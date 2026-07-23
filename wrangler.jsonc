@@ -10,6 +10,11 @@
   "preview_urls": false,
   "observability": { "enabled": true },
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  // Weekly (Monday, off-hour) crawler-list drift check — see
+  // src/crawler-list-sync.mjs. Low frequency on purpose: Cloudflare's
+  // managed default doesn't change often, and this only needs to catch
+  // drift before it's stale for long, not in real time.
+  "triggers": { "crons": ["23 7 * * 1"] },
   // A single wildcard route: this Worker does its own pathname dispatch
   // (see src/index.mjs) rather than registering one Cloudflare route per
   // surface. More-specific routes on sn-analytics/sn-login-guard/sn-provenance

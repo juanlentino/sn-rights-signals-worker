@@ -6,6 +6,8 @@ import { injectTdmMeta } from "./html-injector.mjs";
 import { TDM_RESERVATION_HEADERS } from "./constants.mjs";
 import { versionResponse } from "./version.mjs";
 import { bypassesRightsSignals } from "./admin-bypass.mjs";
+import { checkCrawlerListDrift } from "./crawler-list-sync.mjs";
+import { crawlerListStatusResponse, recordCrawlerListCheck } from "./crawler-list-status.mjs";
 
 function withTdmHeaders(response) {
   const headers = new Headers(response.headers);
@@ -29,6 +31,7 @@ export default {
     // exact path with its own more-specific Cloudflare route — bare
     // /_sn/version on this Worker's wildcard route would never be reached.
     if (pathname === "/_sn/rights-signals/version") return versionResponse(request, env);
+    if (pathname === "/_sn/rights-signals/crawler-list-status") return crawlerListStatusResponse();
     if (pathname === "/robots.txt") return robotsResponse(request);
     if (pathname === "/.well-known/tdmrep.json") return tdmrepResponse();
     if (pathname === "/license.xml") return rslResponse();
@@ -44,5 +47,26 @@ export default {
     const contentType = origin.headers.get("content-type") || "";
     if (!contentType.includes("text/html")) return origin;
     return withTdmHeaders(injectTdmMeta(origin));
+  },
+
+  // Weekly: diff robots-block.mjs's hand-maintained NAMED_CRAWLERS against
+  // Cloudflare's published managed-robots-txt docs (the source it was
+  // seeded from), and log loudly on drift or a failed check — the only
+  // signal that this list needs a manual update. GET
+  // /_sn/rights-signals/crawler-list-status surfaces the last result.
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil((async () => {
+      try {
+        const result = await checkCrawlerListDrift();
+        if (result.drift) {
+          console.error(`crawler-list-sync: DRIFT — missing=[${result.missing.join(",")}] extra=[${result.extra.join(",")}]`);
+        }
+        recordCrawlerListCheck({ ok: true, ...result });
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        console.error(`crawler-list-sync: check failed: ${reason}`);
+        recordCrawlerListCheck({ ok: false, checked_at: new Date().toISOString(), error: reason });
+      }
+    })());
   },
 };

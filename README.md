@@ -28,6 +28,7 @@ admin dashboard.
 | `GET /wp-json/*` | Proxies to origin, adds `TDM-Reservation` / `TDM-Policy` headers. |
 | Everything else | Proxies to origin. If `content-type` is `text/html`, adds the same two headers and injects `<meta name="tdm-reservation">` / `<meta name="tdm-policy">` into `<head>` via `HTMLRewriter`. Non-HTML (images, CSS, JS) passes through unmodified. |
 | `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path). |
+| `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below). Isolate-memory, best-effort — resets on redeploy/eviction. |
 
 ## robots.txt ownership: what was tried, and where it landed
 
@@ -57,14 +58,22 @@ comment for what "still wrapped" looks like and how to revert (`git log`
 `v1.1.1`).
 
 **The tradeoff this accepted:** the named-crawler `Disallow` list
-(Amazonbot, Applebot-Extended, Bytespider, CCBot, ClaudeBot,
-CloudflareBrowserRenderingCrawler, Google-Extended, GPTBot,
-meta-externalagent) baked into `robots-block.mjs` is a **hand-maintained
-snapshot** of what Cloudflare's managed feature was serving live as of
-2026-07-23, not an auto-updating feed. Diff it against
+(`NAMED_CRAWLERS` in `robots-block.mjs`) is a **hand-maintained snapshot**
+of what Cloudflare's managed feature was serving live as of 2026-07-23, not
+an auto-updating feed.
+
+**Mitigated in `v1.3.0`:** `src/crawler-list-sync.mjs` runs weekly
+(`23 7 * * 1`), fetches
 [Cloudflare's managed-robots-txt docs](https://developers.cloudflare.com/bots/additional-configurations/managed-robots-txt/)
-periodically — a periodic sync/diff job (instead of a fully manual check)
-is a reasonable follow-up if this drifts in practice.
+— the page `NAMED_CRAWLERS` was seeded from — and diffs its published
+crawler list against ours, logging loudly on drift (`GET
+/_sn/rights-signals/crawler-list-status` for the last result). Still
+manual to *fix* (this only detects drift, it doesn't rewrite
+`robots-block.mjs`), but no longer manual to *notice*. First real run
+(2026-07-23, ad hoc, not yet the scheduled cron) already flagged that
+`CloudflareBrowserRenderingCrawler` — present in our list — isn't in
+Cloudflare's current docs example; left as-is pending review, since the
+docs example may be illustrative rather than exhaustive.
 
 ## Development
 

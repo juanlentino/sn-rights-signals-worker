@@ -1,11 +1,26 @@
 import { LICENSE_URL } from "./constants.mjs";
 
-// Full ownership of the managed-content-signals block — NOT currently wired
-// into robots.mjs. Ready for a manual flip once the owner disables
-// Cloudflare's "Managed robots.txt" dashboard feature (see robots.mjs for
-// why this can't be automatic: the Worker has no way to detect, from its own
-// code, whether Cloudflare will wrap its response). Until then this module
-// is exercised only by its own tests.
+// Full ownership of the managed-content-signals block. Wired into
+// robots.mjs as of v1.2.0 (2026-07-23) — the owner disabled Cloudflare's
+// "Managed robots.txt" dashboard feature, which is the only thing that made
+// this safe (see robots.mjs for why a Worker can never detect that state
+// itself). NAMED_CRAWLERS is a hand-maintained snapshot of Cloudflare's own
+// managed default as of 2026-07-23 — crawler-list-sync.mjs periodically
+// diffs it against Cloudflare's published docs and reports drift.
+export const NAMED_CRAWLERS = [
+  "Amazonbot",
+  "Applebot-Extended",
+  "Bytespider",
+  "CCBot",
+  "ClaudeBot",
+  "CloudflareBrowserRenderingCrawler",
+  "Google-Extended",
+  "GPTBot",
+  "meta-externalagent",
+];
+
+const CRAWLER_BLOCKS = NAMED_CRAWLERS.map((name) => `User-agent: ${name}\nDisallow: /`).join("\n\n");
+
 export const OWNED_ROBOTS_HEADER = `# As a condition of accessing this website, you agree to abide by the following
 # content signals:
 
@@ -38,39 +53,15 @@ User-agent: *
 Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference
 Allow: /
 
-User-agent: Amazonbot
-Disallow: /
-
-User-agent: Applebot-Extended
-Disallow: /
-
-User-agent: Bytespider
-Disallow: /
-
-User-agent: CCBot
-Disallow: /
-
-User-agent: ClaudeBot
-Disallow: /
-
-User-agent: CloudflareBrowserRenderingCrawler
-Disallow: /
-
-User-agent: Google-Extended
-Disallow: /
-
-User-agent: GPTBot
-Disallow: /
-
-User-agent: meta-externalagent
-Disallow: /
+${CRAWLER_BLOCKS}
 
 # END Signal & Noise rights signals`;
 
 // The marker Cloudflare's OWN managed block ends with, live as of
-// 2026-07-23. For use ONCE full ownership is safe to enable: strips a
-// leftover Cloudflare block out of the origin fetch (defensive only — by
-// the time full ownership is safe, this marker should never appear again).
+// 2026-07-23. Defensive only: strips a leftover Cloudflare block out of the
+// origin fetch in case the dashboard toggle is ever re-enabled by mistake
+// (see robots.mjs for why that alone wouldn't be sufficient — revert to
+// appendLicenseOnly if that ever happens).
 const CLOUDFLARE_END_MARKER = "# END Cloudflare Managed Content";
 
 export function originTail(fetchedText) {
@@ -84,9 +75,8 @@ export function fullRobotsTxt(originTailText) {
   return `${OWNED_ROBOTS_HEADER}${tail}\n\nLicense: ${LICENSE_URL}\n`;
 }
 
-// The only mode currently wired into robots.mjs: touch nothing, append
-// License:. Safe regardless of whether Cloudflare's managed block is active,
-// because it never composes anything that could duplicate it.
+// Kept for reference (git history, v1.1.1) as the documented revert path if
+// Cloudflare's wrap ever comes back into play — not currently called.
 export function appendLicenseOnly(fetchedText) {
   return `${fetchedText.trimEnd()}\nLicense: ${LICENSE_URL}\n`;
 }

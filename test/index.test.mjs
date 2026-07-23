@@ -39,3 +39,21 @@ describe("dispatcher", () => {
     expect(text).toContain('<meta name="tdm-reservation" content="1">');
   });
 });
+
+describe("scheduled: crawler-list-sync", () => {
+  it("runs the drift check and the result shows up on the status route", async () => {
+    const html = "User-agent: *\nAllow: /\n\n" +
+      ["Amazonbot", "Applebot-Extended", "Bytespider", "CCBot", "ClaudeBot",
+        "CloudflareBrowserRenderingCrawler", "Google-Extended", "GPTBot", "meta-externalagent"]
+        .map((n) => `User-agent: ${n}\nDisallow: /`).join("\n\n");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(html)));
+
+    let captured;
+    await worker.scheduled({}, {}, { waitUntil: (p) => { captured = p; } });
+    await captured; // scheduled() only kicks off ctx.waitUntil — await it directly so the record lands before we assert
+
+    const res = await worker.fetch(new Request("https://juanlentino.com/_sn/rights-signals/crawler-list-status"), {});
+    const body = await res.json();
+    expect(body.last_check).toMatchObject({ ok: true, drift: false });
+  });
+});

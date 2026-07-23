@@ -2,6 +2,32 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+## [1.3.0] - 2026-07-23
+
+### New
+
+- Weekly crawler-list drift check (`src/crawler-list-sync.mjs`, cron
+  `23 7 * * 1`): fetches Cloudflare's published managed-robots-txt docs (the
+  page `NAMED_CRAWLERS` was seeded from), extracts the crawler list they
+  currently document, and diffs it against `robots-block.mjs`'s
+  hand-maintained list — the tradeoff accepted in `v1.2.0`. Logs loudly on
+  drift or a failed check; `GET /_sn/rights-signals/crawler-list-status`
+  surfaces the last result (isolate-memory, best-effort, same convention as
+  sn-provenance's `/_sn/status`).
+- `robots-block.mjs` refactored: `NAMED_CRAWLERS` is now a plain array that
+  both generates the served block and the sync check compares against —
+  single source of truth, output verified byte-identical to before.
+- **First real finding, live 2026-07-23:** the parser needed to strip HTML
+  tags before matching — Cloudflare's docs page renders the example as a
+  syntax-highlighted code block (each line in its own nested `<span>`s),
+  which defeated a naive regex entirely (0 matches) until fixed. Once
+  fixed, it flagged that `CloudflareBrowserRenderingCrawler` — present in
+  our list (seeded from the live robots.txt output during this session) —
+  isn't mentioned in Cloudflare's current docs example. Left as-is pending
+  review: the docs example may simply be illustrative/incomplete rather
+  than exhaustive; this is exactly the kind of discrepancy the job exists
+  to surface, not silently resolve.
+
 ## [1.2.0] - 2026-07-23
 
 ### New
