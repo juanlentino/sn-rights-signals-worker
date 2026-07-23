@@ -2,7 +2,33 @@
 
 All notable changes to sn-rights-signals are documented here.
 
-## [1.1.0] - 2026-07-23
+## [1.1.1] - 2026-07-23
+
+### Fixed (reverts most of 1.1.0's `/robots.txt` change)
+
+- **1.1.0 shipped a live regression:** composing the full owned block while
+  Cloudflare's "Managed robots.txt" was still on produced TWO conflicting
+  `Content-Signal` lines (Cloudflare's ai-input-less one, then ours) —
+  because Cloudflare wraps its own block around whatever this Worker
+  returns, unconditionally, independent of what the Worker's response
+  contains. A same-session follow-up attempt to self-detect this via the
+  Worker's own `fetch(request)` result also failed: that internal subrequest
+  never sees Cloudflare's block regardless of the dashboard toggle state
+  (confirmed live, twice, with a debug endpoint dumping the exact bytes) —
+  so there is genuinely no signal available to Worker code that
+  distinguishes "safe to own" from "will get double-wrapped."
+- `/robots.txt` is back to `v1.0.0`-era behavior: append `License:` only,
+  touch nothing else. `robots-block.mjs`'s full-ownership functions
+  (`fullRobotsTxt`, `originTail`) are kept, tested, and documented as ready
+  for a **manual** code change once the owner confirms "Managed robots.txt"
+  is disabled in the Cloudflare dashboard — see `robots.mjs`'s comment for
+  the exact one-line swap.
+- `Content-Signal: ai-input=yes` is NOT live. Back to the v1.0.0 known
+  limitation, now with a corrected root-cause understanding and a concrete
+  unblock condition (owner disables the dashboard toggle) instead of an
+  open-ended "wait for Cloudflare."
+
+## [1.1.0] - 2026-07-23 (partially reverted by 1.1.1 — see above)
 
 ### New
 

@@ -1,18 +1,11 @@
 import { LICENSE_URL } from "./constants.mjs";
 
-// Full ownership of the managed-content-signals block, replacing reliance on
-// Cloudflare's "Managed robots.txt" feature (2026-07-23 decision — see
-// CHANGELOG/session notes: Cloudflare's managed block wraps around whatever
-// this Worker returns, AFTER the Worker runs, so a Worker could never edit
-// its Content-Signal line to add ai-input=yes). This is that same block,
-// hand-authored, byte-identical except for the added ai-input=yes field and
-// the renamed BEGIN/END markers (no longer Cloudflare's to claim). The
-// named-crawler list mirrors exactly what Cloudflare's managed feature was
-// serving live as of 2026-07-23 — if Cloudflare adds a new AI crawler to
-// their managed default, this list will NOT pick it up automatically
-// anymore; it needs a manual diff against
-// https://developers.cloudflare.com/bots/additional-configurations/managed-robots-txt/
-// periodically (see README "Known limitation" for the tradeoff this accepts).
+// Full ownership of the managed-content-signals block — NOT currently wired
+// into robots.mjs. Ready for a manual flip once the owner disables
+// Cloudflare's "Managed robots.txt" dashboard feature (see robots.mjs for
+// why this can't be automatic: the Worker has no way to detect, from its own
+// code, whether Cloudflare will wrap its response). Until then this module
+// is exercised only by its own tests.
 export const OWNED_ROBOTS_HEADER = `# As a condition of accessing this website, you agree to abide by the following
 # content signals:
 
@@ -75,14 +68,11 @@ Disallow: /
 # END Signal & Noise rights signals`;
 
 // The marker Cloudflare's OWN managed block ends with, live as of
-// 2026-07-23. Used only to detect and strip a still-active Cloudflare block
-// out of the origin fetch during the transition window before the owner
-// disables "Managed robots.txt" in the dashboard — after that, this marker
-// never appears and originTail() below is a no-op passthrough.
+// 2026-07-23. For use ONCE full ownership is safe to enable: strips a
+// leftover Cloudflare block out of the origin fetch (defensive only — by
+// the time full ownership is safe, this marker should never appear again).
 const CLOUDFLARE_END_MARKER = "# END Cloudflare Managed Content";
 
-// The origin's OWN robots.txt content, with any still-active Cloudflare
-// managed block stripped out (never duplicated alongside our owned block).
 export function originTail(fetchedText) {
   const idx = fetchedText.indexOf(CLOUDFLARE_END_MARKER);
   const tail = idx === -1 ? fetchedText : fetchedText.slice(idx + CLOUDFLARE_END_MARKER.length);
@@ -92,4 +82,11 @@ export function originTail(fetchedText) {
 export function fullRobotsTxt(originTailText) {
   const tail = originTailText ? `\n\n${originTailText}` : "";
   return `${OWNED_ROBOTS_HEADER}${tail}\n\nLicense: ${LICENSE_URL}\n`;
+}
+
+// The only mode currently wired into robots.mjs: touch nothing, append
+// License:. Safe regardless of whether Cloudflare's managed block is active,
+// because it never composes anything that could duplicate it.
+export function appendLicenseOnly(fetchedText) {
+  return `${fetchedText.trimEnd()}\nLicense: ${LICENSE_URL}\n`;
 }

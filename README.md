@@ -21,7 +21,7 @@ admin dashboard.
 
 | Path | Behavior |
 |---|---|
-| `GET /robots.txt` | **Full ownership**, not a patch — generates the entire content-signals block itself (`Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference`, the Article 4 preamble, the named-crawler `Disallow` list), appends whatever WordPress's own origin file contributes, then a `License:` directive. See `src/robots-block.mjs`. |
+| `GET /robots.txt` | Proxies to origin, appends a `License:` directive. Cannot touch `Content-Signal` — see "robots.txt ownership" below. |
 | `GET /.well-known/tdmrep.json` | Worker-owned TDMRep well-known expression. |
 | `GET /license.xml` | Worker-owned RSL 1.0 licence document. |
 | `GET /tdm-policy(/)` | Worker-rendered placeholder page (real terms pending counsel). |
@@ -29,35 +29,39 @@ admin dashboard.
 | Everything else | Proxies to origin. If `content-type` is `text/html`, adds the same two headers and injects `<meta name="tdm-reservation">` / `<meta name="tdm-policy">` into `<head>` via `HTMLRewriter`. Non-HTML (images, CSS, JS) passes through unmodified. |
 | `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path). |
 
-## robots.txt ownership: how we got here, and the tradeoff it accepts
+## robots.txt ownership: what was tried, why it doesn't work yet
 
-Empirically verified (2026-07-23): this Worker's own `fetch(request)` call
-for `/robots.txt` only ever reached WordPress's bare origin file. Cloudflare's
-managed content-signals feature wraps its own block AROUND whatever a Worker
-returns, after the Worker runs — so a Worker could append text (that's how
-the `License:` directive landed originally) but could never *edit* the
-managed `Content-Signal` line to add `ai-input=yes`. Cloudflare's dashboard
-didn't expose an `ai-input` toggle either. Filed as product feedback; not
-worth waiting on.
+Empirically verified (2026-07-23), twice, with a debug endpoint dumping the
+exact bytes each layer sees: this Worker's own `fetch(request)` call for
+`/robots.txt` only EVER reaches WordPress's bare origin file — it never sees
+Cloudflare's managed content-signals block, **regardless of whether
+"Managed robots.txt" is on or off in the dashboard**. Meanwhile, the FINAL
+response this Worker returns to the client gets Cloudflare's block
+prepended unconditionally whenever that dashboard toggle is on — including
+a response that already contains a hand-authored look-alike block, which
+produces two conflicting `Content-Signal` lines rather than replacing
+Cloudflare's. This shipped live for a few minutes on 2026-07-23 (`v1.1.0`)
+before being reverted (`v1.1.1`).
 
-Instead, as of `v1.1.0`, this Worker took full ownership: it generates the
-entire managed-look-alike block itself (`src/robots-block.mjs`), defensively
-stripping a still-active Cloudflare block out of the origin fetch if the
-owner hasn't disabled "Managed robots.txt" in the dashboard yet (so the two
-never end up duplicated during the transition), and appends WordPress's own
-tail content after it.
+**The conclusion:** there is no signal available to Worker code that
+distinguishes "safe to compose our own block" from "will get double-wrapped."
+Full ownership (`src/robots-block.mjs`'s `fullRobotsTxt`/`originTail`, kept
+and tested but not wired into `robots.mjs`) can only go live as a **manual**
+code change, made AFTER the owner confirms "Managed robots.txt" is disabled
+in the Cloudflare dashboard — see `robots.mjs`'s comment for the exact
+one-line swap. Until then, `/robots.txt` stays in the safe v1.0.0-era mode:
+append `License:`, touch nothing else, and `Content-Signal: ai-input=yes`
+stays unset. Filed as Cloudflare product feedback in the meantime — see
+session notes.
 
-**The tradeoff this accepts:** the named-crawler `Disallow` list
-(Amazonbot, Applebot-Extended, Bytespider, CCBot, ClaudeBot,
-CloudflareBrowserRenderingCrawler, Google-Extended, GPTBot,
-meta-externalagent) is a **hand-maintained snapshot** of what Cloudflare's
-managed feature was serving live as of 2026-07-23, not an auto-updating
-feed. If Cloudflare adds a new AI crawler to their managed default, this
-list will not pick it up automatically — diff it against
+**The tradeoff full ownership will accept, once it's safe to enable:** the
+named-crawler `Disallow` list (Amazonbot, Applebot-Extended, Bytespider,
+CCBot, ClaudeBot, CloudflareBrowserRenderingCrawler, Google-Extended,
+GPTBot, meta-externalagent) baked into `robots-block.mjs` is a
+**hand-maintained snapshot** of what Cloudflare's managed feature was
+serving live as of 2026-07-23, not an auto-updating feed — diff it against
 [Cloudflare's managed-robots-txt docs](https://developers.cloudflare.com/bots/additional-configurations/managed-robots-txt/)
-periodically (or once Cloudflare ships an `ai-input` API/dashboard control,
-consider reverting to the patch approach and re-enabling their managed
-feature).
+periodically once it's in use.
 
 ## Development
 
