@@ -1,0 +1,95 @@
+import { LICENSE_URL } from "./constants.mjs";
+
+// Full ownership of the managed-content-signals block, replacing reliance on
+// Cloudflare's "Managed robots.txt" feature (2026-07-23 decision — see
+// CHANGELOG/session notes: Cloudflare's managed block wraps around whatever
+// this Worker returns, AFTER the Worker runs, so a Worker could never edit
+// its Content-Signal line to add ai-input=yes). This is that same block,
+// hand-authored, byte-identical except for the added ai-input=yes field and
+// the renamed BEGIN/END markers (no longer Cloudflare's to claim). The
+// named-crawler list mirrors exactly what Cloudflare's managed feature was
+// serving live as of 2026-07-23 — if Cloudflare adds a new AI crawler to
+// their managed default, this list will NOT pick it up automatically
+// anymore; it needs a manual diff against
+// https://developers.cloudflare.com/bots/additional-configurations/managed-robots-txt/
+// periodically (see README "Known limitation" for the tradeoff this accepts).
+export const OWNED_ROBOTS_HEADER = `# As a condition of accessing this website, you agree to abide by the following
+# content signals:
+
+# (a)  If a Content-Signal = yes, you may collect content for the corresponding
+#      use.
+# (b)  If a Content-Signal = no, you may not collect content for the
+#      corresponding use.
+# (c)  If the website operator does not include a Content-Signal for a
+#      corresponding use, the website operator neither grants nor restricts
+#      permission via Content-Signal with respect to the corresponding use.
+
+# The content signals and their meanings are:
+
+# search:   building a search index and providing search results (e.g., returning
+#           hyperlinks and short excerpts from your website's contents). Search does not
+#           include providing AI-generated search summaries.
+# ai-input: inputting content into one or more AI models (e.g., retrieval
+#           augmented generation, grounding, or other real-time taking of content for
+#           generative AI search answers).
+# ai-train: training or fine-tuning AI models.
+# use:      how AI systems may consume the content (immediate, reference, or full).
+
+# ANY RESTRICTIONS EXPRESSED VIA CONTENT SIGNALS ARE EXPRESS RESERVATIONS OF
+# RIGHTS UNDER ARTICLE 4 OF THE EUROPEAN UNION DIRECTIVE 2019/790 ON COPYRIGHT
+# AND RELATED RIGHTS IN THE DIGITAL SINGLE MARKET.
+
+# BEGIN Signal & Noise rights signals
+
+User-agent: *
+Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference
+Allow: /
+
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: CloudflareBrowserRenderingCrawler
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: meta-externalagent
+Disallow: /
+
+# END Signal & Noise rights signals`;
+
+// The marker Cloudflare's OWN managed block ends with, live as of
+// 2026-07-23. Used only to detect and strip a still-active Cloudflare block
+// out of the origin fetch during the transition window before the owner
+// disables "Managed robots.txt" in the dashboard — after that, this marker
+// never appears and originTail() below is a no-op passthrough.
+const CLOUDFLARE_END_MARKER = "# END Cloudflare Managed Content";
+
+// The origin's OWN robots.txt content, with any still-active Cloudflare
+// managed block stripped out (never duplicated alongside our owned block).
+export function originTail(fetchedText) {
+  const idx = fetchedText.indexOf(CLOUDFLARE_END_MARKER);
+  const tail = idx === -1 ? fetchedText : fetchedText.slice(idx + CLOUDFLARE_END_MARKER.length);
+  return tail.trim();
+}
+
+export function fullRobotsTxt(originTailText) {
+  const tail = originTailText ? `\n\n${originTailText}` : "";
+  return `${OWNED_ROBOTS_HEADER}${tail}\n\nLicense: ${LICENSE_URL}\n`;
+}

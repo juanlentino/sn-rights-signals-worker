@@ -5,6 +5,7 @@ import { tdmPolicyHtml } from "./tdm-policy-page.mjs";
 import { injectTdmMeta } from "./html-injector.mjs";
 import { TDM_RESERVATION_HEADERS } from "./constants.mjs";
 import { versionResponse } from "./version.mjs";
+import { bypassesRightsSignals } from "./admin-bypass.mjs";
 
 function withTdmHeaders(response) {
   const headers = new Headers(response.headers);
@@ -15,11 +16,14 @@ function withTdmHeaders(response) {
 export default {
   // Bound to a single juanlentino.com/* route (more-specific routes on the
   // other three workers — /_sn/px*, /sn-login*, etc. — win over this wildcard
-  // per Cloudflare's route precedence, so this never shadows them). Static
-  // assets and every other unmatched path fall through the content-type
-  // check below untouched: one extra edge-local Worker hop, zero bytes changed.
+  // per Cloudflare's route precedence, so this never shadows them). Auth-
+  // critical WP surfaces (wp-admin, login, xmlrpc, cron) bypass everything
+  // below immediately — see admin-bypass.mjs. Static assets and every other
+  // unmatched path fall through the content-type check below untouched: one
+  // extra edge-local Worker hop, zero bytes changed.
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
+    if (bypassesRightsSignals(pathname)) return fetch(request);
 
     // Namespaced (not /_sn/version) because sn-analytics already owns that
     // exact path with its own more-specific Cloudflare route — bare
