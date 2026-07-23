@@ -1,0 +1,15 @@
+{
+  "name": "sn-rights-signals-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "deploy": "wrangler deploy --var SN_VERSION:$npm_package_version"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.9.0",
+    "vitest": "^3.0.0",
+    "wrangler": "^4.0.0"
+  }
+}

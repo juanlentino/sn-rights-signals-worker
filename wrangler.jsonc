@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sn-rights-signals",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-07-08",
+  // Only ingress is the juanlentino.com route below. Without this, CF defaults
+  // BOTH the workers.dev route and the preview URL to enabled — an
+  // unauthenticated public entry point outside the zone. Lock ingress to the zone.
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  // A single wildcard route: this Worker does its own pathname dispatch
+  // (see src/index.mjs) rather than registering one Cloudflare route per
+  // surface. More-specific routes on sn-analytics/sn-login-guard/sn-provenance
+  // still take precedence over this wildcard (Cloudflare route-matching:
+  // "more specific routes take precedence over wildcard routes").
+  "routes": [
+    { "pattern": "juanlentino.com/*", "zone_name": "juanlentino.com" }
+  ]
+}
