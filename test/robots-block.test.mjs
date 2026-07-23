@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { appendLicenseOnly, fullRobotsTxt, originTail, OWNED_ROBOTS_HEADER } from "../src/robots-block.mjs";
 
-// NOT currently wired into robots.mjs — see robots.mjs for why. Tested here
-// so it's ready to flip on (see that file's comment for the exact swap)
-// without needing to write and debug it again under time pressure.
+// Wired into robots.mjs as of 2026-07-23 (the owner disabled Cloudflare's
+// "Managed robots.txt" toggle, making full ownership safe — see robots.mjs).
 
 describe("originTail", () => {
   it("returns the whole text when no Cloudflare marker is present", () => {

@@ -2,6 +2,23 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+## [1.2.0] - 2026-07-23
+
+### New
+
+- **`Content-Signal: ai-input=yes` is live.** The owner disabled Cloudflare's
+  "Managed robots.txt" dashboard toggle for juanlentino.com, which is the
+  precondition v1.1.1 identified as the only real unblock — with the toggle
+  off, Cloudflare no longer wraps its own block around this Worker's
+  response, so full ownership (`robots-block.mjs`'s `fullRobotsTxt`,
+  written and tested since v1.1.0) is now safe to run. `robots.mjs` flipped
+  from `appendLicenseOnly` to `fullRobotsTxt(originTail(body))`. Verified
+  live: single `Content-Signal` line, `ai-input=yes` present, Article 4
+  preamble and full named-crawler block intact, `License:` directive still
+  appended.
+- Accepts the tradeoff flagged since v1.1.0: the named-crawler `Disallow`
+  list is now a hand-maintained snapshot, not Cloudflare-auto-updating.
+
 ## [1.1.1] - 2026-07-23
 
 ### Fixed (reverts most of 1.1.0's `/robots.txt` change)
