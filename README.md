@@ -12,12 +12,12 @@ the full brief and rationale.
 
 Bound to a single wildcard route (`juanlentino.com/*`) and does its own
 pathname dispatch — see `src/index.mjs`. More-specific Cloudflare routes on
-the sibling workers (sn-analytics, sn-login-guard) take precedence over this
-wildcard, so it never shadows them. Auth-critical WordPress surfaces
-(`/wp-admin`, `/wp-login.php`, `/xmlrpc.php`, `/wp-cron.php`) bypass every
-other check immediately — see `src/admin-bypass.mjs` — so a regression in
-this Worker's own logic can never be the thing that breaks login or the
-admin dashboard.
+the sibling workers (sn-analytics, sn-login-guard, sn-provenance) take
+precedence over this wildcard, so it never shadows them. Auth-critical
+WordPress surfaces (`/wp-admin`, `/wp-login.php`, `/xmlrpc.php`,
+`/wp-cron.php`) bypass every other check immediately — see
+`src/admin-bypass.mjs` — so a regression in this Worker's own logic can
+never be the thing that breaks login or the admin dashboard.
 
 | Path | Behavior |
 |---|---|
@@ -25,10 +25,22 @@ admin dashboard.
 | `GET /.well-known/tdmrep.json` | Worker-owned TDMRep well-known expression. |
 | `GET /license.xml` | Worker-owned RSL 1.0 licence document. |
 | `GET /tdm-policy(/)` | Worker-rendered placeholder page (real terms pending counsel). |
-| `GET /wp-json/*` | Proxies to origin, adds `TDM-Reservation` / `TDM-Policy` headers. |
+| `GET /wp-json` and `/wp-json/*` | Proxies to origin, adds `TDM-Reservation` / `TDM-Policy` headers. |
 | Everything else | Proxies to origin. If `content-type` is `text/html`, adds the same two headers and injects `<meta name="tdm-reservation">` / `<meta name="tdm-policy">` into `<head>` via `HTMLRewriter`. Non-HTML (images, CSS, JS) passes through unmodified. |
 | `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path). |
 | `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below). Isolate-memory, best-effort — resets on redeploy/eviction. |
+
+## What this Worker serves gets anchored
+
+The sibling `sn-provenance` Worker's hourly cron (`src/rights-signals.mjs`)
+independently fetches the four published surfaces this Worker owns —
+`/robots.txt`, `/.well-known/tdmrep.json`, `/license.xml`, `/tdm-policy/` —
+and, when a file's content hash has changed since the last anchored
+version, signs and OTS-stamps it into the provenance ledger under
+`rights-signals/<slug>/v<n>`. Unchanged files are skipped. Practical
+consequence for anyone editing this repo: changing any of those four
+outputs mints a new signed, dated ledger record within the hour, so "what
+reservation was in force on date X" is answerable after the fact.
 
 ## robots.txt ownership: what was tried, and where it landed
 
