@@ -20,7 +20,18 @@ export function parseCrawlersFromDocs(html) {
 }
 
 // { checked_at, drift, missing[] (Cloudflare added, we don't have),
-//   extra[] (we have, Cloudflare no longer lists) }
+// Deliberate divergences from Cloudflare's docs example, each with its
+// review verdict — subtracted from `extra` before drift is computed, so a
+// RECONCILED delta stops warning while anything new still does. The check's
+// job is "prompt a review"; once reviewed, the verdict lives here where the
+// next reviewer sees it.
+export const REVIEWED_EXTRAS = {
+  CloudflareBrowserRenderingCrawler:
+    "kept deliberately (reviewed 2026-07-28): Cloudflare dropped it from the managed-robots.txt docs example, but the Browser Rendering crawler still exists and blocking it matches the site's restrictive rights posture (ai-train=no, TDM reservation).",
+};
+
+//   extra[] (we have, Cloudflare no longer lists, UNREVIEWED),
+//   reviewed_extra[] (we have, Cloudflare no longer lists, deliberate) }
 export async function checkCrawlerListDrift() {
   const res = await fetch(DOCS_URL, {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -37,13 +48,16 @@ export async function checkCrawlerListDrift() {
   }
   const known = [...NAMED_CRAWLERS].sort();
   const missing = live.filter((c) => !known.includes(c));
-  const extra = known.filter((c) => !live.includes(c));
+  const extra_all = known.filter((c) => !live.includes(c));
+  const extra = extra_all.filter((c) => !(c in REVIEWED_EXTRAS));
+  const reviewed_extra = extra_all.filter((c) => c in REVIEWED_EXTRAS);
   return {
     checked_at: new Date().toISOString(),
     live_count: live.length,
     known_count: known.length,
     missing,
     extra,
+    reviewed_extra,
     drift: missing.length > 0 || extra.length > 0,
   };
 }
