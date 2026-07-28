@@ -36,6 +36,48 @@ export function shouldSelfHeal(check, nowMs, attemptMs) {
   return !(age >= 0 && age < STALE_MS); // NaN or stale → heal
 }
 
+// v1.4.3: the verdict also persists in the COLO-LOCAL Cache API, because
+// isolate memory alone was not enough — the plugin polls once per 15
+// minutes, long enough for the isolate to be evicted between polls, so the
+// healed result could evaporate before its one consumer ever read it. The
+// cache survives isolate churn; per-colo scope is fine because the plugin
+// always polls from the same origin egress. Every layer is try/caught: a
+// cache failure degrades to the v1.4.1 behavior, never a fatal.
+const CACHE_KEY = "https://juanlentino.com/_sn/rights-signals/__crawler-check-verdict";
+const CACHE_TTL_S = 14 * 24 * 60 * 60; // two cron cycles; staleness is judged by checked_at, not this
+
+// Injectable seam: production resolves the real colo cache; tests inject a
+// fake (the pool's isolated storage cannot host real Cache API writes —
+// its sqlite WAL files break frame popping, observed 2026-07-28).
+let cacheProvider = () => (typeof caches !== "undefined" && caches.default ? caches.default : null);
+
+export function _setCrawlerCacheForTests(cache) {
+  cacheProvider = () => cache;
+}
+
+async function readCachedCheck() {
+  const cache = cacheProvider();
+  if (!cache) return null;
+  try {
+    const hit = await cache.match(CACHE_KEY);
+    return hit ? await hit.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCachedCheck(result) {
+  const cache = cacheProvider();
+  if (!cache) return;
+  try {
+    await cache.put(CACHE_KEY, new Response(JSON.stringify(result), {
+      headers: { "content-type": "application/json", "cache-control": `max-age=${CACHE_TTL_S}` },
+    }));
+  } catch {
+    // Best-effort: memory still holds it for this isolate's lifetime.
+  }
+}
+
 // The one run-and-record path, shared by the Monday cron (index.mjs
 // scheduled()) and the lazy self-heal below — drift and failure keep their
 // loud console.error trail either way.
@@ -51,9 +93,17 @@ export async function runAndRecordCrawlerListCheck() {
     console.error(`crawler-list-sync: check failed: ${reason}`);
     recordCrawlerListCheck({ ok: false, checked_at: new Date().toISOString(), error: reason });
   }
+  await writeCachedCheck(lastCheck);
 }
 
-export function crawlerListStatusResponse(ctx) {
+export async function crawlerListStatusResponse(ctx) {
+  // Cold isolate: adopt the colo-cached verdict before deciding anything.
+  if (null === lastCheck) {
+    const cached = await readCachedCheck();
+    if (cached) {
+      lastCheck = cached;
+    }
+  }
   if (ctx && typeof ctx.waitUntil === "function" && shouldSelfHeal(lastCheck, Date.now(), lastAttemptMs)) {
     lastAttemptMs = Date.now();
     ctx.waitUntil(runAndRecordCrawlerListCheck());
@@ -68,4 +118,5 @@ export function crawlerListStatusResponse(ctx) {
 export function _resetCrawlerListStateForTests() {
   lastCheck = null;
   lastAttemptMs = 0;
+  cacheProvider = () => (typeof caches !== "undefined" && caches.default ? caches.default : null);
 }
