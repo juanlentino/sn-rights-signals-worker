@@ -2,6 +2,18 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+## [1.4.3] - 2026-07-28
+
+**Headline:** the crawler-list verdict survives isolate eviction — the self-heal's result now lands somewhere the plugin's next poll can actually find it.
+
+### Fixed
+
+- v1.4.1's self-heal stored its result in isolate memory only. The plugin polls once per 15 minutes, long enough for Cloudflare to evict the isolate between polls, so "poll returns null (heal kicks), isolate dies, next poll returns null" could repeat indefinitely — observed live: the pill stayed "unchecked" through two deploys and multiple poll cycles. The verdict now also persists in the colo-local Cache API (`caches.default`, 14-day TTL, no new bindings): the heal and the Monday cron both write it, and a cold isolate answers from the cache before deciding whether to re-check. Staleness is still judged by `checked_at`, failed verdicts stay heal-eligible, and every cache touch is try/caught so a cache failure degrades to the v1.4.1 behavior, never a fatal.
+
+### Deploy notes
+
+`npm run deploy` from this tag; no new secrets, vars, or bindings.
+
 ## [1.4.2] - 2026-07-28
 
 **Headline:** the first live self-healed check found real drift, and this release records the review verdict instead of leaving a permanent warning.
