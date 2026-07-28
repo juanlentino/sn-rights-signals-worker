@@ -6,8 +6,7 @@ import { injectTdmMeta } from "./html-injector.mjs";
 import { TDM_RESERVATION_HEADERS } from "./constants.mjs";
 import { versionResponse } from "./version.mjs";
 import { bypassesRightsSignals } from "./admin-bypass.mjs";
-import { checkCrawlerListDrift } from "./crawler-list-sync.mjs";
-import { crawlerListStatusResponse, recordCrawlerListCheck } from "./crawler-list-status.mjs";
+import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawler-list-status.mjs";
 import { machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
 
 function withTdmHeaders(response) {
@@ -24,7 +23,7 @@ export default {
   // below immediately — see admin-bypass.mjs. Static assets and every other
   // unmatched path fall through the content-type check below untouched: one
   // extra edge-local Worker hop, zero bytes changed.
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
     if (bypassesRightsSignals(pathname)) return fetch(request);
 
@@ -37,7 +36,9 @@ export default {
     // exact path with its own more-specific Cloudflare route — bare
     // /_sn/version on this Worker's wildcard route would never be reached.
     if (pathname === "/_sn/rights-signals/version") return versionResponse(request, env);
-    if (pathname === "/_sn/rights-signals/crawler-list-status") return crawlerListStatusResponse();
+    // ctx enables the v1.4.1 lazy self-heal (throttled background re-check
+    // when the isolate-memory result is missing, failed, or stale).
+    if (pathname === "/_sn/rights-signals/crawler-list-status") return crawlerListStatusResponse(ctx);
     if (pathname === "/_sn/rights-signals/machine-readers") return machineReadersResponse(request, env);
     if (pathname === "/robots.txt") return robotsResponse(request);
     if (pathname === "/.well-known/tdmrep.json") return tdmrepResponse();
@@ -62,18 +63,9 @@ export default {
   // signal that this list needs a manual update. GET
   // /_sn/rights-signals/crawler-list-status surfaces the last result.
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil((async () => {
-      try {
-        const result = await checkCrawlerListDrift();
-        if (result.drift) {
-          console.error(`crawler-list-sync: DRIFT — missing=[${result.missing.join(",")}] extra=[${result.extra.join(",")}]`);
-        }
-        recordCrawlerListCheck({ ok: true, ...result });
-      } catch (e) {
-        const reason = e instanceof Error ? e.message : String(e);
-        console.error(`crawler-list-sync: check failed: ${reason}`);
-        recordCrawlerListCheck({ ok: false, checked_at: new Date().toISOString(), error: reason });
-      }
-    })());
+    // v1.4.1: one shared run-and-record path with the status endpoint's lazy
+    // self-heal — the drift/failure console.error trail lives with it in
+    // crawler-list-status.mjs.
+    ctx.waitUntil(runAndRecordCrawlerListCheck());
   },
 };
