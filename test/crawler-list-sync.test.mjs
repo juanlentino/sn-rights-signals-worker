@@ -71,3 +71,43 @@ describe("checkCrawlerListDrift", () => {
     await expect(checkCrawlerListDrift()).rejects.toThrow(/503/);
   });
 });
+
+// v1.4.2: the 2026-07-28 drift review, encoded. Cloudflare dropped
+// CloudflareBrowserRenderingCrawler from the managed-robots.txt docs example,
+// but the crawler still exists and blocking it matches the site's rights
+// posture — so the block STAYS, the verdict lives in REVIEWED_EXTRAS, and
+// only UNREVIEWED deltas warn.
+import { REVIEWED_EXTRAS } from "../src/crawler-list-sync.mjs";
+
+describe("reviewed extras (the 2026-07-28 verdict)", () => {
+  const docsWithoutReviewed = NAMED_CRAWLERS.filter((c) => !(c in REVIEWED_EXTRAS));
+
+  it("records the review: CloudflareBrowserRenderingCrawler is a deliberate keep", () => {
+    expect(Object.keys(REVIEWED_EXTRAS)).toContain("CloudflareBrowserRenderingCrawler");
+    expect(REVIEWED_EXTRAS.CloudflareBrowserRenderingCrawler).toMatch(/2026-07-28/);
+  });
+
+  it("a reviewed extra alone is NOT drift — it is surfaced separately", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(docsHtmlFor(docsWithoutReviewed))));
+    const result = await checkCrawlerListDrift();
+    expect(result.drift).toBe(false);
+    expect(result.extra).toEqual([]);
+    expect(result.reviewed_extra).toEqual(["CloudflareBrowserRenderingCrawler"]);
+  });
+
+  it("an unreviewed extra still drifts even beside a reviewed one", async () => {
+    const withoutTwo = docsWithoutReviewed.filter((c) => c !== "GPTBot");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(docsHtmlFor(withoutTwo))));
+    const result = await checkCrawlerListDrift();
+    expect(result.drift).toBe(true);
+    expect(result.extra).toEqual(["GPTBot"]);
+    expect(result.reviewed_extra).toEqual(["CloudflareBrowserRenderingCrawler"]);
+  });
+
+  it("a crawler Cloudflare ADDS still drifts regardless of reviews", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(docsHtmlFor([...docsWithoutReviewed, "NewAIBot"]))));
+    const result = await checkCrawlerListDrift();
+    expect(result.drift).toBe(true);
+    expect(result.missing).toEqual(["NewAIBot"]);
+  });
+});
