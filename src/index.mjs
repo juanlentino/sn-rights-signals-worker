@@ -8,6 +8,7 @@ import { versionResponse } from "./version.mjs";
 import { bypassesRightsSignals } from "./admin-bypass.mjs";
 import { checkCrawlerListDrift } from "./crawler-list-sync.mjs";
 import { crawlerListStatusResponse, recordCrawlerListCheck } from "./crawler-list-status.mjs";
+import { machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
 
 function withTdmHeaders(response) {
   const headers = new Headers(response.headers);
@@ -27,11 +28,17 @@ export default {
     const { pathname } = new URL(request.url);
     if (bypassesRightsSignals(pathname)) return fetch(request);
 
+    // v1.4.0: machine-readership sensor — aggregate-only AE write when the UA
+    // classifies into the fixed crawler-family enum; humans and internal /_sn/
+    // paths are never recorded, and observation can never affect the response.
+    if (!pathname.startsWith("/_sn/")) observeMachineReader(request, env, pathname);
+
     // Namespaced (not /_sn/version) because sn-analytics already owns that
     // exact path with its own more-specific Cloudflare route — bare
     // /_sn/version on this Worker's wildcard route would never be reached.
     if (pathname === "/_sn/rights-signals/version") return versionResponse(request, env);
     if (pathname === "/_sn/rights-signals/crawler-list-status") return crawlerListStatusResponse();
+    if (pathname === "/_sn/rights-signals/machine-readers") return machineReadersResponse(request, env);
     if (pathname === "/robots.txt") return robotsResponse(request);
     if (pathname === "/.well-known/tdmrep.json") return tdmrepResponse();
     if (pathname === "/license.xml") return rslResponse();
