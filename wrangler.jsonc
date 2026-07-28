@@ -20,6 +20,11 @@
   // surface. More-specific routes on sn-analytics/sn-login-guard/sn-provenance
   // still take precedence over this wildcard (Cloudflare route-matching:
   // "more specific routes take precedence over wildcard routes").
+  // v1.4.0: machine-readership aggregates (family + surface class + day only —
+  // no IPs, no raw UAs; see src/machine-readers.mjs for the privacy contract).
+  "analytics_engine_datasets": [
+    { "binding": "SN_MR", "dataset": "sn_machine_readers" }
+  ],
   "routes": [
     { "pattern": "juanlentino.com/*", "zone_name": "juanlentino.com" }
   ]
