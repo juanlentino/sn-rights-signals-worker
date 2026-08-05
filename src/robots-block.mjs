@@ -1,4 +1,4 @@
-import { LICENSE_URL } from "./constants.mjs";
+import { LICENSE_URL, CONTENT_SIGNAL } from "./constants.mjs";
 
 // Full ownership of the managed-content-signals block. Wired into
 // robots.mjs as of v1.2.0 (2026-07-23) — the owner disabled Cloudflare's
@@ -50,7 +50,7 @@ export const OWNED_ROBOTS_HEADER = `# As a condition of accessing this website, 
 # BEGIN Signal & Noise rights signals
 
 User-agent: *
-Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference
+Content-Signal: ${CONTENT_SIGNAL}
 Allow: /
 
 ${CRAWLER_BLOCKS}

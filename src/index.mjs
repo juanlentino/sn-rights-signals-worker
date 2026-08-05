@@ -3,7 +3,7 @@ import { tdmrepResponse } from "./tdmrep.mjs";
 import { rslResponse } from "./rsl.mjs";
 import { tdmPolicyHtml } from "./tdm-policy-page.mjs";
 import { injectTdmMeta } from "./html-injector.mjs";
-import { TDM_RESERVATION_HEADERS } from "./constants.mjs";
+import { TDM_RESERVATION_HEADERS, LICENSE_LINK_HEADER } from "./constants.mjs";
 import { versionResponse } from "./version.mjs";
 import { bypassesRightsSignals } from "./admin-bypass.mjs";
 import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawler-list-status.mjs";
@@ -12,6 +12,11 @@ import { machineReadersResponse, observeMachineReader } from "./machine-readers.
 function withTdmHeaders(response) {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(TDM_RESERVATION_HEADERS)) headers.set(name, value);
+  // APPEND, never set. Link is a list header and WordPress emits its own
+  // entries (REST discovery, shortlink); set() would clobber them and break
+  // API autodiscovery. rel="license" is one more entry, not a replacement for
+  // whatever the origin already said.
+  headers.append("Link", LICENSE_LINK_HEADER);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
@@ -50,10 +55,22 @@ export default {
     }
 
     const origin = await fetch(request);
-    if (pathname === "/wp-json" || pathname.startsWith("/wp-json/")) return withTdmHeaders(origin);
 
+    // v1.5.0: the reservation rides EVERY response, not just HTML and REST.
+    //
+    // Driven by the live machine-readership sensor: across 30 days the
+    // declared AI-training crawlers made 172 reads — 110 html, 27 robots,
+    // 18 asset, 15 wp-json, 1 sitemap, 1 feed, and ZERO of the rights files.
+    // Every response the Worker used to pass through untouched was content
+    // taken with no reservation attached, and two of those buckets are prime
+    // training material: the feed carries full prose, and images are
+    // copyrighted works in their own right.
+    //
+    // Only the <head> meta injection stays HTML-gated — HTMLRewriter has
+    // nothing to rewrite in a PNG, and running it on non-HTML would be a
+    // pointless transform on the hot path.
     const contentType = origin.headers.get("content-type") || "";
-    if (!contentType.includes("text/html")) return origin;
+    if (!contentType.includes("text/html")) return withTdmHeaders(origin);
     return withTdmHeaders(injectTdmMeta(origin));
   },
 
