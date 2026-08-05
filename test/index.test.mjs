@@ -24,10 +24,14 @@ describe("dispatcher", () => {
     expect(await res.json()).toEqual({ id: 1 });
   });
 
-  it("passes non-HTML origin responses through with no header additions", async () => {
+  // v1.5.0 CHANGED THIS. It previously asserted that non-HTML responses got
+  // no headers at all. The sensor showed that meant 18 asset reads plus the
+  // feed and sitemap were being taken with no reservation attached, so the
+  // headers now ride every response and only the BODY is left untouched.
+  it("adds headers to non-HTML responses but never alters the body", async () => {
     stubOrigin("body{color:red}", { "content-type": "text/css" });
     const res = await worker.fetch(new Request("https://juanlentino.com/style.css"), {});
-    expect(res.headers.get("tdm-reservation")).toBeNull();
+    expect(res.headers.get("tdm-reservation")).toBe("1");
     expect(await res.text()).toBe("body{color:red}");
   });
 
@@ -76,11 +80,44 @@ describe("dispatcher", () => {
       expect(link).toContain('rel="license"');
     });
 
-    it("still adds nothing to non-HTML, non-REST assets", async () => {
+    // v1.5.0, driven by the live sensor: over 30 days the declared AI-training
+    // crawlers made 172 reads — 110 html, 27 robots, 18 asset, 15 wp-json,
+    // 1 sitemap, 1 feed, and ZERO of the rights files. Anything the Worker
+    // passes through untouched is content taken with no reservation attached,
+    // and the feed carries full prose while images are copyrighted works. So
+    // the reservation rides EVERY response, not just the HTML ones.
+    it("carries the rights on the RSS feed (full prose, previously bare)", async () => {
+      stubOrigin("<rss><channel><item>…</item></channel></rss>", { "content-type": "application/rss+xml" });
+      const res = await worker.fetch(new Request("https://juanlentino.com/feed/"), {});
+      expect(res.headers.get("content-signal")).toBe("search=yes,ai-train=no,ai-input=yes,use=reference");
+      expect(res.headers.get("tdm-reservation")).toBe("1");
+    });
+
+    it("carries the rights on the sitemap", async () => {
+      stubOrigin("<urlset></urlset>", { "content-type": "application/xml" });
+      const res = await worker.fetch(new Request("https://juanlentino.com/wp-sitemap.xml"), {});
+      expect(res.headers.get("content-signal")).toBe("search=yes,ai-train=no,ai-input=yes,use=reference");
+    });
+
+    it("carries the rights on images (copyrighted works, 18 reads in 30d)", async () => {
+      stubOrigin("\x89PNG", { "content-type": "image/png" });
+      const res = await worker.fetch(new Request("https://juanlentino.com/wp-content/uploads/x.png"), {});
+      expect(res.headers.get("content-signal")).toBe("search=yes,ai-train=no,ai-input=yes,use=reference");
+      expect(res.headers.get("link")).toContain('rel="license"');
+    });
+
+    it("does NOT inject meta tags into non-HTML bodies (headers only, body untouched)", async () => {
       stubOrigin("body{color:red}", { "content-type": "text/css" });
       const res = await worker.fetch(new Request("https://juanlentino.com/style.css"), {});
+      expect(res.headers.get("content-signal")).toBe("search=yes,ai-train=no,ai-input=yes,use=reference");
+      expect(await res.text()).toBe("body{color:red}");
+    });
+
+    it("still bypasses auth-critical paths entirely", async () => {
+      stubOrigin("login", { "content-type": "text/html" });
+      const res = await worker.fetch(new Request("https://juanlentino.com/wp-login.php"), {});
       expect(res.headers.get("content-signal")).toBeNull();
-      expect(res.headers.get("link")).toBeNull();
+      expect(res.headers.get("tdm-reservation")).toBeNull();
     });
   });
 });

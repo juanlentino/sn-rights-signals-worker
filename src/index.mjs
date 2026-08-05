@@ -55,10 +55,22 @@ export default {
     }
 
     const origin = await fetch(request);
-    if (pathname === "/wp-json" || pathname.startsWith("/wp-json/")) return withTdmHeaders(origin);
 
+    // v1.5.0: the reservation rides EVERY response, not just HTML and REST.
+    //
+    // Driven by the live machine-readership sensor: across 30 days the
+    // declared AI-training crawlers made 172 reads — 110 html, 27 robots,
+    // 18 asset, 15 wp-json, 1 sitemap, 1 feed, and ZERO of the rights files.
+    // Every response the Worker used to pass through untouched was content
+    // taken with no reservation attached, and two of those buckets are prime
+    // training material: the feed carries full prose, and images are
+    // copyrighted works in their own right.
+    //
+    // Only the <head> meta injection stays HTML-gated — HTMLRewriter has
+    // nothing to rewrite in a PNG, and running it on non-HTML would be a
+    // pointless transform on the hot path.
     const contentType = origin.headers.get("content-type") || "";
-    if (!contentType.includes("text/html")) return origin;
+    if (!contentType.includes("text/html")) return withTdmHeaders(origin);
     return withTdmHeaders(injectTdmMeta(origin));
   },
 

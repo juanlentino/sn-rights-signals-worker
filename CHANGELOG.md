@@ -8,6 +8,7 @@ All notable changes to sn-rights-signals are documented here.
 
 ### Added
 
+- **The reservation rides EVERY response, not just HTML and REST.** Driven by the live machine-readership sensor: across 30 days the declared AI-training crawlers made **172 reads** — 110 html, 27 robots, 18 asset, 15 wp-json, 1 sitemap, 1 feed, and **zero of the rights files**. Every response the Worker passed through untouched was content taken with no reservation attached, and two of those buckets are prime training material: the feed carries full prose, and images are copyrighted works in their own right. Coverage of the granular signal goes from **42/172 (~24%)** to effectively all of it. Only the `<head>` meta injection stays HTML-gated — `HTMLRewriter` has nothing to rewrite in a PNG.
 - **`Content-Signal` on HTML responses** ([src/constants.mjs](src/constants.mjs), [src/index.mjs](src/index.mjs)). It was previously REST-only, which was backwards: `/wp-json` is `noindex` and is not where a scraper takes prose from — the HTML pages are. HTML carried `TDM-Reservation: 1` (the TDMRep binary reservation) but not the granular `search=yes,ai-train=no,ai-input=yes,use=reference` signal that separates indexing from training.
 - **`Link: <https://juanlentino.com/license.xml>; rel="license"`** on every HTML and REST response. `rel="license"` is a registered RFC 8288 relation, so the license becomes machine-discoverable straight off the content fetch instead of requiring a crawler to know to look for `/license.xml`. It is **appended, never set** — WordPress emits its own `Link` entries (REST discovery, shortlink) and replacing them would break API autodiscovery. Pinned by a test.
 
@@ -25,7 +26,8 @@ It is also unnecessary: [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309) alrea
 
 ### Tests
 
-- 71 passing (4 new): Content-Signal present on HTML, the RFC 8288 link, the append-not-replace guarantee against a WordPress `Link` header, and static assets still receiving nothing.
+- 75 passing (8 new): Content-Signal on HTML, the RFC 8288 link, the append-not-replace guarantee against a WordPress `Link` header, the feed / sitemap / image surfaces, that non-HTML bodies are never altered, and that auth-critical paths still bypass everything.
+- One pre-existing assertion was **inverted deliberately**: `passes non-HTML origin responses through with no header additions` encoded the gap the sensor exposed. It now asserts headers are added while the body stays untouched.
 
 ## [1.4.4] - 2026-08-04
 
