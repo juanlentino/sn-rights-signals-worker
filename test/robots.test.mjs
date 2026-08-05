@@ -59,9 +59,47 @@ describe("robotsResponse — defensive stripping if Cloudflare's block somehow r
 });
 
 describe("robotsResponse — error handling", () => {
-  it("fails open on a non-ok origin response", async () => {
+  // RFC 9309 §2.3.1 gives 4xx and 5xx OPPOSITE meanings for robots.txt, so a
+  // single "non-ok" branch is wrong:
+  //
+  //   4xx "unavailable" → crawlers MAY access any resource (allow all).
+  //   5xx "unreachable" → crawlers MUST assume complete disallow.
+  //
+  // Passing a 5xx through is therefore genuinely protective: crawlers back off
+  // entirely. Passing a 404 through is the harmful case — it reads as "no
+  // restrictions of any kind", silently discarding the Article 4 reservation,
+  // the Content-Signal line, the named-crawler blocks and the License line.
+  // The owned block is fully self-contained (fullRobotsTxt("") is asserted in
+  // robots-block.test.mjs), so on a 4xx we can still state the rights position
+  // even though the origin contributed nothing.
+  it("still serves the owned rights block when the origin 404s", async () => {
+    stubFetch("Not Found", { status: 404 });
+    const res = await robotsResponse(new Request("https://juanlentino.com/robots.txt"));
+    const text = await res.text();
+    expect(res.status).toBe(200);
+    expect(text).toContain("Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference");
+    expect(text).toContain("ARTICLE 4 OF THE EUROPEAN UNION DIRECTIVE 2019/790");
+    expect(text).toContain("User-agent: GPTBot\nDisallow: /");
+    expect(text.trim().endsWith("License: https://juanlentino.com/license.xml")).toBe(true);
+  });
+
+  it("does not leak the origin's error body into the served block", async () => {
+    stubFetch("<html><body>404 Not Found</body></html>", { status: 404 });
+    const res = await robotsResponse(new Request("https://juanlentino.com/robots.txt"));
+    const text = await res.text();
+    expect(text).not.toContain("<html>");
+    expect(text.match(/Content-Signal:/g)).toHaveLength(1);
+  });
+
+  it("passes a 5xx through untouched so crawlers apply the full-disallow rule", async () => {
     stubFetch("error", { status: 502 });
     const res = await robotsResponse(new Request("https://juanlentino.com/robots.txt"));
     expect(res.status).toBe(502);
+  });
+
+  it("passes a 429 through untouched (rate limiting is also 'unreachable')", async () => {
+    stubFetch("slow down", { status: 429 });
+    const res = await robotsResponse(new Request("https://juanlentino.com/robots.txt"));
+    expect(res.status).toBe(429);
   });
 });

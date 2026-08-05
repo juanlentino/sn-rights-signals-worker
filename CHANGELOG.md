@@ -2,6 +2,21 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+## [1.4.4] - 2026-08-04
+
+**Headline:** an origin 404 no longer erases every rights signal on the site. `robots.txt` failure handling now follows RFC 9309, which gives 4xx and 5xx opposite meanings — the previous single "not ok" branch treated them identically.
+
+### Fixed
+
+- **`robotsResponse()` returned the origin's response verbatim whenever the origin was not OK**, which on any 4xx dropped the entire owned block: the Article 4 reservation, `Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference`, all nine named-crawler `Disallow`s, and the `License:` line. That is the harmful direction, because [RFC 9309 §2.3.1](https://www.rfc-editor.org/rfc/rfc9309#section-2.3.1) defines a 4xx `robots.txt` as "unavailable", meaning crawlers **may access any resource** — so a transient origin 404 would publish "no restrictions of any kind" on the site's primary machine-readable rights surface. On a 4xx the Worker now composes `fullRobotsTxt("")` and serves it with a 200: the owned block is self-contained, and the origin simply had no directives of its own to contribute. The origin's error body is never echoed into the response.
+- **5xx and 429 still pass through untouched, deliberately.** RFC 9309 defines 5xx as "unreachable", which crawlers **must** treat as a complete disallow — strictly more protective than anything this Worker could compose, so converting it to a 200 would *weaken* the signal. The old single-branch behavior was correct for exactly this half of the status space; it is now pinned by its own test instead of riding on a shared one.
+
+> **Why PATCH:** a correctness fix to a failure mode. No new capability, no renamed or removed export, no configuration or user action required. The observable change is confined to origin-failure states.
+
+### Known, not addressed here
+
+- `package-lock.json` still reports `version: 1.0.0`, unchanged since the repo was created — it has never tracked `package.json`. The deploy stamp reads `$npm_package_version` from `package.json`, so nothing deployed is affected. Left alone rather than hand-edited; a routine `npm install` resyncs it.
+
 ## [1.4.3] - 2026-07-28
 
 **Headline:** the crawler-list verdict survives isolate eviction — the self-heal's result now lands somewhere the plugin's next poll can actually find it.
