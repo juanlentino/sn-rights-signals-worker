@@ -13,10 +13,6 @@ All notable changes to sn-rights-signals are documented here.
 
 > **Why PATCH:** a correctness fix to a failure mode. No new capability, no renamed or removed export, no configuration or user action required. The observable change is confined to origin-failure states.
 
-### Changed
-
-- **`timeout-minutes: 30` on the test job** ([.github/workflows/test.yml](.github/workflows/test.yml)). Without it a hung job inherits GitHub's 6-hour default, billing 360 minutes against a 3,000-minute account-wide monthly pool. The sibling worker repos have carried this since their CI landed; this repo and `sn-provenance-worker` were missed by that sweep. No runtime bytes change, so this item alone needs no redeploy.
-
 ### Known, not addressed here
 
 - `package-lock.json` still reports `version: 1.0.0`, unchanged since the repo was created — it has never tracked `package.json`. The deploy stamp reads `$npm_package_version` from `package.json`, so nothing deployed is affected. Left alone rather than hand-edited; a routine `npm install` resyncs it.
