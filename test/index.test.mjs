@@ -38,6 +38,51 @@ describe("dispatcher", () => {
     const text = await res.text();
     expect(text).toContain('<meta name="tdm-reservation" content="1">');
   });
+
+  // v1.5.0: ordering is not enforceable — HTTP is client-driven and RFC 9309
+  // already requires compliant crawlers to read robots.txt first. Gating
+  // content on a prior robots.txt fetch would need per-client state and would
+  // serve crawlers something different from humans (cloaking). The workable
+  // alternative is to make ordering IRRELEVANT: attach the rights to every
+  // response, so a crawler that never read robots.txt still receives the
+  // reservation in the same response as the content it is taking.
+  //
+  // HTML is where that matters most: /wp-json is noindex and is not where a
+  // scraper takes prose from, yet /wp-json was the only surface carrying
+  // Content-Signal.
+  describe("rights travel with every response (v1.5.0)", () => {
+    it("carries Content-Signal on HTML, matching the robots.txt block verbatim", async () => {
+      stubOrigin("<html><head></head><body>hi</body></html>", { "content-type": "text/html" });
+      const res = await worker.fetch(new Request("https://juanlentino.com/notes/some-post/"), {});
+      expect(res.headers.get("content-signal")).toBe("search=yes,ai-train=no,ai-input=yes,use=reference");
+    });
+
+    it("advertises the license with a registered RFC 8288 rel", async () => {
+      stubOrigin("<html><head></head><body>hi</body></html>", { "content-type": "text/html" });
+      const res = await worker.fetch(new Request("https://juanlentino.com/notes/some-post/"), {});
+      expect(res.headers.get("link")).toContain('<https://juanlentino.com/license.xml>; rel="license"');
+    });
+
+    it("APPENDS Link rather than replacing the origin's own Link headers", async () => {
+      stubOrigin('{"id":1}', {
+        "content-type": "application/json",
+        link: '<https://juanlentino.com/wp-json/>; rel="https://api.w.org/"',
+      });
+      const res = await worker.fetch(new Request("https://juanlentino.com/wp-json/wp/v2/posts"), {});
+      const link = res.headers.get("link");
+      // WordPress's REST discovery link must survive — clobbering it would
+      // break API autodiscovery for every client.
+      expect(link).toContain('rel="https://api.w.org/"');
+      expect(link).toContain('rel="license"');
+    });
+
+    it("still adds nothing to non-HTML, non-REST assets", async () => {
+      stubOrigin("body{color:red}", { "content-type": "text/css" });
+      const res = await worker.fetch(new Request("https://juanlentino.com/style.css"), {});
+      expect(res.headers.get("content-signal")).toBeNull();
+      expect(res.headers.get("link")).toBeNull();
+    });
+  });
 });
 
 describe("scheduled: crawler-list-sync", () => {

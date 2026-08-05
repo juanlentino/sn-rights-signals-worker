@@ -2,6 +2,31 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+## [1.5.0] - 2026-08-04
+
+**Headline:** the rights reservation now travels with every HTML response, so a crawler that never reads robots.txt still receives it alongside the content it is taking.
+
+### Added
+
+- **`Content-Signal` on HTML responses** ([src/constants.mjs](src/constants.mjs), [src/index.mjs](src/index.mjs)). It was previously REST-only, which was backwards: `/wp-json` is `noindex` and is not where a scraper takes prose from — the HTML pages are. HTML carried `TDM-Reservation: 1` (the TDMRep binary reservation) but not the granular `search=yes,ai-train=no,ai-input=yes,use=reference` signal that separates indexing from training.
+- **`Link: <https://juanlentino.com/license.xml>; rel="license"`** on every HTML and REST response. `rel="license"` is a registered RFC 8288 relation, so the license becomes machine-discoverable straight off the content fetch instead of requiring a crawler to know to look for `/license.xml`. It is **appended, never set** — WordPress emits its own `Link` entries (REST discovery, shortlink) and replacing them would break API autodiscovery. Pinned by a test.
+
+### Changed
+
+- **`Content-Signal` is now one constant** (`CONTENT_SIGNAL`), interpolated into both the robots.txt block and the response header, so the file and the header can never state different terms. Contradictory permissions between two surfaces a crawler reads would be worse than saying nothing at all. The robots.txt tests pass unchanged, proving the block is byte-identical.
+
+### Why this shape, and not "make crawlers read the rights first"
+
+Fetch order cannot be enforced. HTTP is client-driven, and the only way to force a crawler to read the rights files before the content is to gate content until it has — which requires per-client state (against this site's cookieless principle) and serves crawlers something different from humans, which is cloaking. It would also penalize well-behaved crawlers arriving on a deep link while doing nothing to the bad ones.
+
+It is also unnecessary: [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309) already requires compliant crawlers to fetch and honor `/robots.txt` before crawling, and a crawler ignoring that would ignore a gate too. So rather than controlling *when* the rights are read, this release makes ordering **irrelevant** — the reservation rides the same response as the content.
+
+> **Why MINOR:** new response headers on every HTML and REST response. No removed or renamed export, no configuration change, nothing requiring operator action.
+
+### Tests
+
+- 71 passing (4 new): Content-Signal present on HTML, the RFC 8288 link, the append-not-replace guarantee against a WordPress `Link` header, and static assets still receiving nothing.
+
 ## [1.4.4] - 2026-08-04
 
 **Headline:** an origin 404 no longer erases every rights signal on the site. `robots.txt` failure handling now follows RFC 9309, which gives 4xx and 5xx opposite meanings — the previous single "not ok" branch treated them identically.
