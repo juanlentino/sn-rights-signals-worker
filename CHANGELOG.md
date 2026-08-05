@@ -2,6 +2,21 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### Known: 2 dev-only advisories, deliberately not fixed (re-evaluated 2026-08-05)
+
+`@cloudflare/vitest-pool-workers@0.9.x` bundles its own `wrangler` in a vulnerable range. The advisory is **OS command injection in `wrangler pages deploy`** — a command this repo never runs; it deploys a Worker, not Pages, via `npm run deploy`. Dev-only, never in the bundle.
+
+Four fixes were attempted and all fail cleanly rather than silently:
+
+1. a top-level `wrangler` override → npm `EOVERRIDE` (conflicts with the direct devDependency)
+2. a nested override under `@cloudflare/vitest-pool-workers` → accepted but does not take effect
+3. the same nested override with the parent version pinned → `EOVERRIDE` again
+4. bumping the pool alone → npm rejects it as invalid against `vitest@3`
+
+The fifth **does** work and was tried in full: `vitest@^4.1.0` + `@cloudflare/vitest-pool-workers@^0.20.1` resolves to **0 vulnerabilities**. It requires migrating `vitest.config.mjs` off the removed `defineWorkersConfig` / `./config` export to the `cloudflareTest()` plugin form (shape taken from the package's own `codemods/vitest-v3-to-v4`). With that migration applied, **76 of 78 tests pass** — the two failures are both in the crawler-list self-heal group (`survives a missing ctx`, `throttles repeated reads`), and both indicate the 0.20 pool **reuses isolates**, so module-level state that the old pool reset between cases now persists.
+
+Those two assertions guard the self-heal and throttle behavior of the Worker that owns the site's rights surface. Making them pass means changing their isolation assumptions, which is a change that deserves review on its own rather than riding along as collateral of an advisory cleanup. Parked with that evidence rather than forced.
+
 ## [1.5.0] - 2026-08-04
 
 **Headline:** the rights reservation now travels with every HTML response, so a crawler that never reads robots.txt still receives it alongside the content it is taking.
