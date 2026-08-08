@@ -17,6 +17,18 @@ The fifth **does** work and was tried in full: `vitest@^4.1.0` + `@cloudflare/vi
 
 Those two assertions guard the self-heal and throttle behavior of the Worker that owns the site's rights surface. Making them pass means changing their isolation assumptions, which is a change that deserves review on its own rather than riding along as collateral of an advisory cleanup. Parked with that evidence rather than forced.
 
+## [1.6.0] - 2026-08-07
+
+**Headline:** the machine-readership sensor can now prove it is alive, so a quiet `sn_machine_readers` dataset stops being ambiguous between "no crawlers came" and "the sensor died in a deploy".
+
+### Added
+
+- **Sensor-alive state** ([src/machine-readers.mjs](src/machine-readers.mjs)). `observeMachineReader()` was fully fail-open — correct, observation must never break serving — but its failure modes were *silent*: a bare `catch { return null; }`, and an unbound `SN_MR` binding that also returned null. If the binding were dropped in a deploy, the dataset behind a published argument would simply go quiet with nothing anywhere saying why. Every observe attempt now updates isolate-memory state (`ae_bound`, `last_write_ok`, `last_write_at`, `last_error`), and both failure paths `console.error` with the message — the return-null contract is unchanged, the silence is not. Same isolate-memory/best-effort convention as the crawler-list check: resets on eviction/redeploy, no new bindings.
+- **`sensor` block on `GET /_sn/rights-signals/version`** ([src/version.mjs](src/version.mjs)): `{ ae_bound, last_write_ok, last_write_at }`. `ae_bound` reflects `env.SN_MR` at the request itself, so a dropped binding is visible on the next deploy-verification curl — before any crawler ever hits. `last_error` is deliberately **not** exposed: raw error text stays in Workers Logs only, pinned by a test.
+- **README catch-up:** the routes table now documents `GET /_sn/rights-signals/machine-readers` (Bearer `SN_MR_READ_TOKEN`, `?days=N` clamped 1–90), and a new section documents the sensor and the `sn_machine_readers` dataset (blobs `[family, surface]`, humans and `/_sn/` paths never recorded) — both had shipped in v1.4.0 undocumented.
+
+> **Why MINOR:** a new field on the version endpoint's response and new module exports. No removed or renamed export, no configuration change, nothing requiring operator action.
+
 ## [1.5.0] - 2026-08-04
 
 **Headline:** the rights reservation now travels with every HTML response, so a crawler that never reads robots.txt still receives it alongside the content it is taking.

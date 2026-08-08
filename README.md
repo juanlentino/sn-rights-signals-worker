@@ -29,6 +29,22 @@ never be the thing that breaks login or the admin dashboard.
 | Everything else | Proxies to origin. If `content-type` is `text/html`, adds the same two headers and injects `<meta name="tdm-reservation">` / `<meta name="tdm-policy">` into `<head>` via `HTMLRewriter`. Non-HTML (images, CSS, JS) passes through unmodified. |
 | `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path). |
 | `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below). Isolate-memory, best-effort — resets on redeploy/eviction. |
+| `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`). `?days=N` clamped to 1–90, default 30. Queries the Analytics Engine SQL API; 503 when the read secrets aren't configured. |
+
+## Machine-readership sensor
+
+`src/machine-readers.mjs` observes every non-`/_sn/` request on the way
+through: when the User-Agent classifies into the fixed crawler-family enum
+(OpenAI, Anthropic, Perplexity, search, feed, …), it writes one aggregate
+datapoint to the Analytics Engine dataset **`sn_machine_readers`** — blobs
+`[family, surface]`, one count, nothing else. Humans (browser UAs) and
+internal `/_sn/` paths are never recorded; the raw User-Agent never leaves
+the module. Observation is fail-open by contract — a sensor failure can
+never affect a response — but not silent: failures and a missing `SN_MR`
+binding are `console.error`'d, and `GET /_sn/rights-signals/version` carries
+a `sensor` block (`ae_bound`, `last_write_ok`, `last_write_at`; isolate-
+memory, error text log-only) so a dead sensor is distinguishable from "no
+crawlers came".
 
 ## What this Worker serves gets anchored
 
