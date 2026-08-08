@@ -2,7 +2,22 @@
 
 All notable changes to sn-rights-signals are documented here.
 
-### Known: 2 dev-only advisories, deliberately not fixed (re-evaluated 2026-08-05)
+### 1.6.1 - 2026-08-08
+
+- **Fix (lost Sitemap pointer):** the composed robots.txt now GUARANTEES a
+  `Sitemap:` line (idempotent — appended only when no source provides one).
+  The regression: this Worker owns /robots.txt and appends the origin's
+  contribution, but a physical robots.txt file on the host's disk bypasses
+  WordPress's virtual robots entirely — so neither WP core's Sitemap line nor
+  the plugin's idempotent pointer ever ran, the origin contributed a bare
+  `Disallow: /tools/`, and the pointer vanished from the internet until
+  Search Console dropped the sitemap. The Worker owns the route, so it now
+  owns the guarantee: the pointer survives ANY origin state (virtual robots,
+  physical file, or the 4xx empty-tail fallback). Why the edge never noticed:
+  sitemap discovery is a crawler-side behavior — nothing this Worker measures
+  could see it; Search Console was the only instrument that could, and did.
+
+## Known: 2 dev-only advisories, deliberately not fixed (re-evaluated 2026-08-05)
 
 `@cloudflare/vitest-pool-workers@0.9.x` bundles its own `wrangler` in a vulnerable range. The advisory is **OS command injection in `wrangler pages deploy`** — a command this repo never runs; it deploys a Worker, not Pages, via `npm run deploy`. Dev-only, never in the bundle.
 
