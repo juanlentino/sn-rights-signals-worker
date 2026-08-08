@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  _resetSensorStateForTests,
   classifyMachineReader,
   classifySurface,
+  getSensorState,
   machineReadersResponse,
   observeMachineReader,
 } from "../src/machine-readers.mjs";
@@ -78,6 +80,62 @@ describe("observeMachineReader — aggregate-only AE writes", () => {
     expect(observeMachineReader(req("GPTBot/1.0"), {}, "/llms.txt")).toBeNull();
     const throwing = { SN_MR: { writeDataPoint: () => { throw new Error("ae down"); } } };
     expect(observeMachineReader(req("GPTBot/1.0"), throwing, "/llms.txt")).toBeNull();
+  });
+});
+
+describe("sensor-alive state — dead sensor and quiet dataset are different answers", () => {
+  const req = (ua) => new Request("https://juanlentino.com/llms.txt", { headers: ua ? { "user-agent": ua } : {} });
+
+  beforeEach(() => {
+    _resetSensorStateForTests();
+  });
+
+  it("starts null across the board (never-attempted, not measured-dead)", () => {
+    expect(getSensorState()).toEqual({ ae_bound: null, last_write_ok: null, last_write_at: null, last_error: null });
+  });
+
+  it("records a successful write: bound, ok, timestamped, no error", () => {
+    const env = { SN_MR: { writeDataPoint: () => {} } };
+    expect(observeMachineReader(req("GPTBot/1.0"), env, "/llms.txt")).toEqual({ family: "openai", surface: "llms" });
+    const s = getSensorState();
+    expect(s.ae_bound).toBe(true);
+    expect(s.last_write_ok).toBe(true);
+    expect(typeof s.last_write_at).toBe("string");
+    expect(Number.isFinite(Date.parse(s.last_write_at))).toBe(true);
+    expect(s.last_error).toBeNull();
+  });
+
+  it("records a throwing write: ok false, error captured, console.error fired, still returns null", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const env = { SN_MR: { writeDataPoint: () => { throw new Error("ae down"); } } };
+    expect(observeMachineReader(req("GPTBot/1.0"), env, "/llms.txt")).toBeNull();
+    const s = getSensorState();
+    expect(s.ae_bound).toBe(true);
+    expect(s.last_write_ok).toBe(false);
+    expect(s.last_error).toBe("ae down");
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy.mock.calls[0][0]).toContain("ae down");
+    spy.mockRestore();
+  });
+
+  it("records an unbound binding: ae_bound false, no throw, loud in the log", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(observeMachineReader(req("GPTBot/1.0"), {}, "/llms.txt")).toBeNull();
+    const s = getSensorState();
+    expect(s.ae_bound).toBe(false);
+    expect(s.last_write_ok).toBeNull(); // no write was ever attempted
+    expect(s.last_error).toContain("SN_MR binding missing");
+    expect(spy).toHaveBeenCalledOnce();
+    spy.mockRestore();
+  });
+
+  it("a human UA is not a write attempt: state untouched beyond ae_bound", () => {
+    const env = { SN_MR: { writeDataPoint: () => {} } };
+    observeMachineReader(req("Mozilla/5.0 (Windows NT 10.0) Chrome/126.0 Safari/537.36"), env, "/");
+    const s = getSensorState();
+    expect(s.ae_bound).toBe(true);
+    expect(s.last_write_ok).toBeNull();
+    expect(s.last_write_at).toBeNull();
   });
 });
 

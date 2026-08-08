@@ -75,21 +75,65 @@ export function classifySurface(pathname) {
   return "html";
 }
 
+// Sensor-alive state — isolate-memory, best-effort, same convention as
+// crawler-list-status's lastCheck: resets on eviction/deploy, "if available"
+// data, not a durable log. Exists because the fail-open contract above cuts
+// both ways: a dropped SN_MR binding used to make the dataset simply go
+// quiet, indistinguishable from "no crawlers came". The state (surfaced on
+// /_sn/rights-signals/version) plus the console.error trail below make
+// "sensor dead" and "site unvisited" different answers.
+//   ae_bound      — whether SN_MR was usable on the LAST observe attempt
+//                   (null until the first attempt; the version endpoint also
+//                   reflects the binding live from env, so it never waits).
+//   last_write_ok — outcome of the last actual write attempt.
+//   last_write_at — timestamp of the last SUCCESSFUL write.
+//   last_error    — last failure message, LOG/MEMORY ONLY: never serialized
+//                   into a response (the getter's copy is for callers that
+//                   know the contract; version.mjs deliberately omits it).
+const sensorState = { ae_bound: null, last_write_ok: null, last_write_at: null, last_error: null };
+
+/** @returns {{ae_bound:boolean|null, last_write_ok:boolean|null, last_write_at:string|null, last_error:string|null}} */
+export function getSensorState() {
+  return { ...sensorState };
+}
+
+// Injectable seam for tests only — module state persists across cases within
+// a pool isolate (same reason crawler-list-status exposes _setCrawlerCacheForTests).
+export function _resetSensorStateForTests() {
+  sensorState.ae_bound = null;
+  sensorState.last_write_ok = null;
+  sensorState.last_write_at = null;
+  sensorState.last_error = null;
+}
+
 /**
  * Observe one request. Aggregate-only, fire-and-forget, never throws, never
- * blocks or alters the response path.
+ * blocks or alters the response path. Failures stay fail-open (return null)
+ * but are no longer silent: they update sensorState and console.error.
  *
  * @returns {{family:string, surface:string}|null} What was recorded, or null.
  */
 export function observeMachineReader(request, env, pathname) {
   try {
-    if (!env || !env.SN_MR || typeof env.SN_MR.writeDataPoint !== "function") return null;
+    const bound = !!(env && env.SN_MR && typeof env.SN_MR.writeDataPoint === "function");
+    sensorState.ae_bound = bound;
+    if (!bound) {
+      sensorState.last_error = "SN_MR binding missing or unusable";
+      console.error(`[machine-readers] observe skipped: ${sensorState.last_error}`);
+      return null;
+    }
     const family = classifyMachineReader(request.headers.get("user-agent"));
-    if (family === null) return null;
+    if (family === null) return null; // human/empty UA — not a write attempt
     const surface = classifySurface(pathname);
     env.SN_MR.writeDataPoint({ blobs: [family, surface], doubles: [1], indexes: [family] });
+    sensorState.last_write_ok = true;
+    sensorState.last_write_at = new Date().toISOString();
+    sensorState.last_error = null;
     return { family, surface };
-  } catch {
+  } catch (err) {
+    sensorState.last_write_ok = false;
+    sensorState.last_error = err && err.message ? err.message : String(err);
+    console.error(`[machine-readers] AE write failed: ${sensorState.last_error}`);
     return null;
   }
 }

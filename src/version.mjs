@@ -2,11 +2,18 @@
 // /_sn/login-guard/status (sn-analytics already owns the bare /_sn/version
 // path with a more-specific route), so deploy verification still uses the
 // same one-curl pattern across all four workers on this zone.
+import { getSensorState } from "./machine-readers.mjs";
+
 export function versionResponse(request, env) {
   if (request.method !== "GET") {
     return new Response(null, { status: 405, headers: { allow: "GET" } });
   }
   const meta = env.CF_VERSION_METADATA || {};
+  // Machine-reader sensor-alive block: ae_bound reflects env.SN_MR at THIS
+  // request (so a dropped binding is visible before any crawler ever hits),
+  // the rest is isolate-memory best-effort. last_error is deliberately NOT
+  // exposed — raw error text stays in Workers Logs only.
+  const sensor = getSensorState();
   const body = JSON.stringify(
     {
       worker: "sn-rights-signals",
@@ -14,6 +21,11 @@ export function versionResponse(request, env) {
       cf_version_id: meta.id || null,
       cf_version_tag: meta.tag || null,
       deployed_at: meta.timestamp || null,
+      sensor: {
+        ae_bound: !!(env && env.SN_MR && typeof env.SN_MR.writeDataPoint === "function"),
+        last_write_ok: sensor.last_write_ok,
+        last_write_at: sensor.last_write_at,
+      },
     },
     null,
     2,
