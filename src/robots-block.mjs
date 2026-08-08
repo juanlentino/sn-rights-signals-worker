@@ -70,9 +70,21 @@ export function originTail(fetchedText) {
   return tail.trim();
 }
 
+// v1.6.1: the Worker owns /robots.txt, so it owns the Sitemap-pointer
+// guarantee. The origin can't be trusted to provide one: a physical
+// robots.txt on the host's disk bypasses WordPress's virtual robots
+// entirely, so neither WP core's Sitemap line nor the plugin's idempotent
+// pointer ever runs — which is exactly what happened live (origin
+// contributed a bare "Disallow: /tools/" and the pointer vanished from the
+// internet until Search Console dropped the sitemap). Idempotent: appended
+// only when the composed output carries no Sitemap line from any source.
+export const SITEMAP_URL = "https://juanlentino.com/wp-sitemap.xml";
+
 export function fullRobotsTxt(originTailText) {
   const tail = originTailText ? `\n\n${originTailText}` : "";
-  return `${OWNED_ROBOTS_HEADER}${tail}\n\nLicense: ${LICENSE_URL}\n`;
+  const composed = `${OWNED_ROBOTS_HEADER}${tail}\n\nLicense: ${LICENSE_URL}\n`;
+  if (composed.includes("Sitemap:")) return composed;
+  return `${composed}Sitemap: ${SITEMAP_URL}\n`;
 }
 
 // Kept for reference (git history, v1.1.1) as the documented revert path if

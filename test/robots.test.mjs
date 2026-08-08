@@ -30,7 +30,8 @@ describe("robotsResponse — full ownership (Cloudflare's managed block off)", (
     const res = await robotsResponse(new Request("https://juanlentino.com/robots.txt"));
     const text = await res.text();
     expect(text).toContain("Disallow: /tools/");
-    expect(text.trim().endsWith("License: https://juanlentino.com/license.xml")).toBe(true);
+    expect(text.trim().endsWith("Sitemap: https://juanlentino.com/wp-sitemap.xml")).toBe(true); // v1.6.1: the guaranteed pointer is now the final line
+    expect(text).toContain("License: https://juanlentino.com/license.xml");
   });
 
   it("never produces a duplicate Content-Signal line", async () => {
@@ -80,7 +81,8 @@ describe("robotsResponse — error handling", () => {
     expect(text).toContain("Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference");
     expect(text).toContain("ARTICLE 4 OF THE EUROPEAN UNION DIRECTIVE 2019/790");
     expect(text).toContain("User-agent: GPTBot\nDisallow: /");
-    expect(text.trim().endsWith("License: https://juanlentino.com/license.xml")).toBe(true);
+    expect(text.trim().endsWith("Sitemap: https://juanlentino.com/wp-sitemap.xml")).toBe(true); // v1.6.1: the guaranteed pointer is now the final line
+    expect(text).toContain("License: https://juanlentino.com/license.xml");
   });
 
   it("does not leak the origin's error body into the served block", async () => {
