@@ -24,12 +24,68 @@ never be the thing that breaks login or the admin dashboard.
 | `GET /robots.txt` | **Full ownership** — generates the entire content-signals block itself (`Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference`, the Article 4 preamble, the named-crawler `Disallow` list), appends whatever WordPress's own origin file contributes, then a `License:` directive. See "robots.txt ownership" below for why this took two tries. |
 | `GET /.well-known/tdmrep.json` | Worker-owned TDMRep well-known expression. |
 | `GET /license.xml` | Worker-owned RSL 1.0 licence document. |
-| `GET /tdm-policy(/)` | Worker-rendered placeholder page (real terms pending counsel). |
+| `GET /tdm-policy(/)` | Worker-rendered policy document — the operative terms every other layer points at. Terms in `src/tdm-policy-terms.mjs`, shell in `src/tdm-policy-page.mjs`. Currently `POLICY_STATUS = "draft"` (see below). |
 | `GET /wp-json` and `/wp-json/*` | Proxies to origin, adds `TDM-Reservation` / `TDM-Policy` headers. |
 | Everything else | Proxies to origin. If `content-type` is `text/html`, adds the same two headers and injects `<meta name="tdm-reservation">` / `<meta name="tdm-policy">` into `<head>` via `HTMLRewriter`. Non-HTML (images, CSS, JS) passes through unmodified. |
 | `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path). |
 | `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below). Isolate-memory, best-effort — resets on redeploy/eviction. |
 | `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`). `?days=N` clamped to 1–90, default 30. Queries the Analytics Engine SQL API; 503 when the read secrets aren't configured. |
+
+## The policy document, and its draft state
+
+`/tdm-policy/` is the human-readable end of the chain: the `TDM-Policy` header,
+`tdmrep.json`'s `tdm-policy` field and `license.xml`'s attribution `<standard>`
+all resolve here. It is Worker-synthesized rather than a WordPress page on
+purpose — if WordPress is down or the page gets unpublished, the URL every
+signal names must still answer with terms.
+
+Three constants in `src/constants.mjs` govern it: `POLICY_VERSION`,
+`POLICY_DATE`, `POLICY_STATUS`.
+
+**It is a draft.** `POLICY_STATUS = "draft"` renders a review banner, sets
+`<meta name="tdm-policy-status">`, and puts a status block in an HTML comment.
+It has not been reviewed by a lawyer. **Promotion path:** counsel reviews
+`src/tdm-policy-terms.mjs`, then flip `POLICY_STATUS` to `"final"`, bump
+`POLICY_VERSION`, deploy. The banner disappears on its own — it renders from the
+constant, so there is no second edit to forget. The deploy check asserts the
+page and the constant agree, in both directions.
+
+Editing the terms is a legal change, not an editorial one. The drafting rules
+are at the top of `src/tdm-policy-terms.mjs`; read them first.
+
+## Rights-signal check
+
+`scripts/rights-assertions.mjs` holds 31 invariants across all four layers —
+headers on HTML *and* `/wp-json`, the robots.txt `Content-Signal`, `tdmrep.json`
+parsing and matching the header, `license.xml` parsing and licensing what it
+should, the policy page's sections and draft state, and the meta tags on a real
+note. Two ways to run it:
+
+```bash
+npm test          # STATIC: included in the suite; drives the real Worker
+                  # over a stubbed origin and checks the composed output
+npm run check:live   # LIVE: fetches juanlentino.com and checks what is served
+```
+
+`npm run deploy` runs the live check automatically afterwards (`postdeploy`, with
+an 8s settle for propagation), so a deploy that breaks the stack fails loudly.
+Exit 0 = consistent, 1 = drifted, **2 = could not run** — unreachable is not a
+pass and is deliberately a different code.
+
+Two things worth knowing:
+
+- **The assertions compare layers against each other**, not each against the
+  constant that produced it — `tdmrep.json`'s policy URL against the *header*,
+  robots.txt's `Content-Signal` against the *header* value byte for byte. A
+  guard sharing its producer's constant can only catch a typo, never a partial
+  deploy.
+- **A green static run is not a green live run.** Static proves the layers agree
+  as composed; it cannot see an undeployed Worker, an edge rule, or a stale
+  cache. The deploy gate is the live one.
+
+The note URL is **discovered** from `/wp-sitemap.xml` at run time, not pinned —
+a hardcoded slug rots the day a note is renamed, and a rotted fixture reads as
+rights drift. `--note <url>` and `--origin <url>` override for staging.
 
 ## Machine-readership sensor
 

@@ -1,4 +1,4 @@
-import { LICENSE_URL, CONTENT_SIGNAL } from "./constants.mjs";
+import { LICENSE_URL, CONTENT_SIGNAL, TDM_POLICY_URL } from "./constants.mjs";
 
 // Full ownership of the managed-content-signals block. Wired into
 // robots.mjs as of v1.2.0 (2026-07-23) — the owner disabled Cloudflare's
@@ -41,11 +41,28 @@ export const OWNED_ROBOTS_HEADER = `# As a condition of accessing this website, 
 #           augmented generation, grounding, or other real-time taking of content for
 #           generative AI search answers).
 # ai-train: training or fine-tuning AI models.
-# use:      how AI systems may consume the content (immediate, reference, or full).
 
 # ANY RESTRICTIONS EXPRESSED VIA CONTENT SIGNALS ARE EXPRESS RESERVATIONS OF
 # RIGHTS UNDER ARTICLE 4 OF THE EUROPEAN UNION DIRECTIVE 2019/790 ON COPYRIGHT
 # AND RELATED RIGHTS IN THE DIGITAL SINGLE MARKET.
+
+# ---------------------------------------------------------------------------
+# NON-NORMATIVE LOCAL EXTENSION: use=reference
+#
+# The Content-Signal line below carries a fourth term, "use", after the three
+# standard terms above. "use" is NOT part of the Cloudflare Content Signals
+# vocabulary. It is a locally-defined hint, published by this site only, that
+# content taken under ai-input is expected to be referenced and cited rather
+# than reproduced whole.
+#
+# It is NOT load-bearing. No permission on this site is granted, withheld, or
+# conditioned by it, and a parser that does not recognise "use" loses nothing
+# by ignoring the term. Per signal (c) above, a use for which no recognised
+# Content-Signal is expressed is neither granted nor restricted by this line.
+#
+# The operative statement of the same expectation is section 3 of the policy
+# at ${TDM_POLICY_URL}
+# ---------------------------------------------------------------------------
 
 # BEGIN Signal & Noise rights signals
 

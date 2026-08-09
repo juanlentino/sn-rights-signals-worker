@@ -2,6 +2,109 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.7.0 - 2026-08-09 — the policy page stops being a placeholder, and the stack starts checking itself
+
+**Headline:** every rights layer pointed at `/tdm-policy/`, and `/tdm-policy/` said "Placeholder."
+The reservation was real, the signals were live, and there was nothing at the end of the chain for
+a party to read or accept. This closes that, makes `license.xml` self-consistent when read alone,
+disclaims the one non-standard term, and adds a check so none of it can drift back unnoticed.
+
+Nothing already live was changed: the headers, the `Content-Signal` value, the named-crawler blocks,
+the `Link: rel="license"` and the `tdmrep.json` reservation are byte-identical to 1.6.1. The live
+check below was run against production BEFORE this change and passed 26 of 31 — the 5 failures were
+exactly the four defects being fixed here.
+
+#### New — `/tdm-policy/` is an operative document
+
+- **[src/tdm-policy-terms.mjs](src/tdm-policy-terms.mjs)** (new) holds the terms as a document,
+  apart from the page shell, so counsel reviews prose and not markup. Eight sections: the Article
+  4(3) reservation asserted globally; the conditional training licence; the unconditional permits;
+  acceptance; the machine-readable pointer table; version and supersession; what the document does
+  **not** claim; and a non-normative appendix.
+
+- **The attribution condition is testable, not aspirational.** Five conditions precedent
+  (C1–C5), each stating what is owed *and* how compliance is verified from the outside:
+  the author name verbatim and the canonical URL (C1), in the output itself and visible to the end
+  user (C2), corpus-level disclosure at a public URL (C3), when C2 triggers — including that a
+  licensee who operates no provenance machinery fails C2 for every output rather than escaping it
+  (C4), and non-transferability (C5). Failure of any one means no licence, with no cure period:
+  they are conditions precedent, not covenants.
+
+- **Marked as a draft in three places** — an HTML comment, a `tdm-policy-status` meta tag, and a
+  rendered banner — all driven by one `POLICY_STATUS` constant, so promotion after counsel's review
+  is a one-line edit that cannot leave a stale banner behind. §7 states plainly what is unsettled:
+  Article 4(3) supplies the mechanism, it does not decide the case; no major provider honours RSL
+  today; Content Signals are honoured voluntarily.
+
+#### Fixed — `license.xml` no longer reads as a naked grant to train
+
+A parser reading only `/license.xml` — the normal case, since robots.txt points at it with a
+`License:` line — saw `<permits type="usage">ai-train</permits>` and nothing else. The
+`ai-train=no` reservation the grant is an exception *to* lived in robots.txt, in the headers, and on
+the policy page, but not in the file itself. Correct as one layer of a stack; wrong as the
+standalone document most machines will actually read.
+
+Fixed in RSL's own grammar rather than in prose. §3.4 permits multiple `<license>` elements per
+`<content>`, so the two tiers are now two licences: `search ai-input` under `<payment type="free"/>`,
+and `ai-train` under `<payment type="attribution">` naming the policy as its `<standard>`. Plus
+`<copyright type="person">` and `<terms>` so the file names its own rightsholder and human terms.
+No `<content server=…>` — the owner is not joining the RSL Collective, and an unreachable license
+server would be worse than none. Validated well-formed with `xmllint`, independently of the reader
+this repo ships.
+
+#### Fixed — `use=reference` is disclaimed where a machine will meet it
+
+`use` is not in the Cloudflare Content Signals vocabulary. It was listed in robots.txt alongside
+`search`, `ai-train` and `ai-input` as though it were, which is the actual defect — not its
+presence. The term is kept; it now sits under its own `NON-NORMATIVE LOCAL EXTENSION` block stating
+that it is locally defined, that nothing depends on it, and that a parser may ignore it without
+loss. The same caveat appears in the policy appendix for human readers.
+
+#### New — a deploy check that fails loud on drift
+
+- **[scripts/rights-assertions.mjs](scripts/rights-assertions.mjs)** — 31 invariants over all four
+  layers, run from two artifact sources:
+  - **static**, on every PR, inside the existing `npm test` job
+    ([test/rights-consistency.test.mjs](test/rights-consistency.test.mjs)) — drives the real Worker
+    over a stubbed origin, so the header wrap, the HTMLRewriter injection and the robots composition
+    all really run;
+  - **live**, at deploy, via `postdeploy` in package.json
+    ([scripts/check-rights-signals.mjs](scripts/check-rights-signals.mjs)).
+
+- **The assertions compare layers against each other**, not each against the constant that produced
+  it. `tdmrep.json`'s policy URL is asserted equal to the `TDM-Policy` *header*; robots.txt's
+  `Content-Signal` equal to the *header* value byte for byte. A guard built from the same constant
+  as the thing it guards can only catch a typo — it cannot catch a partial deploy, which is the
+  failure that actually happens.
+
+- **`license.xml` is really parsed** ([scripts/mini-xml.mjs](scripts/mini-xml.mjs), strict,
+  dependency-free — neither Node nor workerd has a DOM parser). The old test asserted
+  `RSL_XML.toContain('<permits type="usage">ai-train</permits>')`, which stayed green for the entire
+  life of the defect it was meant to guard: a naked grant contains that substring exactly as happily
+  as a conditioned one. Structural assertions replace it, including one that fails if `all` or
+  `ai-all` ever re-grants training through a superset token.
+
+- **Eleven mutation tests assert the checker can fail.** Each flips a real regression — reservation
+  to 0, the two licences merged back into one, a second `Content-Signal` line, a crawler quietly
+  un-blocked, the extension notice removed, the `Link` header clobbering WordPress's own entries —
+  and each must turn the run red. A guard that cannot fail is decoration.
+
+- **Exit 2 means "could not run"**, distinct from exit 1 "drifted". Unreachable is not consistent
+  and must never be read as a pass.
+
+#### Notes
+
+- **CI adds no job.** The static check is a step in the existing `test` job and the live check is a
+  gated step in that same job (`workflow_dispatch` only). Actions bills per job rounded up, so a
+  second job for a four-second check would cost a whole extra minute on every run.
+- **Timestamping needs no new work.** `sn-provenance-worker` already fetches and OTS-anchors all
+  four rights surfaces hourly, content-hash de-duplicated and versioned. Deploying this produces
+  `tdm-policy/v2`, `license-xml/v2` and `robots-txt/v3` in the ledger on the next sweep, with no
+  manual step. Verify after deploy rather than assuming.
+
+> **Why MINOR:** new user-visible capability (a real policy document where a placeholder stood) with
+> no breaking change to any published signal value.
+
 ### 1.6.1 - 2026-08-08
 
 - **Fix (lost Sitemap pointer):** the composed robots.txt now GUARANTEES a

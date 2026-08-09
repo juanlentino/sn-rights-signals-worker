@@ -4,12 +4,27 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Manual only. The live check reads the DEPLOYED site, so it is meaningless
+  # on a PR (nothing is deployed yet) and racy on a push to main (this Worker
+  # ships via `npm run deploy`, not Workers Builds). The deploy gate is the
+  # postdeploy hook in package.json; this is the on-demand "is prod still
+  # consistent right now?" button.
+  workflow_dispatch:
+    inputs:
+      live:
+        description: "Also run the LIVE rights-signal check against juanlentino.com"
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # ONE job on purpose. Actions bills per job, rounded up to the whole minute,
+  # so a second job for a 4-second check would cost a full extra minute every
+  # run. Both checks are steps here; the live one is gated and bills nothing
+  # when it does not run.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -20,4 +35,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Includes test/rights-consistency.test.mjs — the STATIC rights check:
+      # drives the real Worker over a stubbed origin and asserts all four
+      # signal layers agree as composed. Fails the PR on drift.
       - run: npm test
+      - name: Live rights-signal check (deployed site)
+        if: github.event_name == 'workflow_dispatch' && inputs.live
+        run: npm run check:live
