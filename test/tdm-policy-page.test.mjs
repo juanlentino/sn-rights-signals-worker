@@ -57,6 +57,34 @@ describe("tdmPolicyHtml", () => {
     expect(html).toMatch(/OpenTimestamps/);
   });
 
+  // v1.10.2. §6 used to claim "Each published version of this policy is
+  // cryptographically timestamped", and that was false: anchoring runs on an
+  // hourly sweep, so v1.0 was published and superseded inside one interval and
+  // never got an anchor. These pin the corrected claim, because an
+  // over-promise in the one section that talks about evidence is the worst
+  // place in the document to carry one.
+  describe("§6 does not over-promise the anchoring", () => {
+    it("no longer claims EVERY published version is timestamped", () => {
+      expect(html).not.toMatch(/Each published version of this policy is\s*cryptographically timestamped/i);
+    });
+
+    it("states the sweep-interval limit and what is still guaranteed", () => {
+      expect(html).toMatch(/within a single sweep\s*interval<\/em> may therefore carry no anchor/i);
+      expect(html).toMatch(/Every version that is in force across a\s*sweep is anchored/i);
+      // The substantive promise must survive the correction — weakening the
+      // over-claim must not quietly weaken the commitment underneath it.
+      expect(html).toMatch(/no version is ever silently rewritten in place/i);
+    });
+
+    it("records the one instance rather than leaving it to be discovered", () => {
+      expect(html).toMatch(/Known unanchored version: 1\.0/);
+      // Naming WHAT differed is the point: an unexplained missing anchor
+      // invites the reading that terms changed unrecorded.
+      expect(html).toMatch(/did not yet list <code>\/ns\/tdm<\/code>/);
+      expect(html).toMatch(/No term in[\s\S]{0,200}differed/);
+    });
+  });
+
   it("declares its status in the markup, in a comment, and in a banner that agrees", () => {
     expect(html).toContain(`<meta name="tdm-policy-status" content="${POLICY_STATUS}">`);
     expect(html).toContain(`STATUS: ${POLICY_STATUS.toUpperCase()}`);

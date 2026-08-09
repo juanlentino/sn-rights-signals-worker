@@ -269,11 +269,19 @@ at the time it accepted, under <a href="#acceptance">&sect;4</a>. A later versio
 retroactively change the terms of an acceptance already performed, and does not renew one: a party
 whose conduct continues under a new version is accepting that new version by performance.</p>
 
-<p><strong>Supersession is timestamped.</strong> Each published version of this policy is
-cryptographically timestamped into the OpenTimestamps ledger, which anchors a hash of the document
-to the Bitcoin blockchain. That anchor is the evidence of what these terms said on a given date, and
-is independent of this site, of the rightsholder, and of any log either controls. Superseded
-versions keep their timestamps; a version is never silently rewritten in place.</p>
+<p><strong>Supersession is timestamped.</strong> Versions of this policy are cryptographically
+timestamped into the OpenTimestamps ledger, which anchors a hash of the document to the Bitcoin
+blockchain. That anchor is the evidence of what these terms said on a given date, and is independent
+of this site, of the rightsholder, and of any log either controls. Superseded versions keep their
+anchors, and <strong>no version is ever silently rewritten in place</strong>: a change to the terms
+produces a new version rather than an edit to a published one.</p>
+
+<p><strong>What the anchoring does not guarantee.</strong> Anchoring runs on a periodic sweep, not at
+the moment of publication. A version that is published and superseded <em>within a single sweep
+interval</em> may therefore carry no anchor of its own. Every version that is in force across a
+sweep is anchored. One instance of the gap has occurred and is recorded in the
+<a href="#notes">appendix</a>; it is noted there rather than left for a reader to discover by
+finding an anchor missing.</p>
 
 <p>The timestamp proves <em>when a document existed in a given form</em>. It proves nothing about
 who accepted it or whether its terms are enforceable.</p>`,
@@ -316,6 +324,14 @@ cited rather than reproduced whole, and it is
 recognise it loses nothing by ignoring it. The operative statement of that expectation is
 <a href="#unconditional">&sect;3</a>. The same caveat is carried as a comment in robots.txt itself,
 so a machine reader that never reaches this page still sees it.</p>
+
+<p><strong>Known unanchored version: 1.0.</strong> Version 1.0 was published on 9 August 2026 and
+superseded by 1.1 about twenty minutes later, inside a single sweep interval, so it carries no
+OpenTimestamps anchor of its own. It differed from 1.1 in one respect: &sect;5's table of
+machine-readable pointers did not yet list <code>/ns/tdm</code>. No term in
+<a href="#reservation">&sect;1</a>, <a href="#grant">&sect;2</a> or <a href="#unconditional">&sect;3</a>
+differed. Recorded here because an absent anchor should be explained by the document rather than
+discovered by a reader who goes looking for one.</p>
 
 <p><strong>Why a reservation and a grant in the same stack.</strong> Reading
 <a href="${LICENSE_URL}">/license.xml</a> in isolation, a parser sees <code>ai-train</code>
