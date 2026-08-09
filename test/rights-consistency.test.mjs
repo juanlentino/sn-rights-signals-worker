@@ -91,6 +91,9 @@ describe("rights-signal consistency (static)", () => {
     ["the ODRL policy grants ai-train with no duty", (a) => (a.policyOdrl.body = a.policyOdrl.body.replace(/"duty": \[[\s\S]*?\n {6}\]\n/, ""))],
     ["the ODRL policy drifts to a different version than the HTML", (a) => (a.policyOdrl.body = a.policyOdrl.body.replace(/"sn:version": "[^"]*"/, '"sn:version": "9.9"'))],
     ["Vary: Accept is dropped from the HTML representation", (a) => a.policy.headers.delete("vary")],
+    ["license.xml names CC BY as the governing attribution standard", (a) => (a.license.body = a.license.body.replace("<standard>https://juanlentino.com/tdm-policy/</standard>", "<standard>https://creativecommons.org/licenses/by/4.0/</standard>"))],
+    ["the policy stops denying that it grants CC BY 4.0", (a) => (a.policy.body = a.policy.body.replace(/This is not a grant of CC BY 4\.0 over this content/i, "This content is available"))],
+    ["the ODRL duty loses the incorporated attribution standard", (a) => (a.policyOdrl.body = a.policyOdrl.body.replace(/"sn:attributionStandard": "[^"]*",?\n/, ""))],
   ];
 
   it.each(mutations)("fails loudly when %s", async (_label, mutate) => {

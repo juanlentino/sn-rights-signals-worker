@@ -56,7 +56,19 @@ export const RSL_XML = `<?xml version="1.0" encoding="UTF-8"?>
          the sole route by which training becomes permitted, and it takes effect
          only for a party meeting the attribution conditions C1-C5 stated at
          the <standard> URL below. Attribution is the consideration; there is
-         no monetary term. -->
+         no monetary term.
+
+         WHY <standard> IS THE POLICY URL AND NOT THE CC BY 4.0 URL, even
+         though RSL's own guide shows CC BY there: the policy INCORPORATES
+         CC BY 4.0 §3(a) as its definition of adequate attribution, and then
+         adds C2-C4 on top (in-output, end-user-visible, corpus disclosure).
+         §3(a) alone is satisfied by a model card; C2 is not. Naming the CC
+         URL here would let a parser read the weaker half as the whole term,
+         and a licensee could satisfy the file while failing the licence. One
+         <standard>, pointing at the complete conditions. The CC reference is
+         published where it cannot be mistaken for the governing term: in the
+         policy prose, and as a namespaced sn:attributionStandard in the ODRL
+         representation. -->
     <license>
       <permits type="usage">ai-train</permits>
       <payment type="attribution">

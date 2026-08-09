@@ -51,13 +51,30 @@ ODRL's own name for a pre-condition on a permission. Negotiation is
 conservative: HTML unless JSON is named explicitly, because crawlers send `*/*`
 and must get the human terms, not the machine ones.
 
-**It is a draft.** `POLICY_STATUS = "draft"` renders a review banner, sets
-`<meta name="tdm-policy-status">`, and puts a status block in an HTML comment.
-It has not been reviewed by a lawyer. **Promotion path:** counsel reviews
-`src/tdm-policy-terms.mjs`, then flip `POLICY_STATUS` to `"final"`, bump
-`POLICY_VERSION`, deploy. The banner disappears on its own — it renders from the
-constant, so there is no second edit to forget. The deploy check asserts the
-page and the constant agree, in both directions.
+**It is in force, and it is self-drafted.** `POLICY_STATUS = "published"` since
+v1.9.0. It has not been reviewed by a lawyer and the page says so on its face —
+that assertion is checked in *both* status branches, so a future promotion
+cannot quietly drop it. Drafting risk is reduced by borrowing rather than by
+review: C1 incorporates **CC BY 4.0 §3(a)** as the definition of adequate
+attribution.
+
+**The line that must not move.** Incorporating §3(a) as a *standard* is not
+licensing this content under CC BY 4.0. CC BY grants rights in the licensed
+*material*, not in a *use*, so it cannot be narrowed to "training only" and stay
+CC BY — a party accepting it would acquire reproduction, adaptation and
+commercial redistribution of whole works. §2 therefore incorporates one clause
+and names the reserved uses explicitly. `license.xml` deliberately does **not**
+name the CC URL as its governing `<standard>` even though RSL's guide shows that
+pattern: §3(a) alone is met by a model card and C2 is not, so a parser reading
+the CC URL as the whole term would let a licensee satisfy the file while failing
+the licence. One invariant in the check asserts this boundary across all three
+layers.
+
+**C2 is stricter than §3(a) on purpose** and is labelled `beyond §3(a)` in the
+document. That is the one place borrowing CC would have weakened the position.
+
+**If CC Signals ships,** revisit: it is the purpose-built framework for this and
+was still in development at v1.9.0.
 
 Editing the terms is a legal change, not an editorial one. The drafting rules
 are at the top of `src/tdm-policy-terms.mjs`; read them first.
