@@ -325,6 +325,54 @@ export function documentChecks(a, check) {
       }
     }),
 
+    check("/llms.txt: does not announce the training grant without the reservation", () => {
+      // v1.10.3. NOT a worker surface — /llms.txt is WordPress prose, and that
+      // is exactly why it drifted: it sat outside the boundary every other
+      // assertion here draws. It shipped saying the RSL licence permits "AI
+      // training permitted with attribution", which states the EXCEPTION as
+      // the rule. A machine reading only that file — the reader it exists for
+      // — takes away a permission and never learns the default is no.
+      //
+      // Deliberately loose on wording and strict on substance, because this is
+      // hand-written prose that will be reworded and a brittle check would be
+      // deleted the first time it cried wolf. The rule: if the file talks
+      // about training at all, it must also say the default is reserved.
+      const body = String(a.llms.body);
+      const mentions = [...body.matchAll(/ai[- ]?train\w*|training/gi)];
+      if (mentions.length === 0) return; // silent on the subject is not a misstatement
+
+      // THE UNIT OF A CLAIM IS THE BULLET, not the document and not a character
+      // radius. Two earlier versions of this check were killed by their own
+      // mutation test: asserting /reserv/ document-wide passed when the
+      // training bullet was gutted, because a LATER bullet contained the word
+      // "reservation"; widening to a ±160-char window failed the same way,
+      // since adjacent bullets sit inside it. A claim is qualified by the
+      // sentence making it, so each list item is evaluated on its own.
+      // \b matters more than it looks: an unanchored /condition/ matches
+      // "unconditionally", which is the OPPOSITE meaning and let the gutted
+      // bullet pass. Third time this mutation test killed a version of this
+      // check — each failure was my regex being looser than my intent.
+      const GATING = /\breserv|by default|only under|\bconditions?\b/i;
+      const units = body.split(/\n(?=\s*[-*]\s)/);
+      const ungated = units.filter(
+        (u) => /ai[- ]?train\w*|training/i.test(u) && !GATING.test(u),
+      );
+      if (ungated.length) {
+        throw new Error(
+          "training stated with no reservation or condition in the same item: " +
+            JSON.stringify(ungated[0].replace(/\s+/g, " ").trim().slice(0, 140)),
+        );
+      }
+      // A machine reading only this file must be able to reach the conditions.
+      const hdr = header(a.html, "tdm-policy");
+      if (hdr && !body.includes(hdr)) {
+        throw new Error(`mentions training but does not link the policy (${hdr})`);
+      }
+      if (!body.includes("/license.xml")) {
+        throw new Error("mentions training but does not link license.xml");
+      }
+    }),
+
     check("note: the TDM meta tags are present in the rendered <head>", () => {
       const html = String(a.note.body);
       for (const tag of ['<meta name="tdm-reservation" content="1">', '<meta name="tdm-policy"']) {

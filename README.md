@@ -85,7 +85,7 @@ are at the top of `src/tdm-policy-terms.mjs`; read them first.
 `scripts/rights-assertions.mjs` holds 31 invariants across all four layers —
 headers on HTML *and* `/wp-json`, the robots.txt `Content-Signal`, `tdmrep.json`
 parsing and matching the header, `license.xml` parsing and licensing what it
-should, the policy page's sections and draft state, and the meta tags on a real
+should, `/llms.txt` not stating the training exception as the rule, the policy page's sections and draft state, and the meta tags on a real
 note. Two ways to run it:
 
 ```bash

@@ -42,7 +42,7 @@ function check(name, fn) {
  * @returns {{ok: boolean, passed: number, failed: number, results: object[]}} Report.
  */
 export function runRightsChecks(artifacts) {
-  const required = ["html", "wpjson", "robots", "tdmrep", "license", "policy", "policyOdrl", "nsTdm", "nsTdmJson", "note"];
+  const required = ["html", "wpjson", "robots", "tdmrep", "license", "policy", "policyOdrl", "nsTdm", "nsTdmJson", "llms", "note"];
   const absent = required.filter((k) => !artifacts || !artifacts[k]);
 
   const results = absent.length

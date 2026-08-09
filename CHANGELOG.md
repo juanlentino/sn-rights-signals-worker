@@ -2,6 +2,54 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.10.3 - 2026-08-09 — the check learns about /llms.txt
+
+**Tooling only — no `src/` change, nothing to deploy.**
+
+A concurrent session found `/llms.txt` announcing *"AI training permitted with attribution"* — the
+exception stated as the rule. A machine reading only that file, which is the reader it exists for,
+takes away a permission and never learns the default is **no**. They fixed it. **This check would
+not have caught it**, and that is the interesting part: 39 invariants covered headers, robots.txt,
+tdmrep.json, license.xml, both policy representations, `/ns/tdm` and a note — and said nothing about
+a file that makes substantive claims about the licence position in prose.
+
+The blind spot had a shape: `/llms.txt` is **WordPress-owned prose**, not a Worker surface, so it
+fell outside the boundary every other assertion here draws. The Worker knows the path exists —
+`machine-readers.mjs` classifies it as a surface class — and never looked at what it says.
+
+#### The invariant
+
+If `/llms.txt` mentions training at all, the **list item making that claim** must also carry
+reservation or conditioning language, and the file must link both the policy and `license.xml`.
+Silence on the subject is not a misstatement and passes.
+
+Deliberately loose on wording, strict on substance: this is hand-written prose that will be
+reworded, and a brittle check gets deleted the first time it cries wolf.
+
+#### Three versions of this check were killed by its own mutation test
+
+Worth recording, because each failure was the regex being looser than the intent:
+
+1. `/reserv/` **document-wide** — passed on the gutted bullet, because a *later* bullet contained
+   the word "reservation". Document-wide presence is not a statement about the claim being made.
+2. A **±160-character window** — passed too, since adjacent bullets sit inside it.
+3. Per-bullet, but with an unanchored `/condition/` — **matched "unconditionally"**, which is the
+   opposite meaning.
+
+Now: per list item, with `\bconditions?\b`. The unit of a claim is the sentence making it, not the
+document and not a character radius. Without the mutation test, all three would have shipped looking
+green.
+
+#### Static vs live
+
+`/llms.txt` is proxied, not synthesized, so the static run checks the **assertion logic** against a
+stub modelled on the live Rights block, and the live run checks the **content**. The two mutations
+are what give the static half its value.
+
+**40 invariants, 22 mutations.** Verified against production: `all 40 checks passed`.
+
+> **Why PATCH:** an addition to a development tool. No published artifact changed.
+
 ### 1.10.2 - 2026-08-09 — §6 stops over-promising the anchoring
 
 **Policy prose 1.1 → 1.2. DO NOT DEPLOY BEFORE THE 19:00 UTC SWEEP** — see the sequencing note below.
