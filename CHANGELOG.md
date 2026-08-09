@@ -2,6 +2,57 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.10.2 - 2026-08-09 — §6 stops over-promising the anchoring
+
+**Policy prose 1.1 → 1.2. DO NOT DEPLOY BEFORE THE 19:00 UTC SWEEP** — see the sequencing note below.
+
+§6 claimed: *"Each published version of this policy is cryptographically timestamped into the
+OpenTimestamps ledger."* That is false, and this stack produced the counterexample within hours of
+publishing it. **Version 1.0 was live for about twenty minutes and was replaced before the hourly
+sweep could fire**, so it carries no anchor.
+
+The over-claim sat in the one section of the document that talks about *evidence*, which is the
+worst place in it to carry one.
+
+#### The correction
+
+§6 now separates the guarantee from its limit:
+
+- **Guaranteed:** superseded versions keep their anchors, and no version is ever silently rewritten
+  in place — a change to the terms produces a new version rather than an edit to a published one.
+  The substantive commitment is untouched; weakening an over-claim must not quietly weaken the
+  promise underneath it.
+- **Not guaranteed:** anchoring runs on a periodic sweep, not at publication, so a version published
+  and superseded *within a single sweep interval* may carry no anchor of its own. Every version in
+  force across a sweep is anchored.
+
+#### The gap is recorded, not left to be found
+
+The appendix names version 1.0 explicitly: when it was published and superseded, and **what
+differed** — §5's pointer table did not yet list `/ns/tdm`, and no term in §1, §2 or §3 differed at
+all. An unexplained missing anchor invites the reading that terms changed unrecorded; naming the
+difference forecloses it. Better for the document to explain the gap than for a reader to discover
+it by going looking for an anchor that isn't there.
+
+#### Pinned by tests
+
+Three assertions (157 total): that §6 no longer carries the old "each published version" sentence,
+that it states both the sweep-interval limit and what survives it, and that the appendix records the
+instance *with* what differed. Prose that is only correct until someone tidies it is not correct.
+
+#### Sequencing — why this must not deploy yet
+
+Policy 1.1 is **currently unanchored**: it went live at 18:32 UTC and the 19:00 sweep has not run.
+Deploying 1.2 before that sweep would supersede 1.1 inside its own interval and leave **two**
+consecutive unanchored versions — while shipping the very section that explains why that happens.
+Self-consistent, and absurd.
+
+Hold until `/_sn/status` shows a `last_cron` after 19:00 with 1.1 anchored, then deploy. Costs
+nothing; there is no deploy in flight.
+
+> **Why PATCH:** a correction to published prose. No permission, value, route or representation
+> changed.
+
 ### 1.10.1 - 2026-08-09 — the deploy gate stops crying wolf, second cause
 
 **No `src/` change — nothing to deploy.** Tooling only; the fix is live for the next `npm run deploy`
