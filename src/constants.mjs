@@ -1,6 +1,28 @@
 export const SITE_ORIGIN = "https://juanlentino.com";
 export const TDM_POLICY_URL = `${SITE_ORIGIN}/tdm-policy/`;
 export const LICENSE_URL = `${SITE_ORIGIN}/license.xml`;
+export const TDMREP_URL = `${SITE_ORIGIN}/.well-known/tdmrep.json`;
+export const ROBOTS_URL = `${SITE_ORIGIN}/robots.txt`;
+export const CONTACT_URL = `${SITE_ORIGIN}/contact/`;
+
+// The rightsholder named in the attribution condition. Held here rather than
+// inlined into the policy prose because /license.xml's <copyright> element and
+// the policy page's §2 must name the SAME party — an attribution condition
+// that names two different holders is not a testable condition.
+export const RIGHTSHOLDER = "Juan Lentino";
+
+// Policy version + effective date. ONE pair of constants, read by the policy
+// page (§6), the RSL file's <terms> pointer and the deploy check. A version
+// stated in one place and not the other is the failure this prevents: a
+// licensee accepts "v0.1" and the file it accepted can no longer be identified.
+//
+// POLICY_STATUS is deliberately part of the data, not the prose. While it reads
+// "draft" the page renders its review banner; flipping it to "final" is the one
+// edit that promotes the document, and the check script asserts the page and
+// this constant agree.
+export const POLICY_VERSION = "0.1";
+export const POLICY_DATE = "2026-08-09";
+export const POLICY_STATUS = "draft";
 
 // The one Content-Signal string. robots-block.mjs interpolates this same
 // constant into the robots.txt block, so the header and the file can never
