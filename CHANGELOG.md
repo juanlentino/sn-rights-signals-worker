@@ -2,6 +2,63 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.9.1 - 2026-08-09 — the deploy gate stops crying wolf
+
+**Headline:** the v1.9.0 deploy landed correctly and `postdeploy` reported **9 of 36 failed**. The
+gate was wrong, not the deploy. A gate that cries wolf is worse than no gate, because the next real
+failure gets waved through by someone who has learned to re-run it.
+
+#### Two causes, and why a bigger sleep fixes neither
+
+`--settle 8` guessed at a duration and hoped. It was wrong twice over:
+
+1. **Propagation is not a fixed interval.** Replaced the blind sleep with a poll of
+   `/_sn/rights-signals/version` until it reports the version being shipped (`--await-version`).
+   That endpoint is `cache-control: no-store`, so it flips the instant the deploy lands: the wait is
+   exactly as long as it needs to be. Measured against production, **0 seconds** — the padded eight
+   was pure superstition even when it worked.
+
+2. **Edge caching outlives propagation, and version-matching alone would NOT have caught it.**
+   `license.xml` and `tdmrep.json` are served `public, max-age=3600`, so a colo can hand back an
+   hour-old copy long after the Worker itself has updated. That is what actually produced most of
+   the nine failures. `--fresh` sends `cache-control: no-cache` so the documents are revalidated
+   against the Worker instead of read out of a colo.
+
+#### `--fresh` is deliberately not the default
+
+Without it the tool reports **what a crawler actually receives**, cache and all — the honest thing
+for a drift check to measure. With it, it reports **what the Worker is serving now** — the right
+question immediately after a deploy, and the only one `postdeploy` cares about. The report header
+names which mode ran (`as cached` / `revalidated`) so a reader is never guessing which question was
+answered.
+
+#### Version gating is opt-in, never inferred
+
+npm exports `npm_package_version` to *every* script, so reading it as a default would have made a
+plain `npm run check:live` exit 2 whenever `main` was ahead of production — silently converting a
+drift report into a deploy gate for someone who only wanted to look. `postdeploy` passes
+`--await-version $npm_package_version` explicitly, so the expectation still comes from package.json
+and the number is still written exactly once.
+
+#### Exit codes keep their meanings
+
+A version that never goes live exits **2** (not verified), not 1 (drifted). Nothing was checked
+against the expected build, and reporting that as drift would misname the fault: the stack is not
+inconsistent, it is unconfirmed. `--await-timeout` bounds the wait (default 120s, generous so a slow
+rollout never reads as a failure) and makes the give-up path exercisable.
+
+#### Verified against production, both paths
+
+- `--await-version 1.9.0 --fresh` → live in 0s, **36/36 passed**, exit 0
+- `--await-version 99.0.0 --await-timeout 6` → `never reported v99.0.0 (last seen: 1.9.0)`, **exit 2**
+
+The failure path is tested by running it, not by asserting a mock: the bug being fixed was one a
+mocked clock and a mocked cache would both have missed.
+
+> **Why PATCH:** a fix to a broken gate. The three new flags exist to serve it. Judgment call worth
+> flagging — additive CLI surface has a MINOR case, but nothing a consumer of this Worker can see
+> changed.
+
 ### 1.9.0 - 2026-08-09 — the attribution standard comes from Creative Commons, and the terms come into force
 
 **Headline:** the definition of "adequate attribution" is no longer bespoke. Section 2's C1 now

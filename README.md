@@ -93,10 +93,24 @@ npm test          # STATIC: included in the suite; drives the real Worker
 npm run check:live   # LIVE: fetches juanlentino.com and checks what is served
 ```
 
-`npm run deploy` runs the live check automatically afterwards (`postdeploy`, with
-an 8s settle for propagation), so a deploy that breaks the stack fails loudly.
-Exit 0 = consistent, 1 = drifted, **2 = could not run** — unreachable is not a
-pass and is deliberately a different code.
+`npm run deploy` runs the live check automatically afterwards (`postdeploy`), so
+a deploy that breaks the stack fails loudly. Exit 0 = consistent, 1 = drifted,
+**2 = could not verify** — unreachable, or the expected version never went live.
+Deliberately a different code: unverified is not a pass.
+
+Two flags matter, and both exist because v1.9.0's deploy produced a 9-of-36
+**false red**:
+
+- `--await-version <v>` polls `/_sn/rights-signals/version` (which is
+  `no-store`) until the Worker reports that version, instead of sleeping a
+  guessed number of seconds. Opt-in, never inferred from `npm_package_version`,
+  or `check:live` would refuse to run whenever main is ahead of production.
+- `--fresh` sends `cache-control: no-cache`. `license.xml` and `tdmrep.json` are
+  served `max-age=3600`, so a colo can return an hour-old copy long after the
+  Worker updated — version-matching alone does **not** catch that. Not the
+  default: without it the tool measures what a crawler actually receives, which
+  is the honest question for a drift check. The report header names which mode
+  ran.
 
 Two things worth knowing:
 
