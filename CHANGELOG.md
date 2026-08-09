@@ -2,6 +2,53 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.10.1 - 2026-08-09 — the deploy gate stops crying wolf, second cause
+
+**No `src/` change — nothing to deploy.** Tooling only; the fix is live for the next `npm run deploy`
+from this checkout.
+
+The v1.10.0 deploy produced a second false red, from a cause v1.9.1's version poll does not cover:
+`/ns/tdm` answered correctly on the plain request and **404'd on the `ld+json` one, in the same
+parallel batch, milliseconds apart.** Both were correct within a minute, and the full check passed
+39/39 immediately after.
+
+#### Why version-matching was not enough
+
+Propagation is per-colo, and the ten artifact fetches go out in parallel. Matching the version at
+one endpoint proves that endpoint's colo is current; it proves nothing about the colo that serves
+the next request. A **brand-new route** is the worst case, because the pre-deploy 404 can still be
+cached at an edge the version poll never touched — which is exactly what `/ns/tdm` was.
+
+`--fresh` did not save it either: revalidation asks an edge to check with the origin, and an edge
+that has not yet learned the route exists is not an edge that will discover it mid-request.
+
+#### The fix
+
+A deploy run re-collects and re-checks up to **3 times**, 8s apart, before believing a failure. Each
+retry names what failed and why it is retrying, so a retry can never be mistaken for the tool
+quietly hiding something.
+
+**This does not weaken the gate.** A genuine defect fails every attempt and is still reported — with
+`still failing after 3 attempts over ~16s — this is drift, not propagation`, so the report says which
+of the two it concluded. The cost is ~16 seconds on a run that was going to fail anyway. What it
+removes is the failure mode where a real problem gets waved through because the gate has cried wolf
+twice in one afternoon.
+
+**A plain `check:live` retries nothing.** Retries are keyed to `--await-version`, which only
+postdeploy passes. With no deploy in flight a failure is a fact about the live site, and retrying
+until it passes would be the tool lying on the site's behalf.
+
+#### Verified, all three paths
+
+| Run | Result |
+|---|---|
+| deploy mode, healthy | passes on attempt 1, no retry noise |
+| deploy mode, genuinely broken artifact | retries 2×, then `1 of 39 FAILED` + "this is drift, not propagation", **exit 1** |
+| plain drift check, same broken artifact | **zero** retries, exit 1 |
+
+> **Why PATCH:** a fix to a development tool. No published artifact changed and no consumer of this
+> Worker can observe it.
+
 ### 1.10.0 - 2026-08-09 — the sn: namespace resolves, and §5 stops pointing at a 404
 
 Three loose ends from the post-deploy audit. Policy prose moves to **1.1**; see the supersession
