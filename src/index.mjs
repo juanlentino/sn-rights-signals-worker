@@ -3,6 +3,7 @@ import { tdmrepResponse } from "./tdmrep.mjs";
 import { rslResponse } from "./rsl.mjs";
 import { tdmPolicyHtml } from "./tdm-policy-page.mjs";
 import { tdmPolicyOdrlResponse } from "./tdm-policy-odrl.mjs";
+import { nsTdmResponse } from "./ns-tdm.mjs";
 import { injectTdmMeta } from "./html-injector.mjs";
 import { TDM_RESERVATION_HEADERS, LICENSE_LINK_HEADER } from "./constants.mjs";
 import { versionResponse } from "./version.mjs";
@@ -70,6 +71,15 @@ export default {
     // here rather than published at a second address nobody references.
     // `Vary: Accept` rides BOTH representations; without it a shared cache
     // hands the JSON to a browser.
+    // v1.10.0: the sn: namespace the ODRL document declares now resolves.
+    // JSON-LD never required it to, but publishing a URI that 404s is a poor
+    // argument on a site whose whole claim is that assertions should be
+    // checkable. Negotiated identically to /tdm-policy/ — same clients, same
+    // reason, and behaving differently between the two would be a trap.
+    if (pathname === "/ns/tdm" || pathname === "/ns/tdm/") {
+      return withTdmHeaders(nsTdmResponse(prefersOdrl(request.headers.get("accept"))));
+    }
+
     if (pathname === "/tdm-policy" || pathname === "/tdm-policy/") {
       if (prefersOdrl(request.headers.get("accept"))) return withTdmHeaders(tdmPolicyOdrlResponse());
       return withTdmHeaders(

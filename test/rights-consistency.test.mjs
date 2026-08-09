@@ -52,7 +52,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("rights-signal consistency (static)", () => {
   async function collect() {
     stubOrigin();
-    const [html, wpjson, robots, tdmrep, license, policy, policyOdrl, note] = await Promise.all([
+    const [html, wpjson, robots, tdmrep, license, policy, policyOdrl, nsTdm, nsTdmJson, note] = await Promise.all([
       artifact("/"),
       artifact("/wp-json/wp/v2/posts"),
       artifact("/robots.txt"),
@@ -60,9 +60,11 @@ describe("rights-signal consistency (static)", () => {
       artifact("/license.xml"),
       artifact("/tdm-policy/"),
       artifact("/tdm-policy/", "application/ld+json"),
+      artifact("/ns/tdm"),
+      artifact("/ns/tdm", "application/ld+json"),
       artifact("/notes/a-note/"),
     ]);
-    return { html, wpjson, robots, tdmrep, license, policy, policyOdrl, note };
+    return { html, wpjson, robots, tdmrep, license, policy, policyOdrl, nsTdm, nsTdmJson, note };
   }
 
   it("every layer the Worker composes agrees with every other", async () => {
@@ -94,6 +96,9 @@ describe("rights-signal consistency (static)", () => {
     ["license.xml names CC BY as the governing attribution standard", (a) => (a.license.body = a.license.body.replace("<standard>https://juanlentino.com/tdm-policy/</standard>", "<standard>https://creativecommons.org/licenses/by/4.0/</standard>"))],
     ["the policy stops denying that it grants CC BY 4.0", (a) => (a.policy.body = a.policy.body.replace(/This is not a grant of CC BY 4\.0 over this content/i, "This content is available"))],
     ["the ODRL duty loses the incorporated attribution standard", (a) => (a.policyOdrl.body = a.policyOdrl.body.replace(/"sn:attributionStandard": "[^"]*",?\n/, ""))],
+    ["a new sn: term is emitted with no definition at /ns/tdm", (a) => (a.policyOdrl.body = a.policyOdrl.body.replace('"sn:status"', '"sn:undocumentedThing": "x",\n  "sn:status"'))],
+    ["/ns/tdm stops resolving", (a) => { a.nsTdm.body = "not found"; a.nsTdm.headers = new Headers({ "content-type": "text/plain" }); }],
+    ["an ODRL purpose appears that robots.txt never declares", (a) => (a.policyOdrl.body = a.policyOdrl.body.replace('"sn:ai-train"', '"sn:ai-embed"'))],
   ];
 
   it.each(mutations)("fails loudly when %s", async (_label, mutate) => {

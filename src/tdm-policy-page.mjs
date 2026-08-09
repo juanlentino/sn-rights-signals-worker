@@ -25,7 +25,7 @@ import {
 // answer with terms. That is also why the styling is inline — the page must not
 // depend on the theme, or on any origin fetch, to render.
 
-const STYLES = `
+export const STYLES = `
 :root {
   color-scheme: light dark;
   --bg: #fbfaf8; --fg: #16151a; --muted: #5d5a66; --rule: #e2ded6;
