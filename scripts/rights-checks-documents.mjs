@@ -201,6 +201,41 @@ export function documentChecks(a, check) {
       if (duty.action !== "attribute") throw new Error(`duty action is ${duty.action}`);
     }),
 
+    check("CC BY 4.0 is incorporated as a STANDARD, never published as a grant", () => {
+      // The most expensive mistake available in this stack. CC BY 4.0 grants
+      // rights in the licensed MATERIAL, not in a USE — a consumer that read
+      // it as the licence would take reproduction, adaptation and commercial
+      // redistribution of whole works. Three assertions, one per layer.
+      const html = String(a.policy.body);
+      if (!html.includes("creativecommons.org/licenses/by/4.0/legalcode#s3a")) {
+        throw new Error("the policy does not incorporate the §3(a) attribution standard");
+      }
+      if (!/not a grant of CC BY 4\.0 over this content/i.test(html)) {
+        throw new Error("the policy does not deny granting CC BY 4.0 in terms");
+      }
+      // RSL: the governing <standard> must be the POLICY, not the CC licence.
+      // §3(a) alone is satisfied by a model card; C2 is not, so a CC URL here
+      // would let a parser read the weaker half as the whole term.
+      const content = childrenNamed(parseXml(a.license.body), "content")[0];
+      const training = childrenNamed(content, "license").find((l) =>
+        usageTokens(l).includes("ai-train"),
+      );
+      const standards = childrenNamed(childrenNamed(training, "payment")[0], "standard").map(textOf);
+      if (standards.some((s) => /creativecommons\.org/.test(s))) {
+        throw new Error(`license.xml names CC BY as the governing standard: ${standards.join(", ")}`);
+      }
+      // ODRL: the CC reference may appear, but only under a local namespace.
+      const duty = JSON.parse(a.policyOdrl.body)
+        .permission.find((p) => /ai-train/.test(String(p.constraint?.[0]?.["odrl:rightOperand"])))
+        .duty[0];
+      if (!String(duty["sn:attributionStandard"] || "").includes("creativecommons.org")) {
+        throw new Error("the ODRL duty does not name the incorporated attribution standard");
+      }
+      if (String(duty["sn:conditions"]).includes("creativecommons.org")) {
+        throw new Error("the ODRL governing conditions point at CC BY instead of the policy");
+      }
+    }),
+
     check("policy (ODRL): version and draft status match the HTML representation", () => {
       const doc = JSON.parse(a.policyOdrl.body);
       const html = String(a.policy.body);

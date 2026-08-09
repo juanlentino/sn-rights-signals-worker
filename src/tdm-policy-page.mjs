@@ -9,7 +9,7 @@ import {
   TDM_POLICY_URL,
 } from "./constants.mjs";
 import {
-  DRAFT_NOTICE,
+  STATUS_NOTICE,
   POLICY_DESCRIPTION,
   POLICY_SECTIONS,
   POLICY_TITLE,
@@ -62,6 +62,13 @@ code {
 }
 .flag strong { letter-spacing: .06em; font-size: .78rem; text-transform: uppercase; display: block; margin-bottom: .35rem; }
 .flag p { margin: 0; }
+.flag-live { --flag-bg: color-mix(in oklab, var(--accent) 8%, transparent); --flag-br: color-mix(in oklab, var(--accent) 45%, transparent); }
+.beyond {
+  font-size: .68rem; letter-spacing: .07em; text-transform: uppercase; font-weight: 600;
+  color: var(--accent); border: 1px solid currentColor; border-radius: 999px;
+  padding: .1em .5em; margin-left: .5em; vertical-align: .12em;
+}
+p.reserved { border-left: 3px solid var(--accent); padding-left: 1rem; }
 nav.toc {
   background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
   padding: 1.1rem 1.4rem .3rem; margin: 0 0 3rem; font-size: .92rem;
@@ -98,14 +105,14 @@ function sectionsHtml() {
   ).join("\n\n");
 }
 
-// The draft banner is rendered from POLICY_STATUS, not hardcoded — flipping the
-// constant to "final" is the single edit that promotes the document, and the
-// deploy check asserts the page and the constant agree.
-function draftBannerHtml() {
-  if (POLICY_STATUS !== "draft") return "";
-  return `<div class="flag" role="note">
-<strong>Draft — not final legal terms</strong>
-<p>${DRAFT_NOTICE}</p>
+// The status banner renders from POLICY_STATUS, never hardcoded, so the notice
+// and the declared status cannot disagree. The deploy check asserts that too,
+// in both directions.
+function statusBannerHtml() {
+  const draft = POLICY_STATUS === "draft";
+  return `<div class="flag${draft ? "" : " flag-live"}" role="note">
+<strong>${draft ? "Draft — not final legal terms" : "In force — self-drafted, not legal advice"}</strong>
+<p>${STATUS_NOTICE}</p>
 </div>`;
 }
 
@@ -115,11 +122,17 @@ export function tdmPolicyHtml() {
 <!--
   ${POLICY_TITLE} — version ${POLICY_VERSION} (${POLICY_STATUS}), ${POLICY_DATE}.
 
-  STATUS: ${POLICY_STATUS.toUpperCase()}. This document has NOT been reviewed by IP counsel.
-  It is published so the machine-readable rights signals have something to point at that
-  states real terms, and so counsel has a concrete draft to mark up — not as final legal
-  terms. Do not cite it as settled. Promotion path: review, then flip POLICY_STATUS in
-  src/constants.mjs, bump POLICY_VERSION, and timestamp the superseded text.
+  STATUS: ${POLICY_STATUS.toUpperCase()}. These terms are in force. They have NOT been
+  reviewed by a lawyer, and this document says so on its face rather than implying otherwise.
+  The drafting risk is reduced deliberately, not ignored: the definition of adequate
+  attribution is incorporated from CC BY 4.0 §3(a) — a standard, widely-construed clause —
+  rather than invented here. §7 states what the document does not claim.
+
+  NOT a CC BY 4.0 grant. One clause is incorporated as the attribution standard. Everything
+  §2 does not license is reserved under §1. Loosening that wording gives away the corpus.
+
+  Changing §2 changes what a licensee already accepted: bump POLICY_VERSION in
+  src/constants.mjs and let the superseded text keep its OpenTimestamps anchor.
 
   Source: src/tdm-policy-terms.mjs in sn-rights-signals-worker.
 -->
@@ -142,7 +155,7 @@ ${TDM_META_TAGS}
 <h1>${POLICY_TITLE}</h1>
 <p class="meta">${label} &middot; Version ${POLICY_VERSION} &middot; ${POLICY_DATE} &middot; ${RIGHTSHOLDER} &middot; juanlentino.com</p>
 
-${draftBannerHtml()}
+${statusBannerHtml()}
 
 <p>This page states how this site licenses text and data mining, AI training, and retrieval access
 to its content. It is the human-readable document that the site's machine-readable rights signals

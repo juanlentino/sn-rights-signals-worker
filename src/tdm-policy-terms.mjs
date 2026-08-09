@@ -15,6 +15,8 @@
 //      POLICY_VERSION in constants.mjs and timestamp the superseded text.
 
 import {
+  ATTRIBUTION_STANDARD_NAME,
+  ATTRIBUTION_STANDARD_URL,
   CONTACT_URL,
   LICENSE_URL,
   RIGHTSHOLDER,
@@ -72,22 +74,27 @@ that to be so. A party that meets some but not all of them holds no licence, and
 <dl class="conds">
 
   <dt>C1 &mdash; What must be attributed</dt>
-  <dd>The author name <strong>${RIGHTSHOLDER}</strong>, and the canonical URL of the specific work
-  relied on.
-  <p class="test"><em>Test:</em> both strings are present. The author name appears verbatim,
-  character for character. The URL is an absolute <code>https://</code> URL on the
-  <code>juanlentino.com</code> host that resolves to the work relied on &mdash; not the site root,
-  not a shortened, proxied, redirected, or tracker-wrapped form of it.</p>
-  <p class="test"><em>Standard:</em> where C1 is silent, the attribution requirements of
-  <a href="https://creativecommons.org/licenses/by/4.0/legalcode#s3a">Creative Commons Attribution
-  4.0 International, &sect;3(a)</a> apply as the definition of adequate attribution, including its
-  reasonable-manner and medium-appropriate provisions. <strong>That reference defines the
-  attribution standard only.</strong> It is not a grant of CC BY 4.0 over this content, and no
-  right beyond the training licence in this section is licensed by it.</p></dd>
+  <dd>Attribution meeting <a href="${ATTRIBUTION_STANDARD_URL}">${ATTRIBUTION_STANDARD_NAME}</a>,
+  which is incorporated here as the standard of adequate attribution and applies as though this
+  content were licensed under CC BY 4.0. In substance that requires, so far as reasonably
+  practicable: the author name <strong>${RIGHTSHOLDER}</strong>; a copyright notice; a URI to the
+  work; a notice of these terms; and an indication if the work was modified.
+  <p class="test"><em>Test:</em> the author name appears verbatim, character for character. The URI
+  is an absolute <code>https://</code> URL on the <code>juanlentino.com</code> host that resolves to
+  the specific work relied on &mdash; not the site root, and not a shortened, proxied, redirected,
+  or tracker-wrapped form of it. The notice of terms is a link to this page.</p>
+  <p class="test"><em>Why a standard rather than a bespoke definition:</em> &sect;3(a) is drafted,
+  translated into dozens of languages, and widely construed. Nothing is gained by inventing a
+  private definition of a term that already has a good public one.</p></dd>
 
-  <dt>C2 &mdash; Where it must appear</dt>
+  <dt>C2 &mdash; Where it must appear <span class="beyond">beyond &sect;3(a)</span></dt>
   <dd>In the model output itself, in the same response as the content it is attributing, visible to
   the end user who receives that response.
+  <p class="test"><em>This condition is stricter than ${ATTRIBUTION_STANDARD_NAME}, deliberately.</em>
+  &sect;3(a) asks for attribution "in any reasonable manner based on the medium, means, and context",
+  which was written for republication and does not settle where credit belongs when the medium is a
+  generated answer. C2 settles it for this content: in the answer. Where &sect;3(a) and C2 could both
+  be satisfied by different placements, C2 governs.</p>
   <p class="test"><em>Test:</em> a user reading the response sees the attribution without taking a
   further action. Attribution carried only in a training-data manifest, a model card, a system
   prompt, a hover state, a collapsed panel, a separate "sources" page, or an aggregated corpus
@@ -119,7 +126,22 @@ that to be so. A party that meets some but not all of them holds no licence, and
 </dl>
 
 <p>Nothing in this section is a payment obligation. The consideration for the licence is the
-attribution, and only the attribution.</p>`,
+attribution, and only the attribution.</p>
+
+<h3>What this section does not license</h3>
+
+<p class="reserved"><strong>This is not a grant of CC BY 4.0 over this content.</strong> C1
+incorporates one clause of that licence &mdash; &sect;3(a), which defines adequate attribution
+&mdash; and nothing else of it. CC BY 4.0 grants rights in the licensed <em>material</em> rather
+than in a particular <em>use</em>, so a party accepting it would acquire far more than training
+rights. No party acquires those rights here.</p>
+
+<p>The licence in this section extends to reproduction and extraction <strong>for the purpose of
+training or fine-tuning a model</strong>, and to nothing else. Reproduction, republication,
+distribution, public display, translation, adaptation, and any commercial exploitation of the works
+themselves &mdash; whether by a licensee, its users, or a third party &mdash; are
+<strong>reserved</strong> under <a href="#reservation">&sect;1</a> and are not licensed by this
+section, by C1's reference to &sect;3(a), or by any machine-readable signal this site publishes.</p>`,
   },
 
   {
@@ -300,10 +322,18 @@ elements &mdash; so the two files agree even when read separately.</p>`,
 ];
 
 // Rendered into the page banner and asserted by the deploy check, so the
-// document can never present as final while the source still says draft.
-export const DRAFT_NOTICE = `This is a working draft prepared for review by IP counsel. It states the
-rightsholder's position and the machine-readable signals it explains are live, but it has not been
-reviewed by a lawyer and should not be relied on as final legal terms. Comments to
+// document can never present a status its source does not declare.
+//
+// v1.9.0 CHANGED WHAT THIS SAYS. It previously read "pending IP counsel". The
+// owner decided not to instruct counsel for now and to lean on a standard
+// public licence clause instead, which is a real reduction in drafting risk —
+// the definition of attribution is no longer bespoke. So the terms are in
+// force, and the notice says what is actually true about them rather than
+// promising a review that is not scheduled. It does NOT claim legal review.
+export const STATUS_NOTICE = `These terms are in force. They are written by the rightsholder rather
+than by a lawyer, and they lean deliberately on a standard public licence clause &mdash;
+<a href="${ATTRIBUTION_STANDARD_URL}">${ATTRIBUTION_STANDARD_NAME}</a> &mdash; for the definition of
+attribution, rather than inventing one. Nothing here is legal advice. Corrections and questions to
 <a href="${CONTACT_URL}">${CONTACT_URL}</a>.`;
 
 export const POLICY_TITLE = "Text and Data Mining Policy";

@@ -20,9 +20,28 @@ export const RIGHTSHOLDER = "Juan Lentino";
 // "draft" the page renders its review banner; flipping it to "final" is the one
 // edit that promotes the document, and the check script asserts the page and
 // this constant agree.
-export const POLICY_VERSION = "0.1";
+export const POLICY_VERSION = "1.0";
 export const POLICY_DATE = "2026-08-09";
-export const POLICY_STATUS = "draft";
+export const POLICY_STATUS = "published";
+
+// The attribution baseline the policy incorporates by reference (section 2,
+// C1). Creative Commons Attribution 4.0 International, section 3(a) — the
+// clause that defines what adequate attribution IS. It is drafted, translated,
+// widely construed, and it is the reference RSL's own guide names for
+// payment type="attribution".
+//
+// READ THIS BEFORE CHANGING ANYTHING NEAR IT: incorporating §3(a) as the
+// DEFINITION of attribution is not the same as licensing this content under
+// CC BY 4.0, and the difference is the whole position. CC BY 4.0 grants rights
+// in the *Licensed Material*, not in a *use* — a party who accepts it acquires
+// reproduction, adaptation and commercial redistribution of whole works, and
+// the licence cannot be narrowed to "training only" while remaining CC BY.
+// The policy therefore incorporates the clause and expressly reserves
+// everything §2 does not grant. Loosening that wording gives away the corpus.
+export const ATTRIBUTION_STANDARD_URL =
+  "https://creativecommons.org/licenses/by/4.0/legalcode#s3a";
+export const ATTRIBUTION_STANDARD_NAME =
+  "Creative Commons Attribution 4.0 International, section 3(a)";
 
 // The one Content-Signal string. robots-block.mjs interpolates this same
 // constant into the robots.txt block, so the header and the file can never

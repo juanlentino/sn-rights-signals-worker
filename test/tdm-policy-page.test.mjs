@@ -57,13 +57,49 @@ describe("tdmPolicyHtml", () => {
     expect(html).toMatch(/OpenTimestamps/);
   });
 
-  it("declares its draft status in the markup, in a comment, and in a banner", () => {
+  it("declares its status in the markup, in a comment, and in a banner that agrees", () => {
     expect(html).toContain(`<meta name="tdm-policy-status" content="${POLICY_STATUS}">`);
     expect(html).toContain(`STATUS: ${POLICY_STATUS.toUpperCase()}`);
-    expect(html).toMatch(/NOT been reviewed by IP counsel/);
-    if (POLICY_STATUS === "draft") {
-      expect(html).toContain("Draft — not final legal terms");
-    }
+    // Whatever the status, the page must never imply a legal review that has
+    // not happened. This assertion holds in both branches on purpose.
+    // \s+ because the source comment wraps; the words matter, the wrap does not.
+    expect(html).toMatch(/NOT been\s+reviewed by a lawyer/);
+    const draftBanner = html.includes("Draft — not final legal terms");
+    expect(draftBanner).toBe(POLICY_STATUS === "draft");
+  });
+
+  // v1.9.0. The single most expensive mistake available in this document is
+  // letting the CC BY reference read as a licence rather than as a definition.
+  // CC BY 4.0 grants rights in the licensed MATERIAL, not in a USE, so a party
+  // who accepted it would acquire reproduction, adaptation and commercial
+  // redistribution of whole works. These assertions guard that boundary.
+  describe("the CC BY 4.0 reference is a standard, not a grant", () => {
+    it("incorporates §3(a) by link, as the definition of adequate attribution", () => {
+      expect(html).toContain('href="https://creativecommons.org/licenses/by/4.0/legalcode#s3a"');
+      expect(html).toMatch(/incorporated here as the standard of adequate attribution/i);
+    });
+
+    it("denies, in terms, that it grants CC BY 4.0 over the content", () => {
+      expect(html).toMatch(/This is not a grant of CC BY 4\.0 over this content/i);
+      expect(html).toMatch(/rights in the licensed <em>material<\/em> rather\s*than in a particular <em>use<\/em>/i);
+    });
+
+    it("names the reserved uses explicitly rather than leaving them to inference", () => {
+      // "Everything not granted is reserved" is true but weak. Naming the
+      // uses is what makes the boundary checkable by a reader in a hurry.
+      for (const use of ["republication", "distribution", "translation", "adaptation"]) {
+        expect(html.toLowerCase(), `${use} not named as reserved`).toContain(use);
+      }
+      expect(html).toMatch(/are\s*<strong>reserved<\/strong>/i);
+    });
+
+    it("keeps C2 stricter than §3(a), and says which governs on conflict", () => {
+      // §3(a)'s "any reasonable manner" was written for republication and does
+      // not settle placement for a generated answer. If C2 ever silently
+      // collapsed into §3(a), the sharpest condition in the policy would go.
+      expect(html).toMatch(/stricter than Creative Commons Attribution 4\.0 International, section 3\(a\)/i);
+      expect(html).toMatch(/C2 governs/);
+    });
   });
 
   it("marks use=reference as non-normative where a human reader will meet it", () => {

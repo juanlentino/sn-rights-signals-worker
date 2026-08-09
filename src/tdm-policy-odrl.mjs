@@ -1,4 +1,5 @@
 import {
+  ATTRIBUTION_STANDARD_URL,
   CONTACT_URL,
   POLICY_DATE,
   POLICY_STATUS,
@@ -112,6 +113,12 @@ export function tdmPolicyOdrl() {
           // that cures a failed condition precedent, and modelling one would
           // restate the grant as a covenant.
           "sn:conditions": `${TDM_POLICY_URL}#grant`,
+          // The incorporated definition of adequate attribution (CC BY 4.0
+          // §3(a)). NAMESPACED ON PURPOSE. An ODRL/RSL consumer must not be
+          // able to mistake it for the governing term: on its own §3(a) is
+          // satisfied by a model card, and C2 is not. `sn:conditions` above is
+          // what governs; this only says which standard C1 borrows.
+          "sn:attributionStandard": ATTRIBUTION_STANDARD_URL,
         },
       ]),
     ],

@@ -2,6 +2,74 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.9.0 - 2026-08-09 — the attribution standard comes from Creative Commons, and the terms come into force
+
+**Headline:** the definition of "adequate attribution" is no longer bespoke. Section 2's C1 now
+incorporates **CC BY 4.0 §3(a)** — a drafted, translated, widely-construed clause, and the reference
+RSL's own guide names for `payment type="attribution"`. With the riskiest piece of drafting borrowed
+rather than invented, `POLICY_STATUS` moves from `draft` to `published` and the version to **1.0**.
+
+#### What CC does and does not do here
+
+**Incorporated as a STANDARD, not granted as a LICENCE.** This distinction is the whole position and
+every layer is asserted against it:
+
+> CC BY 4.0 grants rights in the licensed *material*, not in a particular *use*. It cannot be
+> narrowed to "training only" and still be CC BY. A party accepting it would acquire reproduction,
+> adaptation and commercial redistribution of whole works.
+
+So §2 incorporates one clause and expressly reserves the rest. A new **"What this section does not
+license"** block names the reserved uses — republication, distribution, public display, translation,
+adaptation, commercial exploitation — rather than leaving them to inference from "everything not
+granted". The policy also states in terms that it is *not* a grant of CC BY 4.0.
+
+**C2 stays stricter than §3(a), and says so.** §3(a) asks for attribution "in any reasonable manner
+based on the medium, means, and context" — written for republication, and silent on where credit
+belongs when the medium is a generated answer. On its own it is satisfied by a model card. C2 is
+not, and the policy states that C2 governs where the two could be met by different placements. This
+is the one place borrowing CC would have *weakened* the position, so it is the one place the bespoke
+condition is kept and labelled `beyond §3(a)`.
+
+**CC Signals was the better fit and is not available.** Creative Commons' purpose-built framework —
+credit, compensation, contribution — remains in development with no released text and no
+machine-readable identifiers. Revisit when it ships; the promotion path is a constant, not a rewrite.
+
+#### Where the reference appears, and where it deliberately does not
+
+| Layer | Carries the CC reference? |
+|---|---|
+| policy prose (§2 C1) | **yes** — incorporated by link, with the non-grant denial beside it |
+| ODRL duty | **yes**, as namespaced `sn:attributionStandard` |
+| ODRL `sn:conditions` | **no** — governing conditions stay the policy URL |
+| `license.xml` `<standard>` | **no** — deliberately, see below |
+
+RSL's guide shows `<standard>https://creativecommons.org/licenses/by/4.0/</standard>` for attribution
+payments, and this file does **not** follow it. §3(a) alone is satisfied by a model card and C2 is
+not, so naming the CC URL as the governing standard would let a parser read the weaker half as the
+whole term — a licensee could satisfy the file while failing the licence. One `<standard>`, pointing
+at the complete conditions. The CC reference is published only where it cannot be mistaken for what
+governs.
+
+#### Status
+
+`POLICY_STATUS = "published"`, `POLICY_VERSION = "1.0"`. The banner now reads *"In force —
+self-drafted, not legal advice"* and says plainly that the terms are written by the rightsholder,
+not a lawyer, and lean on a standard public licence clause for the part that matters most. The
+HTML-comment status block says the same. **No layer claims a legal review that has not happened** —
+that assertion holds in both status branches, so it cannot be lost by a future promotion.
+
+#### Checks
+
+One new invariant (36 total), asserting the standard-not-grant boundary across all three layers at
+once: the policy incorporates §3(a) *and* denies granting CC BY; `license.xml` does **not** name CC
+as its governing `<standard>`; the ODRL duty names it only under the local namespace and never in
+`sn:conditions`. Three new mutations (17 total) — `license.xml` renamed to the CC URL, the non-grant
+denial removed, the ODRL standard dropped — each must turn the run red.
+
+> **Why MINOR:** the terms come into force and their scope is stated more tightly, but no permission
+> is added or withdrawn. A party meeting C1–C5 held a licence before this release and holds the same
+> licence after it.
+
 ### 1.8.0 - 2026-08-09 — the policy becomes machine-readable, on the same URL
 
 **Headline:** v1.7.0 gave `/tdm-policy/` real terms. It gave them only to humans. TDMRep treats a
