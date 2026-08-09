@@ -106,6 +106,14 @@ Two flags matter, and both exist because v1.9.0's deploy produced a 9-of-36
   `no-store`) until the Worker reports that version, instead of sleeping a
   guessed number of seconds. Opt-in, never inferred from `npm_package_version`,
   or `check:live` would refuse to run whenever main is ahead of production.
+- **A deploy run retries; a plain run never does.** When `--await-version` is
+  passed, the whole collect-and-check repeats up to 3 times 8s apart before a
+  failure is believed — propagation is per-colo and the ten fetches go out in
+  parallel, so a matched version at one endpoint says nothing about the colo
+  serving the next request. A genuine defect fails every attempt and is still
+  reported, labelled "this is drift, not propagation". Plain `check:live` gets
+  one attempt: with no deploy in flight, retrying until it passes would be the
+  tool lying on the site's behalf.
 - `--fresh` sends `cache-control: no-cache`. `license.xml` and `tdmrep.json` are
   served `max-age=3600`, so a colo can return an hour-old copy long after the
   Worker updated — version-matching alone does **not** catch that. Not the

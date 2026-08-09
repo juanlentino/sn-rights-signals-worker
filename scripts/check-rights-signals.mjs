@@ -44,6 +44,27 @@
 // a crawler actually receives, cache and all, which is the honest thing for a
 // drift check to measure. With it, it reports what the Worker is serving now,
 // which is the right question immediately after a deploy.
+//
+// v1.10.1 — WHY A DEPLOY RUN RETRIES, AND A PLAIN RUN NEVER DOES.
+//
+// The v1.10.0 deploy produced a SECOND false red, from a cause the version poll
+// above does not cover: /ns/tdm answered correctly on the plain request and
+// 404'd on the ld+json one, in the same batch, milliseconds apart. Both were
+// correct within a minute. Propagation is per-colo and the ten artifact fetches
+// go out in parallel, so matching the version at one endpoint proves nothing
+// about the colo that serves the next request — and a brand-new route is the
+// worst case, because the pre-deploy 404 may still be cached at an edge the
+// poll never touched.
+//
+// So a deploy run re-collects and re-checks up to DEPLOY_ATTEMPTS times before
+// believing a failure. This does NOT weaken the gate: a genuine defect fails
+// every attempt and is still reported, at the cost of ~16 extra seconds on a
+// run that was going to fail anyway. What it removes is the failure mode where
+// a real problem gets waved through because the gate has cried wolf twice.
+//
+// A plain `check:live` retries NOTHING. There is no deploy in flight, so a
+// failure is a fact about the live site and retrying until it passes would be
+// the tool lying on the site's behalf.
 
 import { SITE_ORIGIN } from "../src/constants.mjs";
 import { formatReport, runRightsChecks } from "./rights-assertions.mjs";
@@ -51,6 +72,12 @@ import { formatReport, runRightsChecks } from "./rights-assertions.mjs";
 const TIMEOUT_MS = 15000;
 const AWAIT_TIMEOUT_MS = 120000; // generous: a slow rollout must not read as a failure
 const AWAIT_INTERVAL_MS = 3000;
+
+// v1.10.1: how many times to re-collect and re-check before believing a
+// failure, and how long to wait between tries. DEPLOY RUNS ONLY — see runOnce's
+// caller for why a plain drift check must never retry.
+const DEPLOY_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = 8000;
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
@@ -120,34 +147,16 @@ async function discoverNote(origin) {
   return first[1];
 }
 
-async function main() {
-  const origin = arg("origin", SITE_ORIGIN).replace(/\/+$/, "");
+/**
+ * Collect every artifact once and run the invariants over them.
+ *
+ * @param {string} origin   Site origin.
+ * @param {number} attempt  1-based attempt number, for the report header.
+ * @param {number} attempts Total attempts allowed.
+ * @returns {Promise<{report: object, mode: string}>} Report and its header line.
+ */
+async function collectAndCheck(origin, attempt, attempts) {
   let artifacts;
-
-  // Wait for the thing we are about to assert on to actually be live, instead
-  // of sleeping a guessed number of seconds and hoping. See the header comment.
-  // OPT-IN, never inferred from the environment: npm exports
-  // npm_package_version to every script, so defaulting to it would make a plain
-  // `check:live` exit 2 whenever main is ahead of production — turning a drift
-  // report into a deploy gate for someone who only wanted to look. postdeploy
-  // passes it explicitly, so the expectation still comes from package.json and
-  // the number is still written once.
-  const want = arg("await-version", "");
-  if (want) {
-    process.stdout.write(`waiting for ${origin} to report v${want}…\n`);
-    const budgetMs = Number(arg("await-timeout", AWAIT_TIMEOUT_MS / 1000)) * 1000;
-    const { ok, seen, waitedMs } = await awaitVersion(origin, want, budgetMs);
-    if (!ok) {
-      process.stderr.write(
-        `the Worker never reported v${want} (last seen: ${seen ?? "unreachable"}) ` +
-          `after ${Math.round(waitedMs / 1000)}s\n` +
-          "  (exit 2 = NOT verified — the deploy may not have landed; nothing was checked against it)\n",
-      );
-      process.exit(2);
-    }
-    process.stdout.write(`v${want} live after ${Math.round(waitedMs / 1000)}s\n`);
-  }
-
   try {
     const noteUrl = arg("note") || (await discoverNote(origin));
     const [html, wpjson, robots, tdmrep, license, policy, policyOdrl, nsTdm, nsTdmJson, note] = await Promise.all([
@@ -173,9 +182,66 @@ async function main() {
   }
 
   const report = runRightsChecks(artifacts);
-  const mode = `live · ${origin} · ${FRESH ? "revalidated" : "as cached"} · note ${artifacts.note.url}`;
-  process.stdout.write(`${formatReport(report, mode)}\n`);
-  process.exit(report.ok ? 0 : 1);
+  const attemptNote = attempts > 1 ? ` · attempt ${attempt}/${attempts}` : "";
+  const mode = `live · ${origin} · ${FRESH ? "revalidated" : "as cached"}${attemptNote} · note ${artifacts.note.url}`;
+  return { report, mode };
+}
+
+async function main() {
+  const origin = arg("origin", SITE_ORIGIN).replace(/\/+$/, "");
+
+  // OPT-IN, never inferred from the environment: npm exports
+  // npm_package_version to every script, so defaulting to it would make a plain
+  // `check:live` exit 2 whenever main is ahead of production — turning a drift
+  // report into a deploy gate for someone who only wanted to look. postdeploy
+  // passes it explicitly, so the expectation still comes from package.json and
+  // the number is still written once.
+  const want = arg("await-version", "");
+  if (want) {
+    process.stdout.write(`waiting for ${origin} to report v${want}…\n`);
+    const budgetMs = Number(arg("await-timeout", AWAIT_TIMEOUT_MS / 1000)) * 1000;
+    const { ok, seen, waitedMs } = await awaitVersion(origin, want, budgetMs);
+    if (!ok) {
+      process.stderr.write(
+        `the Worker never reported v${want} (last seen: ${seen ?? "unreachable"}) ` +
+          `after ${Math.round(waitedMs / 1000)}s\n` +
+          "  (exit 2 = NOT verified — the deploy may not have landed; nothing was checked against it)\n",
+      );
+      process.exit(2);
+    }
+    process.stdout.write(`v${want} live after ${Math.round(waitedMs / 1000)}s\n`);
+  }
+
+  // Retries are a DEPLOY affordance, not a general one. `want` is only set by
+  // postdeploy, so a plain drift check gets exactly one attempt: with no deploy
+  // in flight a failure is a fact about the live site, and retrying until it
+  // passes would be the tool lying on the site's behalf.
+  const attempts = want ? DEPLOY_ATTEMPTS : 1;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const { report, mode } = await collectAndCheck(origin, attempt, attempts);
+
+    if (report.ok || attempt === attempts) {
+      process.stdout.write(`${formatReport(report, mode)}\n`);
+      if (!report.ok && attempts > 1) {
+        process.stdout.write(
+          `\nstill failing after ${attempts} attempts over ` +
+            `~${Math.round((RETRY_BACKOFF_MS * (attempts - 1)) / 1000)}s — this is drift, not propagation\n`,
+        );
+      }
+      process.exit(report.ok ? 0 : 1);
+    }
+
+    // A brand-new route is the worst case here: the pre-deploy 404 can still be
+    // cached at an edge the version poll never touched. Name what failed, so a
+    // retry is never mistaken for the tool hiding something.
+    process.stdout.write(
+      `attempt ${attempt}/${attempts}: ${report.failed} failed ` +
+        `(${report.results.filter((r) => !r.ok).map((r) => r.name).join("; ")}) — ` +
+        `retrying in ${RETRY_BACKOFF_MS / 1000}s in case this is propagation\n`,
+    );
+    await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
+  }
 }
 
 main();
