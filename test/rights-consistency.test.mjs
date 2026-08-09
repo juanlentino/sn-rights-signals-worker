@@ -41,9 +41,9 @@ function stubOrigin() {
   );
 }
 
-async function artifact(path) {
+async function artifact(path, accept) {
   const url = `https://juanlentino.com${path}`;
-  const res = await worker.fetch(new Request(url), {});
+  const res = await worker.fetch(new Request(url, accept ? { headers: { accept } } : undefined), {});
   return { url, status: res.status, headers: res.headers, body: await res.text() };
 }
 
@@ -52,16 +52,17 @@ afterEach(() => vi.unstubAllGlobals());
 describe("rights-signal consistency (static)", () => {
   async function collect() {
     stubOrigin();
-    const [html, wpjson, robots, tdmrep, license, policy, note] = await Promise.all([
+    const [html, wpjson, robots, tdmrep, license, policy, policyOdrl, note] = await Promise.all([
       artifact("/"),
       artifact("/wp-json/wp/v2/posts"),
       artifact("/robots.txt"),
       artifact("/.well-known/tdmrep.json"),
       artifact("/license.xml"),
       artifact("/tdm-policy/"),
+      artifact("/tdm-policy/", "application/ld+json"),
       artifact("/notes/a-note/"),
     ]);
-    return { html, wpjson, robots, tdmrep, license, policy, note };
+    return { html, wpjson, robots, tdmrep, license, policy, policyOdrl, note };
   }
 
   it("every layer the Worker composes agrees with every other", async () => {
@@ -87,6 +88,9 @@ describe("rights-signal consistency (static)", () => {
     ["the note loses its TDM meta tags", (a) => (a.note.body = a.note.body.replace(/<meta name="tdm-reservation"[^>]*>/, ""))],
     ["the Link header clobbers WordPress's own entries", (a) => a.html.headers.set("link", '<https://juanlentino.com/license.xml>; rel="license"')],
     ["the tdmrep policy URL drifts from the header", (a) => (a.tdmrep.body = a.tdmrep.body.replace("/tdm-policy/", "/tdm-policy-old/"))],
+    ["the ODRL policy grants ai-train with no duty", (a) => (a.policyOdrl.body = a.policyOdrl.body.replace(/"duty": \[[\s\S]*?\n {6}\]\n/, ""))],
+    ["the ODRL policy drifts to a different version than the HTML", (a) => (a.policyOdrl.body = a.policyOdrl.body.replace(/"sn:version": "[^"]*"/, '"sn:version": "9.9"'))],
+    ["Vary: Accept is dropped from the HTML representation", (a) => a.policy.headers.delete("vary")],
   ];
 
   it.each(mutations)("fails loudly when %s", async (_label, mutate) => {

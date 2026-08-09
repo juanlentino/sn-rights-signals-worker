@@ -24,7 +24,7 @@ never be the thing that breaks login or the admin dashboard.
 | `GET /robots.txt` | **Full ownership** — generates the entire content-signals block itself (`Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference`, the Article 4 preamble, the named-crawler `Disallow` list), appends whatever WordPress's own origin file contributes, then a `License:` directive. See "robots.txt ownership" below for why this took two tries. |
 | `GET /.well-known/tdmrep.json` | Worker-owned TDMRep well-known expression. |
 | `GET /license.xml` | Worker-owned RSL 1.0 licence document. |
-| `GET /tdm-policy(/)` | Worker-rendered policy document — the operative terms every other layer points at. Terms in `src/tdm-policy-terms.mjs`, shell in `src/tdm-policy-page.mjs`. Currently `POLICY_STATUS = "draft"` (see below). |
+| `GET /tdm-policy(/)` | Worker-rendered policy document, **content-negotiated**: `text/html` by default, an ODRL policy in the W3C TDMRep profile (`application/ld+json`) when a client explicitly asks. `Vary: Accept` on both — the operative terms every other layer points at. Terms in `src/tdm-policy-terms.mjs`, shell in `src/tdm-policy-page.mjs`. Currently `POLICY_STATUS = "draft"` (see below). |
 | `GET /wp-json` and `/wp-json/*` | Proxies to origin, adds `TDM-Reservation` / `TDM-Policy` headers. |
 | Everything else | Proxies to origin. If `content-type` is `text/html`, adds the same two headers and injects `<meta name="tdm-reservation">` / `<meta name="tdm-policy">` into `<head>` via `HTMLRewriter`. Non-HTML (images, CSS, JS) passes through unmodified. |
 | `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path). |
@@ -41,6 +41,15 @@ signal names must still answer with terms.
 
 Three constants in `src/constants.mjs` govern it: `POLICY_VERSION`,
 `POLICY_DATE`, `POLICY_STATUS`.
+
+**Two representations, one URL.** TDMRep treats a policy as machine-readable only
+when served as `application/(ld+)json`, so `src/tdm-policy-odrl.mjs` serves an
+ODRL policy in the TDMRep profile from the same address — modelled on Springer
+Nature's production policy, not invented here. `search` and `ai-input` are
+permissions with no duty; `ai-train` carries an ODRL `attribute` duty, which is
+ODRL's own name for a pre-condition on a permission. Negotiation is
+conservative: HTML unless JSON is named explicitly, because crawlers send `*/*`
+and must get the human terms, not the machine ones.
 
 **It is a draft.** `POLICY_STATUS = "draft"` renders a review banner, sets
 `<meta name="tdm-policy-status">`, and puts a status block in an HTML comment.

@@ -2,6 +2,77 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.8.0 - 2026-08-09 — the policy becomes machine-readable, on the same URL
+
+**Headline:** v1.7.0 gave `/tdm-policy/` real terms. It gave them only to humans. TDMRep treats a
+TDM Policy as machine-readable **only** when it is served as `application/json` or
+`application/ld+json` — so the `tdm-policy` field in tdmrep.json, the `TDM-Policy` header on every
+response, and the attribution `<standard>` in license.xml all resolved to a document no crawler
+could act on. The reservation was machine-readable; the terms that lift it were not.
+
+#### New — an ODRL policy in the W3C TDMRep profile
+
+[src/tdm-policy-odrl.mjs](src/tdm-policy-odrl.mjs). Not invented here: modelled on the W3C TDMRep
+techniques note and on Springer Nature's production policy at
+`datasolutions.springernature.com/tdm/SNTDMPolicy.json` — same `@context` stack (ODRL + vCard +
+`tdm:`), same `Offer` / `profile` / `assigner` / `permission` shape, same practice of versioning
+inside the `uid` path.
+
+**The ODRL fit is exact, which is why none of the prose had to bend.** ODRL defines a Duty as *"a
+pre-condition which must be fulfilled in order to receive the Permission"* — which is precisely what
+§2's C1–C5 are: conditions precedent, not covenants. So:
+
+- `search` and `ai-input` are permissions with **no duty** — nothing is owed;
+- `ai-train` is a permission carrying an `attribute` duty (ODRL's own action, *"To attribute the use
+  of the Asset"*) naming the `attributedParty`.
+
+`consequence` is deliberately absent: there is no remedial step that cures a failed condition
+precedent, and modelling one would restate the grant as a covenant with a remedy.
+
+**Purpose tokens are namespaced local terms** (`sn:ai-train`, resolvable under
+`https://juanlentino.com/ns/tdm#`), because ODRL has no standard right-operand for "train a model"
+versus "ground an answer". That is the `use=reference` lesson applied on the way in rather than
+retrofitted: a local term that resolves to a documented URI is honest; a bare token sitting beside
+standard ones is not. Likewise `sn:conditions` points at the operative prose instead of faking an
+ODRL left operand for "visible to the end user in the same response" — a term no processor could
+evaluate while implying it can.
+
+#### New — content negotiation, one URL
+
+Same `/tdm-policy/`, two representations. Not a second URL: five layers already name this one, and
+a parallel `/tdm-policy.json` would be a fifth pointer to update and a fifth thing to drift.
+
+`prefersOdrl()` is deliberately conservative — the JSON type must be named **explicitly** and must
+not be outranked by `text/html`. The trap it exists for: crawlers send `Accept: */*`, so a naive
+"does Accept mention json" test would hand every crawler the machine document and never the terms a
+human reviewer reads. Six cases are pinned by table.
+
+`Vary: Accept` rides **both** representations, and the check asserts it on both. Without it a shared
+cache serves the JSON to a browser and the HTML to a crawler — worse than not negotiating at all.
+
+#### Changed — the attribution standard is borrowed, not invented
+
+C1 now defers, where it is silent, to the attribution requirements of **CC BY 4.0 §3(a)** — a
+lawyer-drafted, widely-construed clause, and the reference RSL's own guide names for
+`payment type="attribution"`. Scoped explicitly: it defines *adequate attribution* and nothing else.
+The policy states in terms that this is **not** a grant of CC BY 4.0 over the content, which would
+license reproduction, adaptation and commercial use of whole works — far beyond training.
+
+#### Checks
+
+Four new invariants (35 total): the ld+json representation answers with the right content-type and
+profile; `Vary: Accept` on both representations; **the ODRL permissions mirror the RSL licences
+exactly**; and the ODRL version and draft status match the HTML representation's meta tags, with the
+`uid` versioned to match. Three new mutation tests — ai-train's duty stripped, the ODRL version
+drifting from the HTML, `Vary` dropped — each must turn the run red.
+
+The RSL-vs-ODRL mirror check is the one that earns its keep: two machine-readable expressions of one
+grant, asserted against **each other**. Either drifting alone is the whole failure mode.
+
+> **Why MINOR:** a new representation of an existing resource. No published value changed and no
+> existing consumer is affected — HTML remains the default for everything that does not explicitly
+> ask for JSON.
+
 ### 1.7.0 - 2026-08-09 — the policy page stops being a placeholder, and the stack starts checking itself
 
 **Headline:** every rights layer pointed at `/tdm-policy/`, and `/tdm-policy/` said "Placeholder."

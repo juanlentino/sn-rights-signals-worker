@@ -77,7 +77,13 @@ that to be so. A party that meets some but not all of them holds no licence, and
   <p class="test"><em>Test:</em> both strings are present. The author name appears verbatim,
   character for character. The URL is an absolute <code>https://</code> URL on the
   <code>juanlentino.com</code> host that resolves to the work relied on &mdash; not the site root,
-  not a shortened, proxied, redirected, or tracker-wrapped form of it.</p></dd>
+  not a shortened, proxied, redirected, or tracker-wrapped form of it.</p>
+  <p class="test"><em>Standard:</em> where C1 is silent, the attribution requirements of
+  <a href="https://creativecommons.org/licenses/by/4.0/legalcode#s3a">Creative Commons Attribution
+  4.0 International, &sect;3(a)</a> apply as the definition of adequate attribution, including its
+  reasonable-manner and medium-appropriate provisions. <strong>That reference defines the
+  attribution standard only.</strong> It is not a grant of CC BY 4.0 over this content, and no
+  right beyond the training licence in this section is licensed by it.</p></dd>
 
   <dt>C2 &mdash; Where it must appear</dt>
   <dd>In the model output itself, in the same response as the content it is attributing, visible to
@@ -202,6 +208,12 @@ any one of them reaches the others, and so that a human reviewer can trace the w
       <td>every response, HTML and <code>/wp-json</code> alike</td>
       <td><code>TDM-Reservation</code>, <code>TDM-Policy</code>, <code>Content-Signal</code>, and a
       <code>Link: &lt;/license.xml&gt;; rel="license"</code></td>
+    </tr>
+    <tr>
+      <td>ODRL / TDMRep</td>
+      <td>this URL, requested as <code>application/ld+json</code></td>
+      <td>the same permissions as a machine-readable W3C TDMRep policy: the two unconditional
+      permits, and the training permit carrying an ODRL <code>attribute</code> duty</td>
     </tr>
     <tr>
       <td>HTML metadata</td>
