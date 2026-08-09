@@ -20,9 +20,23 @@ export const RIGHTSHOLDER = "Juan Lentino";
 // "draft" the page renders its review banner; flipping it to "final" is the one
 // edit that promotes the document, and the check script asserts the page and
 // this constant agree.
-export const POLICY_VERSION = "1.0";
+export const POLICY_VERSION = "1.1";
 export const POLICY_DATE = "2026-08-09";
 export const POLICY_STATUS = "published";
+
+// SUPERSESSION IS THE REASON THIS IS 1.1 AND NOT AN EDIT TO 1.0.
+//
+// §6 promises that each published version is OpenTimestamps-anchored and that
+// "a version is never silently rewritten in place." At the time §5 gained its
+// /ns/tdm row, the only anchored tdm-policy record in the ledger was the OLD
+// PLACEHOLDER page (rights-signals/tdm-policy/v1, Bitcoin block 960034) — 1.0
+// itself had not yet been swept. So an in-place edit was technically available.
+//
+// It was declined. The sweep runs hourly on the hour and would anchor whatever
+// happened to be live when it fired, so "edit in place" meant racing a cron for
+// the right to rewrite a published version — which is the precise thing §6 was
+// written to prevent, dressed up as a technicality. Bumping costs one constant
+// and exercises the rule the policy states. 1.0 keeps whatever record it got.
 
 // The attribution baseline the policy incorporates by reference (section 2,
 // C1). Creative Commons Attribution 4.0 International, section 3(a) — the

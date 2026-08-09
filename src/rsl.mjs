@@ -44,7 +44,30 @@ export const RSL_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <terms>${TDM_POLICY_URL}</terms>
 
     <!-- Unconditional. Mirrors Content-Signal search=yes, ai-input=yes and
-         section 3 of the policy: free, no acceptance, no attribution owed. -->
+         section 3 of the policy: free, no acceptance, no attribution owed.
+
+         "search ai-input" IS ONE ELEMENT ON PURPOSE, AND MUST STAY THAT WAY.
+         Raised in the 2026-08-09 audit as possibly non-conforming, with a
+         proposed split into two <permits type="usage"> elements. Checked
+         against RSL 1.0 section 3.5, which settles it both ways:
+
+           "the listed values, separated by one or more spaces, are allowed"
+
+         so space separation conforms — and, in the same section:
+
+           "A <license> element MAY contain at most one <permits> element for
+            each distinct value of the type attribute"
+
+         so the proposed remedy would itself have been NON-CONFORMING. Two
+         <permits type="usage"> siblings inside one <license> is the thing the
+         spec forbids. Splitting the grant means splitting the <license>, which
+         would say something different: two separate term sets rather than one
+         licence covering both uses.
+
+         The worry behind the audit item was real — a strict parser reading only
+         the first token would silently drop the ai-input grant — but the fix
+         for that is a conforming document plus a test that asserts both tokens
+         survive parsing, which test/rsl.test.mjs does. Do not "fix" this. -->
     <license>
       <permits type="usage">search ai-input</permits>
       <payment type="free"/>

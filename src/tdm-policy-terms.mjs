@@ -232,6 +232,13 @@ any one of them reaches the others, and so that a human reviewer can trace the w
       <code>Link: &lt;/license.xml&gt;; rel="license"</code></td>
     </tr>
     <tr>
+      <td>Vocabulary</td>
+      <td><a href="${SITE_ORIGIN}/ns/tdm">/ns/tdm</a></td>
+      <td>definitions for the locally-defined <code>sn:</code> terms the machine-readable policy
+      uses, each with a resolving fragment. Definitions only &mdash; nothing there grants
+      anything</td>
+    </tr>
+    <tr>
       <td>ODRL / TDMRep</td>
       <td>this URL, requested as <code>application/ld+json</code></td>
       <td>the same permissions as a machine-readable W3C TDMRep policy: the two unconditional

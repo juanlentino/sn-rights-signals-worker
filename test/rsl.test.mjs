@@ -61,6 +61,26 @@ describe("license.xml (RSL 1.0)", () => {
     expect(licenses.flatMap(usage)).not.toContain("ai-all");
   });
 
+  // RSL 1.0 §3.5: multiple values are space-separated within ONE element, and
+  // "A <license> element MAY contain at most one <permits> element for each
+  // distinct value of the type attribute." A well-meaning split into two
+  // <permits type="usage"> siblings — proposed in the 2026-08-09 audit — would
+  // be non-conforming. This asserts the shape in both directions.
+  it("keeps multi-value permits in ONE element per type, per RSL §3.5", () => {
+    for (const license of licenses) {
+      const usagePermits = childrenNamed(license, "permits").filter(
+        (p) => (p.attrs.type || "usage") === "usage",
+      );
+      expect(usagePermits.length).toBe(1);
+    }
+    const free = licenses.find((l) => usage(l).includes("search"));
+    // Both tokens must survive parsing — the real risk the audit was pointing
+    // at, which is a parser concern rather than a document-shape concern.
+    expect(usage(free)).toContain("search");
+    expect(usage(free)).toContain("ai-input");
+    expect(textOf(childrenNamed(free, "permits")[0])).toBe("search ai-input");
+  });
+
   it("declares no license server — the owner is not joining the RSL Collective", () => {
     expect(content.attrs).not.toHaveProperty("server");
   });

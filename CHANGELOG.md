@@ -2,6 +2,87 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.10.0 - 2026-08-09 — the sn: namespace resolves, and §5 stops pointing at a 404
+
+Three loose ends from the post-deploy audit. Policy prose moves to **1.1**; see the supersession
+note below for why it is a bump and not an edit.
+
+#### New — `GET /ns/tdm`, the vocabulary behind the `sn:` prefix
+
+The ODRL policy declares `"sn": "https://juanlentino.com/ns/tdm#"` and uses ten terms from it, and
+that URI returned **404**. JSON-LD never required it to resolve, so nothing was broken — but a
+published URI that does not resolve is a poor argument on a site whose whole claim is that
+assertions should be checkable.
+
+Negotiated identically to `/tdm-policy/` (HTML by default, JSON-LD on an explicit ask, `Vary:
+Accept` on both), because the same clients read both for the same reason and diverging would be a
+trap. Every term renders with `id="<term>"`, so the fragment the ODRL document actually uses —
+`/ns/tdm#ai-train` — lands on its definition.
+
+Each entry gives the URI, a one-line definition, and what it corresponds to in Content-Signal or in
+the policy. Terms are marked **normative** or **non-normative**: `sn:conditions` governs;
+`sn:attributionStandard` explicitly does not, because CC BY §3(a) alone is satisfied by a model card
+and C2 is not.
+
+**The term list is audited, not maintained by hand.** The obvious way to build it — grep the source
+for `sn:` — **misses three of the ten**. `sn:search`, `sn:ai-input` and `sn:ai-train` are generated
+by interpolation (`` `sn:${token}` ``) and exist as literals in no source file. So the test walks
+the *emitted* ODRL document and fails if any term it finds is undefined, and the live check does the
+same against the *deployed* document. A hand-maintained list under-covers silently, and the terms it
+forgets are exactly the ones nobody thought about.
+
+#### Investigated — RSL multi-value permits are conforming, and the proposed fix was not
+
+`<permits type="usage">search ai-input</permits>` was raised as possibly non-conforming, with a
+proposed split into two `<permits>` elements. **RSL 1.0 §3.5 settles it both ways.** Space
+separation conforms:
+
+> "the listed values, separated by one or more spaces, are allowed"
+
+and, in the same section:
+
+> "A `<license>` element MAY contain at most one `<permits>` element for each distinct value of the
+> `type` attribute"
+
+so **the remedy would itself have been non-conforming** — two `<permits type="usage">` siblings in
+one `<license>` is the thing §3.5 forbids. Splitting the grant means splitting the `<license>`,
+which says something different: two term sets rather than one licence covering both uses.
+
+Left as-is, with the spec text quoted in a source comment so the next audit does not re-raise it,
+plus a test asserting exactly one `<permits>` per type **and** that both tokens survive parsing. The
+worry behind the item was real — a strict parser reading only the first token would silently drop
+the `ai-input` grant — but that is a parser risk, and the fix for it is a conforming document with a
+test, not a non-conforming one.
+
+#### Extended — the deploy-time check §5 promises
+
+It already existed and already ran: `scripts/rights-assertions.mjs`, static on every PR inside
+`npm test`, live at deploy via `postdeploy`. **§5 was true**, so nothing was softened. It now also
+asserts:
+
+- `/ns/tdm` resolves 200 in both representations, with `Vary: Accept` on each;
+- every `sn:` term the **live** ODRL document emits is defined at `/ns/tdm` **and** has a resolving
+  fragment anchor — cross-repo, so a term added in one session and undocumented in another fails;
+- the ODRL purposes cover **exactly** the published Content-Signal terms, no more and no fewer. A
+  purpose the signal never mentions is an unannounced grant; a signal term with no purpose is a
+  permission the machine document forgot.
+
+**39 invariants, 20 mutations.** Three new mutations: an undocumented `sn:` term, `/ns/tdm` ceasing
+to resolve, and an ODRL purpose robots.txt never declares.
+
+#### Policy 1.0 → 1.1, and why it is a bump
+
+§5 gained a row for `/ns/tdm`. At that moment the only anchored `tdm-policy` record in the ledger was
+the **old placeholder page** (`rights-signals/tdm-policy/v1`, Bitcoin block 960034) — 1.0 itself had
+not been swept yet, so an in-place edit was technically available.
+
+Declined. The sweep runs hourly on the hour and anchors whatever is live when it fires, so "edit in
+place" meant racing a cron for the right to rewrite a published version — the precise thing §6 was
+written to prevent, dressed as a technicality. A bump costs one constant and exercises the rule the
+policy states. **§1, §2 and C1–C5 are untouched.**
+
+> **Why MINOR:** a new route and a new published document. No existing permission or value changed.
+
 ### 1.9.1 - 2026-08-09 — the deploy gate stops crying wolf
 
 **Headline:** the v1.9.0 deploy landed correctly and `postdeploy` reported **9 of 36 failed**. The
