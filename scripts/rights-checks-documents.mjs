@@ -160,6 +160,63 @@ export function documentChecks(a, check) {
       if (declared[1] !== "draft" && banner) throw new Error("status is final but the draft banner renders");
     }),
 
+    check("policy (ODRL): the same URL answers ld+json to a machine", () => {
+      // TDMRep treats a policy as machine-readable ONLY when served as
+      // application/(ld+)json. Serving HTML alone leaves the tdm-policy field
+      // pointing at something no crawler can act on.
+      const ct = header(a.policyOdrl, "content-type");
+      if (!/application\/(ld\+)?json/.test(ct)) throw new Error(`content-type is ${JSON.stringify(ct)}`);
+      const doc = JSON.parse(a.policyOdrl.body);
+      if (doc.profile !== "http://www.w3.org/ns/tdmrep") throw new Error(`profile is ${doc.profile}`);
+      if (doc["@type"] !== "Offer") throw new Error(`@type is ${doc["@type"]}`);
+    }),
+
+    check("policy (ODRL): Vary: Accept rides BOTH representations", () => {
+      // Without it a shared cache serves the JSON to a browser and the HTML to
+      // a crawler — worse than not negotiating at all.
+      for (const [label, res] of [["html", a.policy], ["ld+json", a.policyOdrl]]) {
+        const v = header(res, "vary");
+        if (!/accept/i.test(v)) throw new Error(`${label} representation has Vary: ${JSON.stringify(v)}`);
+      }
+    }),
+
+    check("policy (ODRL): its permissions mirror the RSL licences exactly", () => {
+      // The cross-layer assertion that matters: two machine-readable
+      // expressions of the same grant, checked against EACH OTHER. Either one
+      // drifting alone is the defect this exists to catch.
+      const doc = JSON.parse(a.policyOdrl.body);
+      const purposeOf = (p) => String(p.constraint?.[0]?.["odrl:rightOperand"] || "");
+      const dutied = new Set(
+        doc.permission.filter((p) => p.duty?.length).map((p) => purposeOf(p).replace(/^sn:/, "")),
+      );
+      const free = new Set(
+        doc.permission.filter((p) => !p.duty?.length).map((p) => purposeOf(p).replace(/^sn:/, "")),
+      );
+      for (const t of UNCONDITIONAL) {
+        if (!free.has(t)) throw new Error(`${t} is not an unconditional ODRL permission`);
+      }
+      if (!dutied.has("ai-train")) throw new Error("ai-train carries no ODRL duty");
+      if (free.has("ai-train")) throw new Error("ai-train is permitted with no duty");
+      const duty = doc.permission.find((p) => purposeOf(p) === "sn:ai-train").duty[0];
+      if (duty.action !== "attribute") throw new Error(`duty action is ${duty.action}`);
+    }),
+
+    check("policy (ODRL): version and draft status match the HTML representation", () => {
+      const doc = JSON.parse(a.policyOdrl.body);
+      const html = String(a.policy.body);
+      const version = html.match(/<meta name="tdm-policy-version" content="([^"]*)">/);
+      const status = html.match(/<meta name="tdm-policy-status" content="([^"]*)">/);
+      if (doc["sn:version"] !== version?.[1]) {
+        throw new Error(`odrl=${doc["sn:version"]} html=${version?.[1]}`);
+      }
+      if (doc["sn:status"] !== status?.[1]) {
+        throw new Error(`odrl=${doc["sn:status"]} html=${status?.[1]}`);
+      }
+      if (!String(doc.uid).endsWith(doc["sn:version"])) {
+        throw new Error(`uid ${doc.uid} is not versioned to ${doc["sn:version"]}`);
+      }
+    }),
+
     check("note: the TDM meta tags are present in the rendered <head>", () => {
       const html = String(a.note.body);
       for (const tag of ['<meta name="tdm-reservation" content="1">', '<meta name="tdm-policy"']) {

@@ -67,16 +67,20 @@ async function main() {
 
   try {
     const noteUrl = arg("note") || (await discoverNote(origin));
-    const [html, wpjson, robots, tdmrep, license, policy, note] = await Promise.all([
+    const [html, wpjson, robots, tdmrep, license, policy, policyOdrl, note] = await Promise.all([
       get(`${origin}/`),
       get(`${origin}/wp-json/wp/v2/posts`, "application/json"),
       get(`${origin}/robots.txt`),
       get(`${origin}/.well-known/tdmrep.json`),
       get(`${origin}/license.xml`),
       get(`${origin}/tdm-policy/`),
+      // Same URL, negotiated. Asking for it separately is the only way to
+      // prove the machine representation is really reachable in production —
+      // a Vary-blind cache in front of the Worker would break exactly this.
+      get(`${origin}/tdm-policy/`, "application/ld+json"),
       get(noteUrl),
     ]);
-    artifacts = { html, wpjson, robots, tdmrep, license, policy, note };
+    artifacts = { html, wpjson, robots, tdmrep, license, policy, policyOdrl, note };
   } catch (err) {
     process.stderr.write(`rights-signal check could not run against ${origin}\n  ${err.message}\n`);
     process.stderr.write("  (exit 2 = unreachable, NOT a pass — nothing was verified)\n");

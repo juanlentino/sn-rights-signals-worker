@@ -2,12 +2,28 @@ import { robotsResponse } from "./robots.mjs";
 import { tdmrepResponse } from "./tdmrep.mjs";
 import { rslResponse } from "./rsl.mjs";
 import { tdmPolicyHtml } from "./tdm-policy-page.mjs";
+import { tdmPolicyOdrlResponse } from "./tdm-policy-odrl.mjs";
 import { injectTdmMeta } from "./html-injector.mjs";
 import { TDM_RESERVATION_HEADERS, LICENSE_LINK_HEADER } from "./constants.mjs";
 import { versionResponse } from "./version.mjs";
 import { bypassesRightsSignals } from "./admin-bypass.mjs";
 import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawler-list-status.mjs";
 import { machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
+
+// Content negotiation for /tdm-policy/, deliberately conservative: HTML is the
+// default and only an explicit JSON preference switches representation.
+//
+// Browsers send `text/html,...,*/*;q=0.8`, so a naive "does Accept mention
+// json" test would be fine — but crawlers send `*/*`, and a naive test that
+// treated `*/*` as JSON-willing would hand every crawler the machine document
+// and never the terms a human reviewer reads. Requiring the JSON type to be
+// named EXPLICITLY, and to not be outranked by text/html, gets both right.
+export function prefersOdrl(accept) {
+  if (!accept) return false;
+  const wantsJson = /\bapplication\/(ld\+)?json\b/i.test(accept);
+  if (!wantsJson) return false;
+  return !/\btext\/html\b/i.test(accept);
+}
 
 function withTdmHeaders(response) {
   const headers = new Headers(response.headers);
@@ -48,9 +64,19 @@ export default {
     if (pathname === "/robots.txt") return robotsResponse(request);
     if (pathname === "/.well-known/tdmrep.json") return tdmrepResponse();
     if (pathname === "/license.xml") return rslResponse();
+    // v1.8.0: ONE URL, two representations. TDMRep treats a policy as
+    // machine-readable only when it is served as application/(ld+)json, and
+    // every layer already points at this exact URL — so the JSON is negotiated
+    // here rather than published at a second address nobody references.
+    // `Vary: Accept` rides BOTH representations; without it a shared cache
+    // hands the JSON to a browser.
     if (pathname === "/tdm-policy" || pathname === "/tdm-policy/") {
+      if (prefersOdrl(request.headers.get("accept"))) return withTdmHeaders(tdmPolicyOdrlResponse());
       return withTdmHeaders(
-        new Response(tdmPolicyHtml(), { status: 200, headers: { "content-type": "text/html; charset=utf-8" } }),
+        new Response(tdmPolicyHtml(), {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8", vary: "Accept" },
+        }),
       );
     }
 
