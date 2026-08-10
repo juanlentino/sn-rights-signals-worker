@@ -14,13 +14,46 @@
 //     beacon pipeline's; the two are separate and never summed.
 //   - Observation must never affect a response: observeMachineReader() is
 //     fully try/catch'd and returns null on any failure.
+//
+// v1.11.0 amends ONE clause of that contract, deliberately and narrowly: a
+// sanitised, length-capped UA sample is stored for requests the taxonomy could
+// not match (RULE 2), because an unknown bucket nobody can inspect is not a
+// measurement. Everything else above still holds, and recognised agents still
+// store nothing but their enum values. See sanitizeUnknownUa() in taxonomy.mjs.
+
+import {
+  classifyVendorPurpose,
+  sanitizeUnknownUa,
+  TAXONOMY_VERSION,
+  TAXONOMY_EFFECTIVE_DATE,
+} from "./taxonomy.mjs";
+import { observeRightsSurfaceDetail } from "./machine-readers-rights-detail.mjs";
 
 /**
- * Fixed classification enum, first match wins — SPECIFIC families before the
- * generic buckets (applebot-extended must precede the plain applebot in
- * "search"; google-extended/googleother are AI fetchers, googlebot is search).
- * Maintained by hand like NAMED_CRAWLERS; extend with a named family rather
- * than widening a regex.
+ * The one additive family value (v1.11.0). Carries rows the frozen classifier
+ * would have dropped, so that no EXISTING family's meaning or population
+ * shifts. Mirrored in the plugin's snt_mr_valid_families() — extend both or
+ * neither, same rule as the original enum.
+ */
+export const UNCLASSIFIED_MACHINE = "unclassified-machine";
+
+/**
+ * FROZEN (v1.11.0). Fixed classification enum, first match wins — SPECIFIC
+ * families before the generic buckets (applebot-extended must precede the plain
+ * applebot in "search"; google-extended/googleother are AI fetchers, googlebot
+ * is search).
+ *
+ * DO NOT EDIT THIS LIST. A published number (77 AI-training reads, 30d to
+ * 31 July 2026, scheduled note 2071) depends on what these values meant, and
+ * the field has already moved underneath a published figure once. Two entries
+ * here are known to be WRONG against the vendors' current docs — googleother is
+ * a generic Google crawler, not an AI fetcher, and /mistralai/i swallows
+ * Mistral's index and user agents alongside its training one — and they stay
+ * wrong on purpose. The correction lives on the vendor/purpose axes in
+ * machine-reader-taxonomy.json, which are matched independently against the raw
+ * UA and never derived from the value produced here.
+ *
+ * New coverage goes in the taxonomy file. Never in this list.
  */
 export const MACHINE_FAMILIES = [
   ["openai", /gptbot|oai-searchbot|chatgpt-user/i],
@@ -122,14 +155,63 @@ export function observeMachineReader(request, env, pathname) {
       console.error(`[machine-readers] observe skipped: ${sensorState.last_error}`);
       return null;
     }
-    const family = classifyMachineReader(request.headers.get("user-agent"));
-    if (family === null) return null; // human/empty UA — not a write attempt
+    const ua = request.headers.get("user-agent");
+
+    // TWO INDEPENDENT PASSES. The family pass is the frozen v1.4.0 classifier,
+    // untouched. The taxonomy pass reads the same raw UA and knows nothing
+    // about what family said. Nothing below derives one axis from the other.
+    const legacyFamily = classifyMachineReader(ua);
+    const vp = classifyVendorPurpose(ua);
+
+    // Neither pass recognised it: a browser, or a machine nobody has named yet
+    // and whose UA carries no bot/crawler marker. Unchanged from v1.4.0 — we do
+    // not start recording humans in order to widen a crawler taxonomy.
+    if (legacyFamily === null && vp === null) return null;
+
+    // The additive family value (v1.11.0), used ONLY where the frozen
+    // classifier would have dropped the row entirely — facebookexternalhit,
+    // meta-webindexer, Slackbot, WhatsApp, ia_archiver and friends, all of
+    // which returned null and were silently treated as human. No EXISTING
+    // family value changes meaning or population, so any query filtering the
+    // original 18 families returns bit-identical results across the cutover.
+    const family = legacyFamily === null ? UNCLASSIFIED_MACHINE : legacyFamily;
     const surface = classifySurface(pathname);
-    env.SN_MR.writeDataPoint({ blobs: [family, surface], doubles: [1], indexes: [family] });
+
+    // RULE 2: the unknown bucket has to be reviewable or it is not a
+    // measurement. Sample the UA ONLY when the taxonomy failed to match —
+    // a recognised agent contributes nothing by having its UA stored, and
+    // storing less is the whole posture. See sanitizeUnknownUa() for the
+    // allowlist, and MACHINE-READERS.md for the privacy trade this makes.
+    const uaSample = vp === null ? sanitizeUnknownUa(ua) : "";
+
+    env.SN_MR.writeDataPoint({
+      blobs: [
+        family,
+        surface,
+        vp?.vendor ?? "",
+        vp?.purpose ?? "unknown",
+        TAXONOMY_VERSION,
+        vp?.training_corpus_source ? "1" : "0",
+        vp?.first_party ? "1" : "0",
+        uaSample,
+      ],
+      doubles: [1],
+      // Still exactly one index: Analytics Engine permits one per data point,
+      // so purpose cannot also be indexed. That costs sampling granularity on
+      // the purpose axis, not queryability — blobs are fully queryable in SQL.
+      indexes: [family],
+    });
+
+    // RULE 3: full-fidelity detail for rights-surface hits only (~80 reads per
+    // 30 days). Separate dataset, separate contract, never summed with the
+    // aggregate above. Cheap because rare, and these are the events the
+    // published claim actually rests on.
+    observeRightsSurfaceDetail(request, env, pathname, surface, family, vp);
+
     sensorState.last_write_ok = true;
     sensorState.last_write_at = new Date().toISOString();
     sensorState.last_error = null;
-    return { family, surface };
+    return { family, surface, vendor: vp?.vendor ?? null, purpose: vp?.purpose ?? "unknown" };
   } catch (err) {
     sensorState.last_write_ok = false;
     sensorState.last_error = err && err.message ? err.message : String(err);
@@ -141,6 +223,60 @@ export function observeMachineReader(request, env, pathname) {
 const DAYS_MIN = 1;
 const DAYS_MAX = 90;
 const DAYS_DEFAULT = 30;
+
+/** Fixed view allowlist — nothing from the query string is ever interpolated. */
+const VIEWS = new Set(["aggregate", "unknown", "rights"]);
+
+// How many unclassified user-agent strings the review view returns. Capped, and
+// the cap is REPORTED in the response, because a silently truncated leaderboard
+// reads as "that is all of them" when it is not.
+const UNKNOWN_LIMIT = 50;
+const RIGHTS_LIMIT = 500;
+
+/**
+ * @param {"aggregate"|"unknown"|"rights"} view
+ * @param {number} days Already clamped to an integer in [1, 90].
+ */
+function buildQuery(view, days) {
+  const since = `WHERE timestamp > NOW() - INTERVAL '${days}' DAY `;
+
+  // RULE 2: the top unclassified UAs by volume, so other-bot can be reviewed
+  // and the taxonomy extended from evidence instead of from guesswork.
+  if (view === "unknown") {
+    return (
+      "SELECT blob8 AS user_agent, sum(_sample_interval) AS hits " +
+      "FROM sn_machine_readers " +
+      since +
+      "AND blob4 = 'unknown' AND blob8 != '' " +
+      `GROUP BY user_agent ORDER BY hits DESC LIMIT ${UNKNOWN_LIMIT} FORMAT JSON`
+    );
+  }
+
+  // RULE 3: the full-fidelity rights-surface stream. Separate dataset; never
+  // summed with the aggregate.
+  if (view === "rights") {
+    return (
+      "SELECT blob1 AS surface, blob2 AS family, blob3 AS vendor, blob4 AS purpose, " +
+      "blob5 AS path, blob6 AS user_agent, blob7 AS accept, blob8 AS observed_at, " +
+      "sum(_sample_interval) AS hits FROM sn_machine_readers_rights " +
+      since +
+      "GROUP BY surface, family, vendor, purpose, path, user_agent, accept, observed_at " +
+      `ORDER BY observed_at DESC LIMIT ${RIGHTS_LIMIT} FORMAT JSON`
+    );
+  }
+
+  // Default: the aggregate. family and surface keep their original names and
+  // meaning so existing consumers are unaffected; the rest are additive.
+  return (
+    "SELECT blob1 AS family, blob2 AS surface, blob3 AS vendor, blob4 AS purpose, " +
+    "blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, " +
+    "toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
+    "FROM sn_machine_readers " +
+    since +
+    "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, " +
+    "first_party, day ORDER BY day ASC FORMAT JSON"
+  );
+}
 
 /**
  * Token-auth read path for the plugin (analytics-worker pattern): Bearer token
@@ -168,12 +304,10 @@ export async function machineReadersResponse(request, env) {
   const raw = parseInt(url.searchParams.get("days") || "", 10);
   const days = Number.isFinite(raw) ? Math.min(DAYS_MAX, Math.max(DAYS_MIN, raw)) : DAYS_DEFAULT;
 
-  // days is clamped to a small integer above — never string-interpolated user input.
-  const query =
-    "SELECT blob1 AS family, blob2 AS surface, toDate(timestamp) AS day, " +
-    "sum(_sample_interval) AS hits FROM sn_machine_readers " +
-    `WHERE timestamp > NOW() - INTERVAL '${days}' DAY ` +
-    "GROUP BY family, surface, day ORDER BY day ASC FORMAT JSON";
+  // view is matched against a fixed allowlist and never interpolated; days is
+  // clamped to a small integer above. Nothing user-supplied reaches the SQL.
+  const view = VIEWS.has(url.searchParams.get("view") || "") ? url.searchParams.get("view") : "aggregate";
+  const query = buildQuery(view, days);
 
   try {
     const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/analytics_engine/sql`, {
@@ -183,7 +317,21 @@ export async function machineReadersResponse(request, env) {
     });
     if (!res.ok) return json(502, { error: "upstream", status: res.status });
     const data = await res.json();
-    return json(200, { worker: "sn-rights-signals", days, data: data.data || [] });
+    // taxonomy_version rides the ENVELOPE as well as every row: the envelope
+    // says which definition this Worker would write today, the row field says
+    // which definition each historical row was written under. A window that
+    // spans a taxonomy change is then visibly mixed rather than quietly so.
+    return json(200, {
+      worker: "sn-rights-signals",
+      days,
+      view,
+      taxonomy_version: TAXONOMY_VERSION,
+      taxonomy_effective_date: TAXONOMY_EFFECTIVE_DATE,
+      // Reported, never silent: a truncated leaderboard that does not say it is
+      // truncated reads as complete coverage.
+      limit: view === "unknown" ? UNKNOWN_LIMIT : view === "rights" ? RIGHTS_LIMIT : null,
+      data: data.data || [],
+    });
   } catch {
     return json(502, { error: "upstream" });
   }

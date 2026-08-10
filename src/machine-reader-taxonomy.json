@@ -1,0 +1,516 @@
+{
+  "$comment": "The published cohort definition for the Machine Readers surface. DATA, not code — no switch statements anywhere. Served verbatim at https://juanlentino.com/_sn/rights-signals/taxonomy so any number derived from it can be checked against it. See docs/MACHINE-READERS.md in signal-and-noise-tools for the full contract.",
+
+  "taxonomy_version": "1.0.0",
+  "effective_date": "2026-08-10",
+
+  "matching": {
+    "algorithm": "ordered-substring-case-insensitive",
+    "note": "Entries are tested in array order and the FIRST match wins, so specific tokens must precede the generic ones they contain (applebot-extended before applebot; googlebot-image before googlebot). Plain substring rather than regex on purpose: no escaping subtleties, no catastrophic backtracking on a hostile UA, and a reviewer can verify a match by eye. Tokens that risk matching inside an unrelated word carry their punctuation (curl/, axios/, java/)."
+  },
+
+  "purpose_vocabulary": {
+    "train": "Declared AI training-corpus collection.",
+    "search": "Index building for a search product.",
+    "retrieval": "Live grounding for an AI answer, agent-initiated.",
+    "user": "User-directed single fetch, not a crawl.",
+    "archive": "Web archiving.",
+    "ops": "Uptime and monitoring.",
+    "seo": "Backlink and SEO crawlers.",
+    "feed": "RSS and JSON Feed readers.",
+    "social": "Link unfurlers and preview fetchers.",
+    "security": "Scanners and internet measurement.",
+    "dev": "Libraries and scripted clients.",
+    "unknown": "Unclassified, or a documented agent whose declared purpose has no home in this vocabulary yet."
+  },
+
+  "field_contract": {
+    "match": "Lowercase token matched as a substring against the lowercased User-Agent.",
+    "vendor": "Owning organisation, or null where not identifiable. Independent of purpose.",
+    "purpose": "One value from purpose_vocabulary. Reflects the operator's OWN declared function, not our inference about downstream use.",
+    "source": "URL of the vendor's own published declaration, or null where no first-party page exists.",
+    "declared": "true when purpose comes from the vendor's own published page; false when it rests on third-party reporting. A surface whose claim is 'observed vs declared' must not blur the two.",
+    "training_corpus_source": "true when content collected by this agent is known to feed AI training corpora, REGARDLESS of purpose. Keeps the dual role queryable without overloading purpose.",
+    "observable": "false for tokens that never appear in a request (robots.txt control tokens). Any observed hit on these is spoofed or synthetic.",
+    "note": "Present only where the call is contested or the vendor's declaration is internally mixed."
+  },
+
+  "entries": [
+    {
+      "id": "openai-gptbot",
+      "match": "gptbot",
+      "vendor": "openai",
+      "purpose": "train",
+      "source": "https://developers.openai.com/api/docs/bots",
+      "declared": true,
+      "training_corpus_source": true
+    },
+    {
+      "id": "openai-searchbot",
+      "match": "oai-searchbot",
+      "vendor": "openai",
+      "purpose": "search",
+      "source": "https://developers.openai.com/api/docs/bots",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "OpenAI: 'used to surface websites in search results in ChatGPT's search features'. Distinct from GPTBot and NOT a training crawler."
+    },
+    {
+      "id": "openai-chatgpt-user",
+      "match": "chatgpt-user",
+      "vendor": "openai",
+      "purpose": "user",
+      "source": "https://developers.openai.com/api/docs/bots",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "User-directed. OpenAI states robots.txt training rules may not apply because a person asked for this specific fetch. MUST NOT be counted as train."
+    },
+    {
+      "id": "openai-adsbot",
+      "match": "oai-adsbot",
+      "vendor": "openai",
+      "purpose": "unknown",
+      "source": "https://developers.openai.com/api/docs/bots",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "CONTESTED FILING. OpenAI: validates 'the safety of web pages submitted as ads on ChatGPT', and explicitly does not train generative models. Ad-safety validation has no home in the current vocabulary; filed unknown rather than stretched into security. An 'ads' purpose is proposed, not assumed."
+    },
+
+    {
+      "id": "anthropic-claudebot",
+      "match": "claudebot",
+      "vendor": "anthropic",
+      "purpose": "train",
+      "source": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
+      "declared": true,
+      "training_corpus_source": true
+    },
+    {
+      "id": "anthropic-searchbot",
+      "match": "claude-searchbot",
+      "vendor": "anthropic",
+      "purpose": "search",
+      "source": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "Anthropic: 'navigates the web to improve search result quality for users'. Falls to family other-bot under the frozen v1.4.0 family regex, which never matched this token — the vendor axis is what makes it visible."
+    },
+    {
+      "id": "anthropic-claude-user",
+      "match": "claude-user",
+      "vendor": "anthropic",
+      "purpose": "user",
+      "source": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "User-directed. MUST NOT be counted as train."
+    },
+    {
+      "id": "anthropic-claude-web",
+      "match": "claude-web",
+      "vendor": "anthropic",
+      "purpose": "user",
+      "source": null,
+      "declared": false,
+      "training_corpus_source": false,
+      "note": "Legacy token carried by the frozen family regex. Not present in Anthropic's current documentation; retained so historical family rows keep a vendor."
+    },
+
+    {
+      "id": "google-extended",
+      "match": "google-extended",
+      "vendor": "google",
+      "purpose": "train",
+      "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "declared": true,
+      "training_corpus_source": true,
+      "observable": false,
+      "note": "Control token, like Applebot-Extended: Google documents it as the way to 'manage whether content may be used for training future generations of Gemini models', not as a fetching agent. Expect ~0 observed hits."
+    },
+    {
+      "id": "google-cloudvertexbot",
+      "match": "google-cloudvertexbot",
+      "vendor": "google",
+      "purpose": "retrieval",
+      "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "CONTESTED FILING. Google: 'crawls requested by site owners for building Vertex AI Agents'. Filed retrieval because it builds grounding corpora that serve AI answers rather than foundation-model weights; a reasonable reader could argue train."
+    },
+    {
+      "id": "google-inspectiontool",
+      "match": "google-inspectiontool",
+      "vendor": "google",
+      "purpose": "seo",
+      "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "Search Console's Rich Result Test and URL inspection — owner-triggered SEO tooling, not a crawl."
+    },
+    {
+      "id": "google-storebot",
+      "match": "storebot-google",
+      "vendor": "google",
+      "purpose": "search",
+      "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "google-other-image",
+      "match": "googleother-image",
+      "vendor": "google",
+      "purpose": "unknown",
+      "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "google-other-video",
+      "match": "googleother-video",
+      "vendor": "google",
+      "purpose": "unknown",
+      "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "google-other",
+      "match": "googleother",
+      "vendor": "google",
+      "purpose": "unknown",
+      "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "CORRECTS A LIVE OVER-COUNT. Google documents GoogleOther as a 'generic crawler that may be used by various product teams for fetching publicly accessible content' — it is not AI-specific. The frozen family regex files it as google-ai, which sits inside the published AI-training set, so generic Google fetches are currently reported as AI-training reads. family is frozen and stays wrong; purpose is what should be read."
+    },
+    {
+      "id": "google-bot-image",
+      "match": "googlebot-image",
+      "vendor": "google",
+      "purpose": "search",
+      "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "google-bot-video",
+      "match": "googlebot-video",
+      "vendor": "google",
+      "purpose": "search",
+      "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "google-bot-news",
+      "match": "googlebot-news",
+      "vendor": "google",
+      "purpose": "search",
+      "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "google-bot",
+      "match": "googlebot",
+      "vendor": "google",
+      "purpose": "search",
+      "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "declared": true,
+      "training_corpus_source": false
+    },
+
+    {
+      "id": "perplexity-user",
+      "match": "perplexity-user",
+      "vendor": "perplexity",
+      "purpose": "user",
+      "source": "https://docs.perplexity.ai/guides/bots",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "Perplexity: 'not used for web crawling or to collect content for training AI foundation models'."
+    },
+    {
+      "id": "perplexity-bot",
+      "match": "perplexitybot",
+      "vendor": "perplexity",
+      "purpose": "search",
+      "source": "https://docs.perplexity.ai/guides/bots",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "Perplexity: 'designed to surface and link websites in search results', and 'not used to crawl content for AI foundation models'."
+    },
+
+    {
+      "id": "apple-bot-extended",
+      "match": "applebot-extended",
+      "vendor": "apple",
+      "purpose": "train",
+      "source": "https://support.apple.com/en-us/119829",
+      "declared": true,
+      "training_corpus_source": true,
+      "observable": false,
+      "note": "NOT AN OBSERVABLE AGENT. Apple: 'Applebot-Extended does not crawl webpages' — it is a robots.txt control token used only to decide how data already collected by Applebot may be used. The requested Apple train/search split cannot be measured from request logs. The frozen family apple-ai therefore reports a phantom: any non-zero count is spoofed or synthetic."
+    },
+    {
+      "id": "apple-bot",
+      "match": "applebot",
+      "vendor": "apple",
+      "purpose": "search",
+      "source": "https://support.apple.com/en-us/119829",
+      "declared": true,
+      "training_corpus_source": true,
+      "note": "The only Apple agent that actually fetches. training_corpus_source is true because Applebot-Extended governs the training use of exactly this agent's collection."
+    },
+
+    {
+      "id": "meta-externalagent",
+      "match": "meta-externalagent",
+      "vendor": "meta",
+      "purpose": "train",
+      "source": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
+      "declared": true,
+      "training_corpus_source": true,
+      "note": "Meta declares a mixed function: 'training foundation AI models or improving products by indexing content directly'. Filed train because training is named first and is the reason the rights surfaces exist."
+    },
+    {
+      "id": "meta-externalfetcher",
+      "match": "meta-externalfetcher",
+      "vendor": "meta",
+      "purpose": "retrieval",
+      "source": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "Meta: 'helping AI navigate websites to complete tasks for users' — agent-initiated grounding, not corpus collection."
+    },
+    {
+      "id": "meta-webindexer",
+      "match": "meta-webindexer",
+      "vendor": "meta",
+      "purpose": "search",
+      "source": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "Improves Meta AI search results. Invisible to the frozen family classifier, which returns null for this token — recorded only under the additive unclassified-machine family."
+    },
+    {
+      "id": "meta-externalads",
+      "match": "meta-externalads",
+      "vendor": "meta",
+      "purpose": "unknown",
+      "source": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "Advertising and business products. Same vocabulary gap as OAI-AdsBot; see the proposed 'ads' purpose."
+    },
+    {
+      "id": "meta-facebookexternalhit",
+      "match": "facebookexternalhit",
+      "vendor": "meta",
+      "purpose": "social",
+      "source": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "Link unfurler: fetches 'title, description, and thumbnail image' for content shared into Meta apps. Returns null from the frozen family classifier (no bot/crawler/spider substring), so it has never been recorded at all."
+    },
+
+    {
+      "id": "commoncrawl-ccbot",
+      "match": "ccbot",
+      "vendor": "commoncrawl",
+      "purpose": "archive",
+      "source": "https://commoncrawl.org/ccbot",
+      "declared": true,
+      "training_corpus_source": true,
+      "note": "DECIDED: archive. Common Crawl's own declaration is 'an open repository of web crawl data that is universally accessible and analyzable by anyone' — archiving, with no claim to train models. Its role as one of the largest AI training corpora is real but is a downstream fact about consumers, not the operator's declared purpose, so it rides training_corpus_source rather than overloading purpose. Filing it train would attribute to Common Crawl an intent it does not state; filing it archive alone would hide the dual role. This is the case the boolean exists for."
+    },
+
+    {
+      "id": "amazon-bot",
+      "match": "amazonbot",
+      "vendor": "amazon",
+      "purpose": "search",
+      "source": "https://developer.amazon.com/amazonbot",
+      "declared": true,
+      "training_corpus_source": true,
+      "note": "JUSTIFIED: search. Amazon's page leads with 'used to improve our products and services' and 'provide more accurate information to customers', then hedges training as a possibility: content 'may be used to train Amazon AI models'. purpose records the primary declared function, so filing train would overstate a hedged claim; the training use is preserved exactly where the CCBot precedent puts it, on training_corpus_source. Same treatment, same reasoning, so the two are comparable."
+    },
+
+    {
+      "id": "bytedance-bytespider",
+      "match": "bytespider",
+      "vendor": "bytedance",
+      "purpose": "train",
+      "source": null,
+      "declared": false,
+      "training_corpus_source": true,
+      "note": "NO FIRST-PARTY DECLARATION EXISTS. ByteDance publishes no crawler page comparable to OpenAI's or Anthropic's; the training purpose rests on third-party reporting only. declared=false is the honest record of that, and this surface must not present an inference as a declaration."
+    },
+
+    {
+      "id": "mistral-training",
+      "match": "mistralai-training",
+      "vendor": "mistral",
+      "purpose": "train",
+      "source": "https://docs.mistral.ai/robots/",
+      "declared": true,
+      "training_corpus_source": true
+    },
+    {
+      "id": "mistral-index",
+      "match": "mistralai-index",
+      "vendor": "mistral",
+      "purpose": "search",
+      "source": "https://docs.mistral.ai/robots/",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "CORRECTS A LIVE OVER-COUNT. Mistral: 'indexing purposes only', explicitly 'not used for generative AI training'. The frozen family regex /mistralai/i files all three Mistral agents as the mistral family, which sits inside the published AI-training set."
+    },
+    {
+      "id": "mistral-user",
+      "match": "mistralai-user",
+      "vendor": "mistral",
+      "purpose": "user",
+      "source": "https://docs.mistral.ai/robots/",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "User-directed; Mistral states it is not used for generative AI training. Same over-count as mistralai-index."
+    },
+
+    {
+      "id": "cohere-ai",
+      "match": "cohere-ai",
+      "vendor": "cohere",
+      "purpose": "train",
+      "source": null,
+      "declared": false,
+      "training_corpus_source": true,
+      "note": "No first-party Cohere crawler page was reachable at taxonomy time (cohere.com/cohere-bot returns 404). Purpose rests on third-party directories, which are themselves split between training collection and user-prompted retrieval. Re-verify before this token is cited in a published claim."
+    },
+
+    {
+      "id": "allenai-ai2bot",
+      "match": "ai2bot",
+      "vendor": "allen-ai",
+      "purpose": "train",
+      "source": "https://allenai.org/crawler",
+      "declared": true,
+      "training_corpus_source": true,
+      "note": "Allen Institute: 'This web content is used to train open language models.'"
+    },
+
+    {
+      "id": "diffbot",
+      "match": "diffbot",
+      "vendor": "diffbot",
+      "purpose": "train",
+      "source": null,
+      "declared": false,
+      "training_corpus_source": true,
+      "note": "No reachable first-party crawler page at taxonomy time. Diffbot extracts structured data into a commercial Knowledge Graph; whether that is 'training corpus collection' is genuinely contested. declared=false."
+    },
+
+    {
+      "id": "microsoft-copilot-preview",
+      "match": "microsoftpreview",
+      "vendor": "microsoft",
+      "purpose": "retrieval",
+      "source": null,
+      "declared": false,
+      "training_corpus_source": false
+    },
+    {
+      "id": "microsoft-bingbot",
+      "match": "bingbot",
+      "vendor": "microsoft",
+      "purpose": "search",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+
+    { "id": "duckduckgo", "match": "duckduckbot", "vendor": "duckduckgo", "purpose": "search", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "yandex", "match": "yandex", "vendor": "yandex", "purpose": "search", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "baidu", "match": "baiduspider", "vendor": "baidu", "purpose": "search", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "seznam", "match": "seznambot", "vendor": "seznam", "purpose": "search", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "you-com", "match": "youbot", "vendor": "you.com", "purpose": "search", "source": null, "declared": false, "training_corpus_source": false },
+
+    { "id": "seo-ahrefs", "match": "ahrefsbot", "vendor": "ahrefs", "purpose": "seo", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "seo-semrush", "match": "semrushbot", "vendor": "semrush", "purpose": "seo", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "seo-majestic", "match": "mj12bot", "vendor": "majestic", "purpose": "seo", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "seo-moz", "match": "dotbot", "vendor": "moz", "purpose": "seo", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "seo-petal", "match": "petalbot", "vendor": "huawei", "purpose": "seo", "source": null, "declared": true, "training_corpus_source": false },
+
+    { "id": "feed-feedly", "match": "feedly", "vendor": "feedly", "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "feed-feedbin", "match": "feedbin", "vendor": "feedbin", "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "feed-inoreader", "match": "inoreader", "vendor": "inoreader", "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "feed-newsblur", "match": "newsblur", "vendor": "newsblur", "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "feed-feedfetcher", "match": "feedfetcher", "vendor": "google", "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "feed-miniflux", "match": "miniflux", "vendor": null, "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "feed-freshrss", "match": "freshrss", "vendor": null, "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "feed-ttrss", "match": "tiny tiny rss", "vendor": null, "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "feed-rssowl", "match": "rssowl", "vendor": null, "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
+
+    {
+      "id": "ops-betterstack",
+      "match": "better stack",
+      "vendor": "betterstack",
+      "purpose": "ops",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false,
+      "first_party": true,
+      "note": "FIRST-PARTY. This is juanlentino.com's own uptime monitor, and at taxonomy time it is the single largest bucket in the dataset (6,403 of 17,463 reads over 30d, 37%). It is the site measuring itself, not readership. first_party exists so headline totals can exclude it instead of quietly carrying it."
+    },
+    { "id": "ops-betteruptime", "match": "betteruptime", "vendor": "betterstack", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false, "first_party": true },
+    { "id": "ops-betterstack-nospace", "match": "betterstack", "vendor": "betterstack", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false, "first_party": true },
+    { "id": "ops-uptimerobot", "match": "uptimerobot", "vendor": "uptimerobot", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "ops-uptimekuma", "match": "uptime-kuma", "vendor": "uptime-kuma", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "ops-pingdom", "match": "pingdom", "vendor": "pingdom", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "ops-statuscake", "match": "statuscake", "vendor": "statuscake", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "ops-cf-healthcheck", "match": "cloudflare-healthchecks", "vendor": "cloudflare", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false },
+
+    { "id": "archive-org", "match": "archive.org_bot", "vendor": "internet-archive", "purpose": "archive", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "archive-ia", "match": "ia_archiver", "vendor": "internet-archive", "purpose": "archive", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "archive-heritrix", "match": "heritrix", "vendor": "internet-archive", "purpose": "archive", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "archive-wayback", "match": "wayback", "vendor": "internet-archive", "purpose": "archive", "source": null, "declared": true, "training_corpus_source": false },
+
+    { "id": "social-slack", "match": "slackbot", "vendor": "slack", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "social-discord", "match": "discordbot", "vendor": "discord", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "social-twitter", "match": "twitterbot", "vendor": "x", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "social-linkedin", "match": "linkedinbot", "vendor": "linkedin", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "social-telegram", "match": "telegrambot", "vendor": "telegram", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "social-whatsapp", "match": "whatsapp", "vendor": "meta", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "social-mastodon", "match": "mastodon", "vendor": null, "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "social-reddit", "match": "redditbot", "vendor": "reddit", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "social-pinterest", "match": "pinterest", "vendor": "pinterest", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "social-embedly", "match": "embedly", "vendor": "embedly", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
+
+    { "id": "security-censys", "match": "censys", "vendor": "censys", "purpose": "security", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "security-shodan", "match": "shodan", "vendor": "shodan", "purpose": "security", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "security-internet-measurement", "match": "internet-measurement.com", "vendor": "driftnet", "purpose": "security", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "security-paloalto", "match": "expanse", "vendor": "palo-alto", "purpose": "security", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "security-cyberscan", "match": "cyberscan", "vendor": null, "purpose": "security", "source": null, "declared": false, "training_corpus_source": false },
+
+    { "id": "dev-curl", "match": "curl/", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-wget", "match": "wget/", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-python-requests", "match": "python-requests", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-python-httpx", "match": "python-httpx", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-aiohttp", "match": "aiohttp", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-go-http", "match": "go-http-client", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-httpie", "match": "httpie", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-node-fetch", "match": "node-fetch", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-undici", "match": "undici", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-axios", "match": "axios/", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-ruby", "match": "http.rb/", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-java", "match": "java/", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-okhttp", "match": "okhttp", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-guzzle", "match": "guzzlehttp", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-headless-chrome", "match": "headlesschrome", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-puppeteer", "match": "puppeteer", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-playwright", "match": "playwright", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-phantomjs", "match": "phantomjs", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
+    { "id": "dev-scrapy", "match": "scrapy", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false }
+  ]
+}

@@ -2,6 +2,106 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.11.0 - 2026-08-10 — vendor and purpose, on two new axes beside a frozen one
+
+The sensor could say *which crawler family* read a surface. It could not say **why**, and purpose is
+the axis the published claims actually run along. 73% of 30 days of reads sat in two buckets that
+answer nothing: `uptime` 6,403 and `other-bot` 6,295, of 17,463.
+
+**`family` is frozen. Nothing in this release changes what any existing family value means or which
+requests it counts.** A published number depends on the old definition and the field has moved
+underneath a published figure once already. `MACHINE_FAMILIES` now carries a DO-NOT-EDIT banner
+saying so, including that two of its entries are known-wrong and stay wrong deliberately.
+
+#### The taxonomy is data
+
+`src/machine-reader-taxonomy.json` — versioned (`1.0.0`), dated (`2026-08-10`), and served verbatim
+and unauthenticated at **`GET /_sn/rights-signals/taxonomy`**. Every entry carries a match token, a
+vendor, a purpose from a closed twelve-value vocabulary, the URL of the vendor's own published
+declaration, a `declared` flag separating first-party declarations from third-party inference, and a
+note wherever the call is contested. `src/taxonomy.mjs` is a loader and a matcher; it holds no
+classification decisions.
+
+Vendor and purpose are matched **independently against the raw User-Agent** and never derived from
+`family`. That is what lets `Claude-SearchBot` keep `family=other-bot` — exactly as it has counted
+since v1.4.0 — while becoming visible as `anthropic` / `search`.
+
+#### What the vendors' own docs said that the code did not
+
+Verified against each vendor's page, not from memory:
+
+- **`Claude-SearchBot` was never matched.** `/claudebot|claude-web|claude-user/i` does not contain
+  it; Anthropic's search crawler has been counting as `other-bot` since v1.4.0.
+- **`facebookexternalhit` was never recorded at all** — no bot/crawler/spider substring, so the
+  classifier returned `null` and Meta's unfurler was treated as a human. Same for `meta-webindexer`,
+  Slackbot, WhatsApp and `ia_archiver`.
+- **`Google-CloudVertexBot` and `OAI-AdsBot`** fall to `other-bot`.
+- **`Applebot-Extended` does not crawl.** Apple documents it as a robots.txt control token only, so
+  the `apple-ai` family reports a phantom: any non-zero count is spoofed or synthetic. The requested
+  Apple train/search split is not measurable from request logs, and the file says so.
+- **Two live over-counts, both inside the published AI-training set**: `google-ai` matches
+  `googleother`, which Google documents as a *generic* crawler; and `/mistralai/i` swallows
+  `MistralAI-Index` and `MistralAI-User`, both of which Mistral states are **not** used for training.
+  The families stay wrong (frozen); `purpose` is now the honest reading, and three tests pin the
+  disagreement so it is deliberate rather than unnoticed.
+
+#### The ambiguous cases, decided
+
+- **CCBot → `archive`, `training_corpus_source: true`.** Common Crawl's own declaration is an open
+  repository, not model training; its role as a training corpus is a fact about consumers, not the
+  operator's stated purpose. The boolean exists for exactly this.
+- **Amazonbot → `search`, `training_corpus_source: true`.** Amazon leads with product and service
+  improvement and hedges training as *"may be used"*. Filing it `train` would overstate a hedged
+  claim. Same treatment as CCBot, so the two are comparable.
+- **Every `*-User` agent is `user`, never `train`** — pinned by test, since this is the call that
+  would most overstate the published number.
+
+#### One additive family value
+
+`unclassified-machine` carries only rows the frozen classifier would have **dropped entirely**. No
+existing family value changes meaning or population, so any query filtering the original 18 families
+returns bit-identical results across the cutover.
+
+#### RULE 2 — the unknown bucket becomes reviewable
+
+`GET /_sn/rights-signals/machine-readers?view=unknown` returns the top 50 unclassified user-agent
+strings by volume, so the taxonomy can be extended from evidence. **This narrows one clause of the
+v1.4.0 privacy contract**, deliberately: a sanitised UA sample is now stored for requests the
+taxonomy did not match. Strict character **allowlist** (`[A-Za-z0-9._/+ -]`) plus a 96-character cap,
+so the stored value cannot carry markup, quotes, backslashes or control bytes at all, and the admin
+lane escapes it again. Recognised agents still store nothing but their enum values. The posture moves
+from *safe by construction* to *safe by sanitisation and escaping* — a real, bounded loss, recorded
+here rather than discovered later.
+
+#### RULE 3 — full fidelity where the claim lives
+
+A second dataset, `sn_machine_readers_rights` (binding `SN_MR_RIGHTS`), keeps the complete User-Agent,
+path, `Accept` header and timestamp for **rights-surface reads only** — 80 events in 30 days, ~0.5% of
+the dataset. Defensible because it is rare, because rights surfaces are a closed set of four fixed
+URLs whose path leaks nothing about who asked, and because "do the declared AI-training crawlers read
+the rights declarations?" is not answerable from an aggregate. Read via `?view=rights`. Never summed
+with the aggregate stream.
+
+#### Schema
+
+Checked against Cloudflare's documented limits before adding a field: 20 blobs, 20 doubles, **exactly
+one index**, 96 bytes per index, 16 KB of blobs, three-month retention. The aggregate row goes from 2
+blobs to 8 of 20 — it fits, and no dimension was dropped. The binding constraint is the single index:
+`indexes: [family]` stays, so `purpose` cannot also be indexed. That costs sampling granularity on the
+purpose axis, not queryability.
+
+#### Also
+
+`taxonomy_version` rides both the response envelope and every row, so a window spanning a definition
+change is visibly mixed rather than quietly so. `first_party` flags the site's own Better Stack
+monitor — 6,403 reads, 37% of the total, the site measuring itself — so headline totals can exclude
+it instead of silently carrying it. Truncated views report their own `limit`.
+
+Load-time validation rejects an unknown purpose, a duplicate id, a non-lowercase match token, and the
+ordering bug where a generic token shadows a specific one declared later. All four were confirmed to
+fire by mutating the file and re-running the suite; the first is the one that would otherwise make an
+entire vendor split silently unreachable. 191 tests pass.
+
 ### 1.10.3 - 2026-08-09 — the check learns about /llms.txt
 
 **Tooling only — no `src/` change, nothing to deploy.**
