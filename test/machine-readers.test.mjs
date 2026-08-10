@@ -7,6 +7,7 @@ import {
   machineReadersResponse,
   observeMachineReader,
 } from "../src/machine-readers.mjs";
+import { TAXONOMY_VERSION } from "../src/taxonomy.mjs";
 
 describe("classifyMachineReader — fixed enum, raw UA never escapes", () => {
   it("maps AI crawler UAs to their families", () => {
@@ -63,13 +64,59 @@ describe("classifySurface — fixed enum of surface classes", () => {
 describe("observeMachineReader — aggregate-only AE writes", () => {
   const req = (ua) => new Request("https://juanlentino.com/llms.txt", { headers: ua ? { "user-agent": ua } : {} });
 
-  it("writes one datapoint: family + surface blobs, count double, family index", () => {
+  it("writes one datapoint: family + surface + vendor/purpose blobs, count double, family index", () => {
     const writes = [];
     const env = { SN_MR: { writeDataPoint: (p) => writes.push(p) } };
     const out = observeMachineReader(req("GPTBot/1.0"), env, "/llms.txt");
-    expect(out).toEqual({ family: "openai", surface: "llms" });
+    expect(out).toEqual({ family: "openai", surface: "llms", vendor: "openai", purpose: "train" });
     expect(writes).toHaveLength(1);
-    expect(writes[0]).toEqual({ blobs: ["openai", "llms"], doubles: [1], indexes: ["openai"] });
+    // Pinned VALUE-level and positionally: blob order is the read query's
+    // contract (blob3 AS vendor, blob4 AS purpose ...), so a reordering here
+    // would silently relabel every column downstream while still "passing" any
+    // test that only checked the array length or the set of values.
+    expect(writes[0]).toEqual({
+      blobs: ["openai", "llms", "openai", "train", TAXONOMY_VERSION, "1", "0", ""],
+      doubles: [1],
+      indexes: ["openai"],
+    });
+  });
+
+  it("leaves blob1 (family) untouched where the frozen classifier and the taxonomy disagree", () => {
+    // RULE 1, the load-bearing case. Claude-SearchBot has never matched the
+    // frozen family regex, so it counts as other-bot and MUST GO ON counting as
+    // other-bot — while still becoming visible as anthropic/search.
+    const writes = [];
+    const env = { SN_MR: { writeDataPoint: (p) => writes.push(p) } };
+    observeMachineReader(req("Mozilla/5.0 (compatible; Claude-SearchBot/1.0)"), env, "/llms.txt");
+    expect(writes[0].blobs[0]).toBe("other-bot");
+    expect(writes[0].indexes).toEqual(["other-bot"]);
+    expect(writes[0].blobs[2]).toBe("anthropic");
+    expect(writes[0].blobs[3]).toBe("search");
+  });
+
+  it("records previously-invisible machines under the ADDITIVE family only", () => {
+    // facebookexternalhit returns null from the frozen classifier, so before
+    // v1.11.0 it wrote nothing at all and was indistinguishable from a human.
+    const writes = [];
+    const env = { SN_MR: { writeDataPoint: (p) => writes.push(p) } };
+    observeMachineReader(req("facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"), env, "/");
+    expect(writes[0].blobs[0]).toBe("unclassified-machine");
+    expect(writes[0].blobs[2]).toBe("meta");
+    expect(writes[0].blobs[3]).toBe("social");
+  });
+
+  it("samples the UA only when the taxonomy did not match, and never otherwise", () => {
+    const writes = [];
+    const env = { SN_MR: { writeDataPoint: (p) => writes.push(p) } };
+    // Known agent: nothing stored beyond the enums.
+    observeMachineReader(req("GPTBot/1.0"), env, "/");
+    expect(writes[0].blobs[7]).toBe("");
+    // Unknown agent that the family regex still catches: sampled, sanitised.
+    observeMachineReader(req("Mozilla/5.0 (compatible; NeverSeenBot/9.9; <script>x</script>)"), env, "/");
+    expect(writes[1].blobs[3]).toBe("unknown");
+    expect(writes[1].blobs[7]).toContain("NeverSeenBot/9.9");
+    expect(writes[1].blobs[7]).not.toContain("<");
+    expect(writes[1].blobs[7]).not.toContain(">");
   });
 
   it("records nothing for humans and never throws without a binding", () => {
@@ -96,7 +143,12 @@ describe("sensor-alive state — dead sensor and quiet dataset are different ans
 
   it("records a successful write: bound, ok, timestamped, no error", () => {
     const env = { SN_MR: { writeDataPoint: () => {} } };
-    expect(observeMachineReader(req("GPTBot/1.0"), env, "/llms.txt")).toEqual({ family: "openai", surface: "llms" });
+    expect(observeMachineReader(req("GPTBot/1.0"), env, "/llms.txt")).toEqual({
+      family: "openai",
+      surface: "llms",
+      vendor: "openai",
+      purpose: "train",
+    });
     const s = getSensorState();
     expect(s.ae_bound).toBe(true);
     expect(s.last_write_ok).toBe(true);

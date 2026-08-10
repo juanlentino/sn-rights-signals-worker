@@ -10,6 +10,7 @@ import { versionResponse } from "./version.mjs";
 import { bypassesRightsSignals } from "./admin-bypass.mjs";
 import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawler-list-status.mjs";
 import { machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
+import { taxonomyResponse } from "./taxonomy.mjs";
 
 // Content negotiation for /tdm-policy/, deliberately conservative: HTML is the
 // default and only an explicit JSON preference switches representation.
@@ -62,6 +63,11 @@ export default {
     // when the isolate-memory result is missing, failed, or stale).
     if (pathname === "/_sn/rights-signals/crawler-list-status") return crawlerListStatusResponse(ctx);
     if (pathname === "/_sn/rights-signals/machine-readers") return machineReadersResponse(request, env);
+    // v1.11.0 (RULE 4): the published cohort definition, at a stable URL, with
+    // a version and an effective date — same discipline as the TDM policy.
+    // PUBLIC and unauthenticated on purpose: a definition behind a token cannot
+    // be cited by a note that asks the reader to go and check it.
+    if (pathname === "/_sn/rights-signals/taxonomy") return taxonomyResponse(request);
     if (pathname === "/robots.txt") return robotsResponse(request);
     if (pathname === "/.well-known/tdmrep.json") return tdmrepResponse();
     if (pathname === "/license.xml") return rslResponse();

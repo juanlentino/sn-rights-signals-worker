@@ -22,8 +22,13 @@
   // "more specific routes take precedence over wildcard routes").
   // v1.4.0: machine-readership aggregates (family + surface class + day only —
   // no IPs, no raw UAs; see src/machine-readers.mjs for the privacy contract).
+  // v1.11.0: SN_MR_RIGHTS is the RULE 3 full-fidelity stream — complete UA,
+  // path, Accept and timestamp, but ONLY for rights-surface reads (~80 per
+  // 30 days against 17,463 total). A separate dataset because it must never be
+  // summed with the aggregate one and answers a different question.
   "analytics_engine_datasets": [
-    { "binding": "SN_MR", "dataset": "sn_machine_readers" }
+    { "binding": "SN_MR", "dataset": "sn_machine_readers" },
+    { "binding": "SN_MR_RIGHTS", "dataset": "sn_machine_readers_rights" }
   ],
   "routes": [
     { "pattern": "juanlentino.com/*", "zone_name": "juanlentino.com" }
