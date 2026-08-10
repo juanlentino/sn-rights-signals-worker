@@ -42,10 +42,10 @@ const purposeOf = (ua) => classifyVendorPurpose(ua)?.purpose ?? null;
 const vendorOf = (ua) => classifyVendorPurpose(ua)?.vendor ?? null;
 
 describe("purpose vocabulary is closed", () => {
-  it("declares exactly the twelve agreed values", () => {
+  it("declares exactly the thirteen agreed values", () => {
     expect(PURPOSES).toEqual([
       "train", "search", "retrieval", "user", "archive", "ops",
-      "seo", "feed", "social", "security", "dev", "unknown",
+      "seo", "feed", "social", "security", "dev", "ads", "unknown",
     ]);
   });
 
@@ -138,6 +138,29 @@ describe("the two ambiguous cases are decided, not fudged", () => {
   });
 });
 
+describe("the evidence sets the confidence, not the other way round", () => {
+  it("files cohere-ai as unknown because its purpose is unconfirmed", () => {
+    // Regression on my own earlier filing: `train` asserted one of three
+    // equally-live possibilities. An undocumented agent gets `unknown`.
+    const e = TAXONOMY.entries.find((x) => x.id === "cohere-ai");
+    expect(e.purpose).toBe("unknown");
+    expect(e.declared).toBe(false);
+    // false because UNKNOWN, not because ruled out — the note must say so.
+    expect(e.training_corpus_source).toBe(false);
+    expect(e.note).toMatch(/unconfirmed/i);
+  });
+
+  it("splits Diffbot's user agent out of its crawler, ahead of the bare token", () => {
+    expect(purposeOf("Mozilla/5.0 (compatible; Diffbot-User/1.0)")).toBe("user");
+    expect(purposeOf("Mozilla/5.0 (compatible; Diffbot/1.0)")).toBe("train");
+  });
+
+  it("gives the ad validators their own purpose rather than stretching security", () => {
+    expect(purposeOf("Mozilla/5.0 (compatible; OAI-AdsBot/1.0; +https://openai.com/searchbot)")).toBe("ads");
+    expect(purposeOf("meta-externalads/1.1")).toBe("ads");
+  });
+});
+
 describe("newly visible machines", () => {
   it("classifies facebookexternalhit as meta/social though the family classifier drops it", () => {
     expect(classifyMachineReader(UA.fbHit)).toBeNull();
@@ -223,7 +246,7 @@ describe("provenance of every call is recorded", () => {
   });
 
   it("marks inferred purposes as undeclared", () => {
-    for (const id of ["bytedance-bytespider", "cohere-ai", "diffbot"]) {
+    for (const id of ["bytedance-bytespider", "cohere-ai"]) {
       const e = TAXONOMY.entries.find((x) => x.id === id);
       expect(e.declared).toBe(false);
       expect(e.note).toBeTruthy();

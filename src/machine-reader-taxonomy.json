@@ -1,14 +1,11 @@
 {
   "$comment": "The published cohort definition for the Machine Readers surface. DATA, not code — no switch statements anywhere. Served verbatim at https://juanlentino.com/_sn/rights-signals/taxonomy so any number derived from it can be checked against it. See docs/MACHINE-READERS.md in signal-and-noise-tools for the full contract.",
-
-  "taxonomy_version": "1.0.0",
+  "taxonomy_version": "1.1.0",
   "effective_date": "2026-08-10",
-
   "matching": {
     "algorithm": "ordered-substring-case-insensitive",
     "note": "Entries are tested in array order and the FIRST match wins, so specific tokens must precede the generic ones they contain (applebot-extended before applebot; googlebot-image before googlebot). Plain substring rather than regex on purpose: no escaping subtleties, no catastrophic backtracking on a hostile UA, and a reviewer can verify a match by eye. Tokens that risk matching inside an unrelated word carry their punctuation (curl/, axios/, java/)."
   },
-
   "purpose_vocabulary": {
     "train": "Declared AI training-corpus collection.",
     "search": "Index building for a search product.",
@@ -21,9 +18,9 @@
     "social": "Link unfurlers and preview fetchers.",
     "security": "Scanners and internet measurement.",
     "dev": "Libraries and scripted clients.",
+    "ads": "Advertising and business-product fetches: ad-safety validation and catalogue checks.",
     "unknown": "Unclassified, or a documented agent whose declared purpose has no home in this vocabulary yet."
   },
-
   "field_contract": {
     "match": "Lowercase token matched as a substring against the lowercased User-Agent.",
     "vendor": "Owning organisation, or null where not identifiable. Independent of purpose.",
@@ -34,7 +31,6 @@
     "observable": "false for tokens that never appear in a request (robots.txt control tokens). Any observed hit on these is spoofed or synthetic.",
     "note": "Present only where the call is contested or the vendor's declaration is internally mixed."
   },
-
   "entries": [
     {
       "id": "openai-gptbot",
@@ -69,13 +65,12 @@
       "id": "openai-adsbot",
       "match": "oai-adsbot",
       "vendor": "openai",
-      "purpose": "unknown",
+      "purpose": "ads",
       "source": "https://developers.openai.com/api/docs/bots",
       "declared": true,
       "training_corpus_source": false,
-      "note": "CONTESTED FILING. OpenAI: validates 'the safety of web pages submitted as ads on ChatGPT', and explicitly does not train generative models. Ad-safety validation has no home in the current vocabulary; filed unknown rather than stretched into security. An 'ads' purpose is proposed, not assumed."
+      "note": "OpenAI: validates 'the safety of web pages submitted as ads on ChatGPT', and explicitly does not train generative models. Filed under the 'ads' purpose added in taxonomy 1.1.0 rather than stretched into 'security', which would have implied a scanner."
     },
-
     {
       "id": "anthropic-claudebot",
       "match": "claudebot",
@@ -115,7 +110,6 @@
       "training_corpus_source": false,
       "note": "Legacy token carried by the frozen family regex. Not present in Anthropic's current documentation; retained so historical family rows keep a vendor."
     },
-
     {
       "id": "google-extended",
       "match": "google-extended",
@@ -220,7 +214,6 @@
       "declared": true,
       "training_corpus_source": false
     },
-
     {
       "id": "perplexity-user",
       "match": "perplexity-user",
@@ -241,7 +234,6 @@
       "training_corpus_source": false,
       "note": "Perplexity: 'designed to surface and link websites in search results', and 'not used to crawl content for AI foundation models'."
     },
-
     {
       "id": "apple-bot-extended",
       "match": "applebot-extended",
@@ -263,7 +255,6 @@
       "training_corpus_source": true,
       "note": "The only Apple agent that actually fetches. training_corpus_source is true because Applebot-Extended governs the training use of exactly this agent's collection."
     },
-
     {
       "id": "meta-externalagent",
       "match": "meta-externalagent",
@@ -298,11 +289,11 @@
       "id": "meta-externalads",
       "match": "meta-externalads",
       "vendor": "meta",
-      "purpose": "unknown",
+      "purpose": "ads",
       "source": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
       "declared": true,
       "training_corpus_source": false,
-      "note": "Advertising and business products. Same vocabulary gap as OAI-AdsBot; see the proposed 'ads' purpose."
+      "note": "Meta's advertising and business products. Same class as OAI-AdsBot; see the 'ads' purpose."
     },
     {
       "id": "meta-facebookexternalhit",
@@ -314,7 +305,6 @@
       "training_corpus_source": false,
       "note": "Link unfurler: fetches 'title, description, and thumbnail image' for content shared into Meta apps. Returns null from the frozen family classifier (no bot/crawler/spider substring), so it has never been recorded at all."
     },
-
     {
       "id": "commoncrawl-ccbot",
       "match": "ccbot",
@@ -325,7 +315,6 @@
       "training_corpus_source": true,
       "note": "DECIDED: archive. Common Crawl's own declaration is 'an open repository of web crawl data that is universally accessible and analyzable by anyone' — archiving, with no claim to train models. Its role as one of the largest AI training corpora is real but is a downstream fact about consumers, not the operator's declared purpose, so it rides training_corpus_source rather than overloading purpose. Filing it train would attribute to Common Crawl an intent it does not state; filing it archive alone would hide the dual role. This is the case the boolean exists for."
     },
-
     {
       "id": "amazon-bot",
       "match": "amazonbot",
@@ -336,7 +325,6 @@
       "training_corpus_source": true,
       "note": "JUSTIFIED: search. Amazon's page leads with 'used to improve our products and services' and 'provide more accurate information to customers', then hedges training as a possibility: content 'may be used to train Amazon AI models'. purpose records the primary declared function, so filing train would overstate a hedged claim; the training use is preserved exactly where the CCBot precedent puts it, on training_corpus_source. Same treatment, same reasoning, so the two are comparable."
     },
-
     {
       "id": "bytedance-bytespider",
       "match": "bytespider",
@@ -347,7 +335,6 @@
       "training_corpus_source": true,
       "note": "NO FIRST-PARTY DECLARATION EXISTS. ByteDance publishes no crawler page comparable to OpenAI's or Anthropic's; the training purpose rests on third-party reporting only. declared=false is the honest record of that, and this surface must not present an inference as a declaration."
     },
-
     {
       "id": "mistral-training",
       "match": "mistralai-training",
@@ -377,18 +364,16 @@
       "training_corpus_source": false,
       "note": "User-directed; Mistral states it is not used for generative AI training. Same over-count as mistralai-index."
     },
-
     {
       "id": "cohere-ai",
       "match": "cohere-ai",
       "vendor": "cohere",
-      "purpose": "train",
+      "purpose": "unknown",
       "source": null,
       "declared": false,
-      "training_corpus_source": true,
-      "note": "No first-party Cohere crawler page was reachable at taxonomy time (cohere.com/cohere-bot returns 404). Purpose rests on third-party directories, which are themselves split between training collection and user-prompted retrieval. Re-verify before this token is cited in a published claim."
+      "training_corpus_source": false,
+      "note": "CORRECTED in taxonomy 1.1.0. Cohere publishes no first-party crawler page, and the best available third-party record states the purpose is UNCONFIRMED, listing training collection, index building and an unannounced experiment as equally live possibilities. Filing it 'train' asserted one of three, which is precisely what the 'declared' field exists to prevent. training_corpus_source is false because it is unknown, not because it is ruled out."
     },
-
     {
       "id": "allenai-ai2bot",
       "match": "ai2bot",
@@ -399,18 +384,26 @@
       "training_corpus_source": true,
       "note": "Allen Institute: 'This web content is used to train open language models.'"
     },
-
+    {
+      "id": "diffbot-user",
+      "match": "diffbot-user",
+      "vendor": "diffbot",
+      "purpose": "user",
+      "source": "https://www.diffbot.com/docs/crawl/faq/robots-txt",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "Diffbot's agent for 'requests on behalf of individual users'. Must precede the bare diffbot token. The frozen family regex /diffbot/i files both as the diffbot family, so this is the same shape of over-count as googleother and MistralAI-Index."
+    },
     {
       "id": "diffbot",
       "match": "diffbot",
       "vendor": "diffbot",
       "purpose": "train",
-      "source": null,
-      "declared": false,
+      "source": "https://www.diffbot.com/docs/crawl/faq/robots-txt",
+      "declared": true,
       "training_corpus_source": true,
-      "note": "No reachable first-party crawler page at taxonomy time. Diffbot extracts structured data into a commercial Knowledge Graph; whether that is 'training corpus collection' is genuinely contested. declared=false."
+      "note": "Diffbot documents 'Diffbot' for general web crawling into its commercial Knowledge Graph. CONTESTED: a structured-data product is corpus collection, but not foundation-model training, and Diffbot markets the graph for AI grounding. Filed train with the boolean set. NOTE that customer-run Crawlbot crawls use a CUSTOMER-SET user agent, so they do not appear here at all."
     },
-
     {
       "id": "microsoft-copilot-preview",
       "match": "microsoftpreview",
@@ -429,29 +422,177 @@
       "declared": true,
       "training_corpus_source": false
     },
-
-    { "id": "duckduckgo", "match": "duckduckbot", "vendor": "duckduckgo", "purpose": "search", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "yandex", "match": "yandex", "vendor": "yandex", "purpose": "search", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "baidu", "match": "baiduspider", "vendor": "baidu", "purpose": "search", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "seznam", "match": "seznambot", "vendor": "seznam", "purpose": "search", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "you-com", "match": "youbot", "vendor": "you.com", "purpose": "search", "source": null, "declared": false, "training_corpus_source": false },
-
-    { "id": "seo-ahrefs", "match": "ahrefsbot", "vendor": "ahrefs", "purpose": "seo", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "seo-semrush", "match": "semrushbot", "vendor": "semrush", "purpose": "seo", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "seo-majestic", "match": "mj12bot", "vendor": "majestic", "purpose": "seo", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "seo-moz", "match": "dotbot", "vendor": "moz", "purpose": "seo", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "seo-petal", "match": "petalbot", "vendor": "huawei", "purpose": "seo", "source": null, "declared": true, "training_corpus_source": false },
-
-    { "id": "feed-feedly", "match": "feedly", "vendor": "feedly", "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "feed-feedbin", "match": "feedbin", "vendor": "feedbin", "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "feed-inoreader", "match": "inoreader", "vendor": "inoreader", "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "feed-newsblur", "match": "newsblur", "vendor": "newsblur", "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "feed-feedfetcher", "match": "feedfetcher", "vendor": "google", "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "feed-miniflux", "match": "miniflux", "vendor": null, "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "feed-freshrss", "match": "freshrss", "vendor": null, "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "feed-ttrss", "match": "tiny tiny rss", "vendor": null, "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "feed-rssowl", "match": "rssowl", "vendor": null, "purpose": "feed", "source": null, "declared": true, "training_corpus_source": false },
-
+    {
+      "id": "duckduckgo",
+      "match": "duckduckbot",
+      "vendor": "duckduckgo",
+      "purpose": "search",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "yandex",
+      "match": "yandex",
+      "vendor": "yandex",
+      "purpose": "search",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "baidu",
+      "match": "baiduspider",
+      "vendor": "baidu",
+      "purpose": "search",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "seznam",
+      "match": "seznambot",
+      "vendor": "seznam",
+      "purpose": "search",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "you-com",
+      "match": "youbot",
+      "vendor": "you.com",
+      "purpose": "search",
+      "source": null,
+      "declared": false,
+      "training_corpus_source": false
+    },
+    {
+      "id": "seo-ahrefs",
+      "match": "ahrefsbot",
+      "vendor": "ahrefs",
+      "purpose": "seo",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "seo-semrush",
+      "match": "semrushbot",
+      "vendor": "semrush",
+      "purpose": "seo",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "seo-majestic",
+      "match": "mj12bot",
+      "vendor": "majestic",
+      "purpose": "seo",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "seo-moz",
+      "match": "dotbot",
+      "vendor": "moz",
+      "purpose": "seo",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "seo-petal",
+      "match": "petalbot",
+      "vendor": "huawei",
+      "purpose": "seo",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "feed-feedly",
+      "match": "feedly",
+      "vendor": "feedly",
+      "purpose": "feed",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "feed-feedbin",
+      "match": "feedbin",
+      "vendor": "feedbin",
+      "purpose": "feed",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "feed-inoreader",
+      "match": "inoreader",
+      "vendor": "inoreader",
+      "purpose": "feed",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "feed-newsblur",
+      "match": "newsblur",
+      "vendor": "newsblur",
+      "purpose": "feed",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "feed-feedfetcher",
+      "match": "feedfetcher",
+      "vendor": "google",
+      "purpose": "feed",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "feed-miniflux",
+      "match": "miniflux",
+      "vendor": null,
+      "purpose": "feed",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "feed-freshrss",
+      "match": "freshrss",
+      "vendor": null,
+      "purpose": "feed",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "feed-ttrss",
+      "match": "tiny tiny rss",
+      "vendor": null,
+      "purpose": "feed",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "feed-rssowl",
+      "match": "rssowl",
+      "vendor": null,
+      "purpose": "feed",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
     {
       "id": "ops-betterstack",
       "match": "better stack",
@@ -463,54 +604,412 @@
       "first_party": true,
       "note": "FIRST-PARTY. This is juanlentino.com's own uptime monitor, and at taxonomy time it is the single largest bucket in the dataset (6,403 of 17,463 reads over 30d, 37%). It is the site measuring itself, not readership. first_party exists so headline totals can exclude it instead of quietly carrying it."
     },
-    { "id": "ops-betteruptime", "match": "betteruptime", "vendor": "betterstack", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false, "first_party": true },
-    { "id": "ops-betterstack-nospace", "match": "betterstack", "vendor": "betterstack", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false, "first_party": true },
-    { "id": "ops-uptimerobot", "match": "uptimerobot", "vendor": "uptimerobot", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "ops-uptimekuma", "match": "uptime-kuma", "vendor": "uptime-kuma", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "ops-pingdom", "match": "pingdom", "vendor": "pingdom", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "ops-statuscake", "match": "statuscake", "vendor": "statuscake", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "ops-cf-healthcheck", "match": "cloudflare-healthchecks", "vendor": "cloudflare", "purpose": "ops", "source": null, "declared": true, "training_corpus_source": false },
-
-    { "id": "archive-org", "match": "archive.org_bot", "vendor": "internet-archive", "purpose": "archive", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "archive-ia", "match": "ia_archiver", "vendor": "internet-archive", "purpose": "archive", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "archive-heritrix", "match": "heritrix", "vendor": "internet-archive", "purpose": "archive", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "archive-wayback", "match": "wayback", "vendor": "internet-archive", "purpose": "archive", "source": null, "declared": true, "training_corpus_source": false },
-
-    { "id": "social-slack", "match": "slackbot", "vendor": "slack", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "social-discord", "match": "discordbot", "vendor": "discord", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "social-twitter", "match": "twitterbot", "vendor": "x", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "social-linkedin", "match": "linkedinbot", "vendor": "linkedin", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "social-telegram", "match": "telegrambot", "vendor": "telegram", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "social-whatsapp", "match": "whatsapp", "vendor": "meta", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "social-mastodon", "match": "mastodon", "vendor": null, "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "social-reddit", "match": "redditbot", "vendor": "reddit", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "social-pinterest", "match": "pinterest", "vendor": "pinterest", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "social-embedly", "match": "embedly", "vendor": "embedly", "purpose": "social", "source": null, "declared": true, "training_corpus_source": false },
-
-    { "id": "security-censys", "match": "censys", "vendor": "censys", "purpose": "security", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "security-shodan", "match": "shodan", "vendor": "shodan", "purpose": "security", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "security-internet-measurement", "match": "internet-measurement.com", "vendor": "driftnet", "purpose": "security", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "security-paloalto", "match": "expanse", "vendor": "palo-alto", "purpose": "security", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "security-cyberscan", "match": "cyberscan", "vendor": null, "purpose": "security", "source": null, "declared": false, "training_corpus_source": false },
-
-    { "id": "dev-curl", "match": "curl/", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-wget", "match": "wget/", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-python-requests", "match": "python-requests", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-python-httpx", "match": "python-httpx", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-aiohttp", "match": "aiohttp", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-go-http", "match": "go-http-client", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-httpie", "match": "httpie", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-node-fetch", "match": "node-fetch", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-undici", "match": "undici", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-axios", "match": "axios/", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-ruby", "match": "http.rb/", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-java", "match": "java/", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-okhttp", "match": "okhttp", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-guzzle", "match": "guzzlehttp", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-headless-chrome", "match": "headlesschrome", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-puppeteer", "match": "puppeteer", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-playwright", "match": "playwright", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-phantomjs", "match": "phantomjs", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false },
-    { "id": "dev-scrapy", "match": "scrapy", "vendor": null, "purpose": "dev", "source": null, "declared": true, "training_corpus_source": false }
+    {
+      "id": "ops-betteruptime",
+      "match": "betteruptime",
+      "vendor": "betterstack",
+      "purpose": "ops",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false,
+      "first_party": true
+    },
+    {
+      "id": "ops-betterstack-nospace",
+      "match": "betterstack",
+      "vendor": "betterstack",
+      "purpose": "ops",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false,
+      "first_party": true
+    },
+    {
+      "id": "ops-uptimerobot",
+      "match": "uptimerobot",
+      "vendor": "uptimerobot",
+      "purpose": "ops",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "ops-uptimekuma",
+      "match": "uptime-kuma",
+      "vendor": "uptime-kuma",
+      "purpose": "ops",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "ops-pingdom",
+      "match": "pingdom",
+      "vendor": "pingdom",
+      "purpose": "ops",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "ops-statuscake",
+      "match": "statuscake",
+      "vendor": "statuscake",
+      "purpose": "ops",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "ops-cf-healthcheck",
+      "match": "cloudflare-healthchecks",
+      "vendor": "cloudflare",
+      "purpose": "ops",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "archive-org",
+      "match": "archive.org_bot",
+      "vendor": "internet-archive",
+      "purpose": "archive",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "archive-ia",
+      "match": "ia_archiver",
+      "vendor": "internet-archive",
+      "purpose": "archive",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "archive-heritrix",
+      "match": "heritrix",
+      "vendor": "internet-archive",
+      "purpose": "archive",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "archive-wayback",
+      "match": "wayback",
+      "vendor": "internet-archive",
+      "purpose": "archive",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "social-slack",
+      "match": "slackbot",
+      "vendor": "slack",
+      "purpose": "social",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "social-discord",
+      "match": "discordbot",
+      "vendor": "discord",
+      "purpose": "social",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "social-twitter",
+      "match": "twitterbot",
+      "vendor": "x",
+      "purpose": "social",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "social-linkedin",
+      "match": "linkedinbot",
+      "vendor": "linkedin",
+      "purpose": "social",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "social-telegram",
+      "match": "telegrambot",
+      "vendor": "telegram",
+      "purpose": "social",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "social-whatsapp",
+      "match": "whatsapp",
+      "vendor": "meta",
+      "purpose": "social",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "social-mastodon",
+      "match": "mastodon",
+      "vendor": null,
+      "purpose": "social",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "social-reddit",
+      "match": "redditbot",
+      "vendor": "reddit",
+      "purpose": "social",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "social-pinterest",
+      "match": "pinterest",
+      "vendor": "pinterest",
+      "purpose": "social",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "social-embedly",
+      "match": "embedly",
+      "vendor": "embedly",
+      "purpose": "social",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "security-censys",
+      "match": "censys",
+      "vendor": "censys",
+      "purpose": "security",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "security-shodan",
+      "match": "shodan",
+      "vendor": "shodan",
+      "purpose": "security",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "security-internet-measurement",
+      "match": "internet-measurement.com",
+      "vendor": "driftnet",
+      "purpose": "security",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "security-paloalto",
+      "match": "expanse",
+      "vendor": "palo-alto",
+      "purpose": "security",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "security-cyberscan",
+      "match": "cyberscan",
+      "vendor": null,
+      "purpose": "security",
+      "source": null,
+      "declared": false,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-curl",
+      "match": "curl/",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-wget",
+      "match": "wget/",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-python-requests",
+      "match": "python-requests",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-python-httpx",
+      "match": "python-httpx",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-aiohttp",
+      "match": "aiohttp",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-go-http",
+      "match": "go-http-client",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-httpie",
+      "match": "httpie",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-node-fetch",
+      "match": "node-fetch",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-undici",
+      "match": "undici",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-axios",
+      "match": "axios/",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-ruby",
+      "match": "http.rb/",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-java",
+      "match": "java/",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-okhttp",
+      "match": "okhttp",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-guzzle",
+      "match": "guzzlehttp",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-headless-chrome",
+      "match": "headlesschrome",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-puppeteer",
+      "match": "puppeteer",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-playwright",
+      "match": "playwright",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-phantomjs",
+      "match": "phantomjs",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    },
+    {
+      "id": "dev-scrapy",
+      "match": "scrapy",
+      "vendor": null,
+      "purpose": "dev",
+      "source": null,
+      "declared": true,
+      "training_corpus_source": false
+    }
   ]
 }

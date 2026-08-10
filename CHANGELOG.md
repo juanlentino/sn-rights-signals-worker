@@ -4,6 +4,14 @@ All notable changes to sn-rights-signals are documented here.
 
 ### 1.11.0 - 2026-08-10 — vendor and purpose, on two new axes beside a frozen one
 
+> **Taxonomy 1.1.0** (bumped from 1.0.0 before first deploy, on further verification):
+> `cohere-ai` moves from `train` to `unknown` — Cohere publishes no crawler page and the purpose is
+> explicitly *unconfirmed* across training collection, index building and an unannounced
+> experiment, so filing `train` asserted one of three. `Diffbot-User` splits out of `Diffbot`
+> (Diffbot documents both; the frozen `/diffbot/i` family swallows the pair). And `ads` joins the
+> vocabulary as a thirteenth value so `OAI-AdsBot` and `meta-externalads` are not stretched into
+> `security`.
+
 The sensor could say *which crawler family* read a surface. It could not say **why**, and purpose is
 the axis the published claims actually run along. 73% of 30 days of reads sat in two buckets that
 answer nothing: `uptime` 6,403 and `other-bot` 6,295, of 17,463.
@@ -15,9 +23,9 @@ saying so, including that two of its entries are known-wrong and stay wrong deli
 
 #### The taxonomy is data
 
-`src/machine-reader-taxonomy.json` — versioned (`1.0.0`), dated (`2026-08-10`), and served verbatim
+`src/machine-reader-taxonomy.json` — versioned (`1.1.0`), dated (`2026-08-10`), and served verbatim
 and unauthenticated at **`GET /_sn/rights-signals/taxonomy`**. Every entry carries a match token, a
-vendor, a purpose from a closed twelve-value vocabulary, the URL of the vendor's own published
+vendor, a purpose from a closed thirteen-value vocabulary, the URL of the vendor's own published
 declaration, a `declared` flag separating first-party declarations from third-party inference, and a
 note wherever the call is contested. `src/taxonomy.mjs` is a loader and a matcher; it holds no
 classification decisions.
@@ -100,7 +108,7 @@ it instead of silently carrying it. Truncated views report their own `limit`.
 Load-time validation rejects an unknown purpose, a duplicate id, a non-lowercase match token, and the
 ordering bug where a generic token shadows a specific one declared later. All four were confirmed to
 fire by mutating the file and re-running the suite; the first is the one that would otherwise make an
-entire vendor split silently unreachable. 191 tests pass.
+entire vendor split silently unreachable. 194 tests pass.
 
 ### 1.10.3 - 2026-08-09 — the check learns about /llms.txt
 
