@@ -1,7 +1,7 @@
 {
   "$comment": "The published cohort definition for the Machine Readers surface. DATA, not code — no switch statements anywhere. Served verbatim at https://juanlentino.com/_sn/rights-signals/taxonomy so any number derived from it can be checked against it. See docs/MACHINE-READERS.md in signal-and-noise-tools for the full contract.",
-  "taxonomy_version": "1.1.0",
-  "effective_date": "2026-08-10",
+  "taxonomy_version": "1.2.0",
+  "effective_date": "2026-08-11",
   "matching": {
     "algorithm": "ordered-substring-case-insensitive",
     "note": "Entries are tested in array order and the FIRST match wins, so specific tokens must precede the generic ones they contain (applebot-extended before applebot; googlebot-image before googlebot). Plain substring rather than regex on purpose: no escaping subtleties, no catastrophic backtracking on a hostile UA, and a reviewer can verify a match by eye. Tokens that risk matching inside an unrelated word carry their punctuation (curl/, axios/, java/)."
@@ -316,14 +316,34 @@
       "note": "DECIDED: archive. Common Crawl's own declaration is 'an open repository of web crawl data that is universally accessible and analyzable by anyone' — archiving, with no claim to train models. Its role as one of the largest AI training corpora is real but is a downstream fact about consumers, not the operator's declared purpose, so it rides training_corpus_source rather than overloading purpose. Filing it train would attribute to Common Crawl an intent it does not state; filing it archive alone would hide the dual role. This is the case the boolean exists for."
     },
     {
-      "id": "amazon-bot",
-      "match": "amazonbot",
+      "id": "amazon-searchbot",
+      "match": "amzn-searchbot",
       "vendor": "amazon",
       "purpose": "search",
       "source": "https://developer.amazon.com/amazonbot",
       "declared": true,
+      "training_corpus_source": false,
+      "note": "FOUND BY THE UNKNOWN-AGENT REVIEW, 40 minutes after the sensor went live , the first thing RULE 2 surfaced. Amazon: 'used to improve search experiences in Amazon products and services', eligible to appear in surfaces such as Alexa, and explicitly does NOT train generative models. The frozen /amazonbot/i family does not match this token, so it lands in other-bot; the vendor axis is what makes it visible."
+    },
+    {
+      "id": "amazon-user",
+      "match": "amzn-user",
+      "vendor": "amazon",
+      "purpose": "user",
+      "source": "https://developer.amazon.com/amazonbot",
+      "declared": true,
+      "training_corpus_source": false,
+      "note": "Amazon's user-initiated fetcher, e.g. 'responding to Alexa queries that require up-to-date information'. Explicitly not used for training. Like every *-User agent it MUST NOT be counted as train. Not matched by any frozen family, so it records only under unclassified-machine."
+    },
+    {
+      "id": "amazon-bot",
+      "match": "amazonbot",
+      "vendor": "amazon",
+      "purpose": "train",
+      "source": "https://developer.amazon.com/amazonbot",
+      "declared": true,
       "training_corpus_source": true,
-      "note": "JUSTIFIED: search. Amazon's page leads with 'used to improve our products and services' and 'provide more accurate information to customers', then hedges training as a possibility: content 'may be used to train Amazon AI models'. purpose records the primary declared function, so filing train would overstate a hedged claim; the training use is preserved exactly where the CCBot precedent puts it, on training_corpus_source. Same treatment, same reasoning, so the two are comparable."
+      "note": "RECLASSIFIED in taxonomy 1.2.0, on evidence found by the RULE 2 unknown-agent review. Amazon documents THREE agents on one page: Amazonbot, Amzn-SearchBot and Amzn-User. The v1.0.0 filing of `search` rested on Amazon leading with 'improve our products and services' while hedging training as 'may be used'. That reading does not survive a dedicated Amzn-SearchBot existing: with search and user-directed fetching carved into their own agents, the only AI purpose Amazonbot still declares is model training. Filing it `search` would double-book a purpose Amazon assigns elsewhere and hide the training signal, which is the one the rights claim turns on."
     },
     {
       "id": "bytedance-bytespider",
