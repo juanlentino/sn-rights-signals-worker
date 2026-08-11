@@ -179,6 +179,31 @@ describe("the evidence sets the confidence, not the other way round", () => {
   });
 });
 
+describe("first-party tooling is named, not counted as readership", () => {
+  // Found in Workers Logs on 2026-08-11: every one of the top ten readers of the
+  // rights surfaces was this site's own tooling. Before this, most of them
+  // recorded NOTHING (no bot/crawler token), so the surface could not say so.
+  it.each([
+    ["smoke test", "SignalNoise-SmokeTest/1.0 (GitHub Actions)"],
+    ["deploy gate", "sn-rights-check/1.0 (+https://juanlentino.com/tdm-policy/)"],
+    ["health probe", "SignalNoiseTools/10.79.0 rights-anchor-check"],
+    ["integrity check", "SN-Provenance-Integrity/10.79.0"],
+    ["ledger verify", "sn-ledger-verify/1.0 (+https://github.com/juanlentino/signal-and-noise-provenance)"],
+  ])("flags the %s as first-party ops", (_n, ua) => {
+    const m = classifyVendorPurpose(ua);
+    expect(m.first_party).toBe(true);
+    expect(m.purpose).toBe("ops");
+  });
+
+  it("does NOT flag curl as first-party, however it was actually used", () => {
+    // curl/8.5.0 was the owner hand-testing on 9 August, but curl is a generic
+    // client and flagging it first-party would silently drop third-party traffic.
+    const m = classifyVendorPurpose("curl/8.5.0");
+    expect(m.purpose).toBe("dev");
+    expect(m.first_party).toBe(false);
+  });
+});
+
 describe("newly visible machines", () => {
   it("classifies facebookexternalhit as meta/social though the family classifier drops it", () => {
     expect(classifyMachineReader(UA.fbHit)).toBeNull();

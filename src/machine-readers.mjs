@@ -194,6 +194,12 @@ export function observeMachineReader(request, env, pathname) {
         vp?.training_corpus_source ? "1" : "0",
         vp?.first_party ? "1" : "0",
         uaSample,
+        // v1.12.0: the taxonomy entry id, so the surface can name the EXACT
+        // agent rather than leaving it to be inferred from vendor+purpose.
+        // Answering "was the 8 August sweep GPTBot or ChatGPT-User?" required a
+        // trip to Workers Logs, which retains 7 days. This field means the next
+        // such question is answerable from the dataset itself, for 90.
+        vp?.id ?? "",
       ],
       doubles: [1],
       // Still exactly one index: Analytics Engine permits one per data point,
@@ -270,11 +276,11 @@ function buildQuery(view, days) {
   return (
     "SELECT blob1 AS family, blob2 AS surface, blob3 AS vendor, blob4 AS purpose, " +
     "blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, " +
-    "toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
+    "blob9 AS agent, toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
     "FROM sn_machine_readers " +
     since +
     "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, " +
-    "first_party, day ORDER BY day ASC FORMAT JSON"
+    "first_party, agent, day ORDER BY day ASC FORMAT JSON"
   );
 }
 
