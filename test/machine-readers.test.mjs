@@ -75,7 +75,7 @@ describe("observeMachineReader — aggregate-only AE writes", () => {
     // would silently relabel every column downstream while still "passing" any
     // test that only checked the array length or the set of values.
     expect(writes[0]).toEqual({
-      blobs: ["openai", "llms", "openai", "train", TAXONOMY_VERSION, "1", "0", ""],
+      blobs: ["openai", "llms", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot"],
       doubles: [1],
       indexes: ["openai"],
     });
@@ -92,6 +92,8 @@ describe("observeMachineReader — aggregate-only AE writes", () => {
     expect(writes[0].indexes).toEqual(["other-bot"]);
     expect(writes[0].blobs[2]).toBe("anthropic");
     expect(writes[0].blobs[3]).toBe("search");
+    // v1.12.0: the exact agent, so nothing has to be inferred downstream.
+    expect(writes[0].blobs[8]).toBe("anthropic-searchbot");
   });
 
   it("records previously-invisible machines under the ADDITIVE family only", () => {

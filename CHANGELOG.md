@@ -2,6 +2,37 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.12.0 - 2026-08-11 - the surface names the agent, and its own traffic
+
+**Taxonomy 1.3.0.** Both changes come from one afternoon in Workers Logs, chasing two questions the
+dataset could not answer about itself.
+
+#### The exact agent, stored
+
+`vp.id` now rides as blob9 and comes back as `agent`. Answering *"was the 8 August sweep GPTBot or
+ChatGPT-User?"* meant leaving the dataset for the Cloudflare dashboard, where logs live 7 days.
+Analytics Engine keeps 90. The agent id closes that gap: the next question of that shape is
+answerable from the sensor, and the answer survives thirteen times longer.
+
+For the record, that sweep was **GPTBot**. Over 4 to 11 August OpenAI's agents split GPTBot 670,
+ChatGPT-User 240, OAI-SearchBot 160, so **37% of what the frozen `openai` family reports as
+AI-training is not training at all.**
+
+#### Five first-party agents, flagged
+
+Every one of the top ten readers of the rights surfaces turned out to be this site's own tooling:
+the hourly smoke test (330), the Worker's post-deploy gate (120), the plugin's anchor and drift
+probes, the provenance integrity checker, and the ledger verifier. Most matched no frozen family, so
+they recorded nothing and the surface could not say the rights-read count was self-traffic.
+
+They are now `first_party: true`, which existing code already excludes from headline totals.
+
+**curl is deliberately NOT flagged.** The 63 `other-bot` rights reads on 9 August were almost
+certainly the owner hand-testing during that day's deploys, but curl is a generic client and
+flagging it first-party would silently discard real third-party traffic. It stays `dev`.
+
+202 tests pass.
+
 ### 1.11.1 - 2026-08-11 — the unknown-agent review pays for itself in 40 minutes
 
 **Taxonomy 1.2.0, effective 2026-08-11.** Data-only; no code change.
