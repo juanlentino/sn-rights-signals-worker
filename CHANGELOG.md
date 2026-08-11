@@ -2,6 +2,37 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.11.1 - 2026-08-11 — the unknown-agent review pays for itself in 40 minutes
+
+**Taxonomy 1.2.0, effective 2026-08-11.** Data-only; no code change.
+
+Forty minutes after v1.11.0 went live, the RULE 2 unknown-agent view returned exactly one string:
+`Amzn-SearchBot/0.1`. Following it up found that **Amazon documents three agents on one page**, not
+one:
+
+| Agent | Purpose | Trains? |
+| --- | --- | --- |
+| `Amazonbot` | improve products and services | *"may be used to train Amazon AI models"* |
+| `Amzn-SearchBot` | search experiences, incl. Alexa | explicitly **no** |
+| `Amzn-User` | user-initiated live fetches | explicitly **no** |
+
+Neither new token is matched by the frozen `/amazonbot/i` family: `Amzn-SearchBot` lands in
+`other-bot`, `Amzn-User` is not recorded at all without `unclassified-machine`. Same shape as
+Claude-SearchBot and facebookexternalhit, found the same way the file predicted it would be.
+
+**`Amazonbot` is RECLASSIFIED `search` → `train`.** The 1.0.0 filing rested on Amazon leading with
+product improvement while hedging training as *"may be used"*. That reading does not survive a
+dedicated `Amzn-SearchBot` existing: with search and user-directed fetching carved into their own
+agents, the only AI purpose Amazonbot still declares is training. Filing it `search` double-booked a
+purpose Amazon assigns elsewhere and buried the signal the rights claim turns on.
+`training_corpus_source` stays true either way, which is the boolean doing its job.
+
+Honest note on how this was missed: v1.11.0 fetched this exact page and asked only what *Amazonbot*
+was for. The page answered the question asked. Asking it to enumerate every token surfaced all three.
+
+Rows written under 1.1.0 keep `taxonomy_version: "1.1.0"`, so a window spanning the change reports
+`mixed` rather than being silently restated. 196 tests pass.
+
 ### 1.11.0 - 2026-08-10 — vendor and purpose, on two new axes beside a frozen one
 
 > **Taxonomy 1.1.0** (bumped from 1.0.0 before first deploy, on further verification):

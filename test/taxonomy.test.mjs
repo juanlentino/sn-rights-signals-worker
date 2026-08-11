@@ -34,6 +34,8 @@ const UA = {
   mistralTrain: "Mozilla/5.0 (compatible; MistralAI-Training/1.0; +https://docs.mistral.ai/robots)",
   mistralIndex: "Mozilla/5.0 (compatible; MistralAI-Index/1.0; +https://docs.mistral.ai/robots)",
   betterstack: "Better Stack Better Uptime Bot Mozilla/5.0 (compatible; UptimeBot/1.0)",
+  amznSearch: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Amzn-SearchBot/0.1) Chrome/119.0.6045.0 Safari/537.36",
+  amznUser: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Amzn-User/0.1) Chrome/119.0.6045.0 Safari/537.36",
   curl: "curl/8.7.1",
   chrome: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
 };
@@ -62,6 +64,7 @@ describe("the *-User agents are never train", () => {
     ["ChatGPT-User", UA.chatgptUser],
     ["Claude-User", UA.claudeUser],
     ["Perplexity-User", UA.perplexityUser],
+    ["Amzn-User", UA.amznUser],
   ])("%s is user, not train", (_name, ua) => {
     expect(purposeOf(ua)).toBe("user");
   });
@@ -124,17 +127,32 @@ describe("the two ambiguous cases are decided, not fudged", () => {
     expect(m.training_corpus_source).toBe(true);
   });
 
-  it("Amazonbot is search AND flagged as a training-corpus source", () => {
-    const m = classifyVendorPurpose(UA.amazon);
-    expect(m.purpose).toBe("search");
-    expect(m.training_corpus_source).toBe(true);
+  it("keeps CCBot's dual role queryable without archive meaning two things", () => {
+    // If CCBot ever became `train`, the boolean would be redundant and `train`
+    // would silently mean two different claims.
+    expect(purposeOf(UA.ccbot)).not.toBe("train");
   });
 
-  it("keeps the dual role queryable without any purpose meaning two things", () => {
-    // If either of these ever became `train`, the boolean would be redundant
-    // and `train` would silently mean two different claims.
-    expect(purposeOf(UA.ccbot)).not.toBe("train");
-    expect(purposeOf(UA.amazon)).not.toBe("train");
+  // Amazonbot was filed `search` in taxonomy 1.0.0 and RECLASSIFIED to `train`
+  // in 1.2.0. Not a whim: Amazon carves search and user-directed fetching into
+  // their own agents, so `search` double-booked a purpose Amazon assigns
+  // elsewhere and buried the training signal the rights claim turns on.
+  it("splits Amazon three ways, like OpenAI and Anthropic", () => {
+    expect(purposeOf(UA.amazon)).toBe("train");
+    expect(classifyVendorPurpose(UA.amazon).training_corpus_source).toBe(true);
+    expect(purposeOf(UA.amznSearch)).toBe("search");
+    expect(purposeOf(UA.amznUser)).toBe("user");
+    for (const ua of [UA.amznSearch, UA.amznUser]) {
+      expect(vendorOf(ua)).toBe("amazon");
+      expect(classifyVendorPurpose(ua).training_corpus_source).toBe(false);
+    }
+  });
+
+  it("keeps Amazon's two new agents out of the frozen amazon-ai family", () => {
+    // /amazonbot/i matches neither token, so the family stays exactly as it has
+    // counted since v1.4.0 while the vendor axis makes them visible.
+    expect(classifyMachineReader(UA.amznSearch)).toBe("other-bot");
+    expect(classifyMachineReader(UA.amznUser)).toBeNull();
   });
 });
 
