@@ -2,6 +2,37 @@
 
 All notable changes to sn-rights-signals are documented here.
 
+### 1.13.0 - 2026-08-13 - the auto-deploy starts saying which build it is
+
+Found from the WordPress side: Measurement → Machine Readers showed **"Sensor unreachable"** while
+every other indicator on the tab was green and the data below was current to the same day. The
+sensor was fine. `/_sn/rights-signals/version` answered HTTP 200 in 0.13s with `ae_bound: true` —
+and `version: null`.
+
+**A git-connected worker never runs its own `deploy` script.** Workers Builds executes its own
+deploy command, defaulting to `npx wrangler deploy`. The `--var SN_VERSION:$npm_package_version`
+that names the build lives only in the `deploy` script, so every automatic deploy shipped with the
+variable unset and the endpoint honestly reported that it did not know its own version.
+
+`deploy:ci` is that command, made explicit and pointed at by the dashboard Deploy command. It is a
+**separate script from `deploy` on purpose**: `deploy` carries a `postdeploy` hook that probes the
+live URL and waits for a version to appear, which inside a build container either hangs or fails
+the build.
+
+The commit comes from `WORKERS_CI_COMMIT_SHA`, injected by Workers Builds, and falls back to
+`git rev-parse HEAD` so the same script still works when run by hand. Cloudflare documents that
+variable as injected into the *build* process and does not explicitly promise it to the *deploy*
+command — the fallback means the script is correct either way rather than resting on that reading.
+
+**`source_commit` is now in the version response.** Setting a deploy var that nothing reads back is
+inert: it looks identical whether it was plumbed correctly or not. The field is what makes the
+change verifiable, so it ships with it rather than after it.
+
+Both fields stay `null` when a deploy did not pass them. A null means *this deploy did not say*,
+never *the sensor is down* — a distinction the reader on the WordPress side was collapsing, which is
+what produced the false "unreachable" in the first place. That half is fixed separately in the
+plugin.
+
 ### 1.12.0 - 2026-08-11 - the surface names the agent, and its own traffic
 
 **Taxonomy 1.3.0.** Both changes come from one afternoon in Workers Logs, chasing two questions the
