@@ -32,5 +32,12 @@
   ],
   "routes": [
     { "pattern": "juanlentino.com/*", "zone_name": "juanlentino.com" }
-  ]
+  ],
+  // Runaway ceiling, not a tuning target. Chosen without CPU telemetry.
+  // Paid-plan default is 30s (max 5 min) — 3,000× the old Free 10ms cap —
+  // so a stuck invocation is now a real bill. 10s is ~3× below that default
+  // (bounds a runaway) and far above any plausible legitimate path, including
+  // the cron-driven crawler-list sync. Do not tighten it: a ceiling below
+  // legitimate use is an outage.
+  "limits": { "cpu_ms": 10000 }
 }
