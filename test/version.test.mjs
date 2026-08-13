@@ -30,6 +30,22 @@ describe("versionResponse — sensor-alive block", () => {
     expect(Number.isFinite(Date.parse(body.sensor.last_write_at))).toBe(true);
   });
 
+  it("reports version and source_commit from deploy-time vars", async () => {
+    const body = await versionResponse(mkReq(), { SN_VERSION: "1.13.0", SN_COMMIT: "abc1234" }).json();
+    expect(body.version).toBe("1.13.0");
+    expect(body.source_commit).toBe("abc1234");
+  });
+
+  it("reports null — never a placeholder — when the deploy passed no vars", async () => {
+    // The Workers Builds default deploy command passes neither, so this is the
+    // shape a git-connected auto-deploy actually serves. It must stay
+    // distinguishable from an unreachable worker by the reader downstream.
+    const body = await versionResponse(mkReq(), {}).json();
+    expect(body.version).toBeNull();
+    expect(body.source_commit).toBeNull();
+    expect(body.worker).toBe("sn-rights-signals");
+  });
+
   it("never leaks error text into the response after a failed write", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const env = { SN_MR: { writeDataPoint: () => { throw new Error("secret-internal-detail"); } } };

@@ -17,7 +17,14 @@ export function versionResponse(request, env) {
   const body = JSON.stringify(
     {
       worker: "sn-rights-signals",
+      // Both come from `--var` at deploy time, so both are null on any deploy
+      // that did not pass them. Workers Builds runs its OWN deploy command and
+      // never the package.json `deploy` script — which is why `deploy:ci`
+      // exists and why the dashboard Deploy command must point at it. A null
+      // here means "this deploy did not say", never "the sensor is down": the
+      // reader on the WordPress side must not conflate the two.
       version: env.SN_VERSION || null,
+      source_commit: env.SN_COMMIT || null,
       cf_version_id: meta.id || null,
       cf_version_tag: meta.tag || null,
       deployed_at: meta.timestamp || null,

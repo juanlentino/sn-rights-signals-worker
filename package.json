@@ -1,12 +1,13 @@
 {
   "name": "sn-rights-signals-worker",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "vitest run",
     "deploy": "wrangler deploy --var SN_VERSION:$npm_package_version",
     "postdeploy": "node scripts/check-rights-signals.mjs --fresh --await-version $npm_package_version",
+    "deploy:ci": "wrangler deploy --var SN_VERSION:$npm_package_version --var SN_COMMIT:${WORKERS_CI_COMMIT_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}",
     "check:live": "node scripts/check-rights-signals.mjs"
   },
   "devDependencies": {
