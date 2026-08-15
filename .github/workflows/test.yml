@@ -20,6 +20,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: this workflow only checks out the repo and runs tests. It
+# never calls the GitHub API, so read access to contents is all it needs.
+permissions:
+  contents: read
+
 jobs:
   # ONE job on purpose. Actions bills per job, rounded up to the whole minute,
   # so a second job for a 4-second check would cost a full extra minute every
