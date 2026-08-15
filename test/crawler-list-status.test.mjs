@@ -24,7 +24,7 @@ describe("crawler list status", () => {
 // its stored result is missing, failed, or stale — answering immediately
 // with the current state; the caller's next poll sees the healed result.
 import { vi, afterEach } from "vitest";
-import { shouldSelfHeal, _resetCrawlerListStateForTests, runAndRecordCrawlerListCheck, _setCrawlerCacheForTests } from "../src/crawler-list-status.mjs";
+import { shouldSelfHeal, _resetCrawlerListStateForTests, runAndRecordCrawlerListCheck, _setCrawlerCacheForTests, classifyCheckFailure, CHECK_FAILURE_CODES } from "../src/crawler-list-status.mjs";
 import { NAMED_CRAWLERS } from "../src/robots-block.mjs";
 
 const docsHtmlFor = (names) =>
@@ -151,5 +151,72 @@ describe("crawler list status: colo-cache persistence (v1.4.3)", () => {
     const body = await (await crawlerListStatusResponse({ waitUntil })).json();
     expect(body.last_check).toBeNull();
     expect(waitUntil).toHaveBeenCalledOnce();
+  });
+});
+
+// ── v1.4.4: the published verdict must never carry a raw exception message ──
+// CodeQL js/stack-trace-exposure fired on two sinks fed by the same field: the
+// colo-cache write and the public response body. A `fetch` failure or a runtime
+// error can put arbitrary internals in `e.message`, and this endpoint is
+// public. The full reason still reaches console.error (Workers Logs, owner-
+// only); what crosses the wire is a closed set of codes.
+describe("failure verdicts are classified, never reflected", () => {
+  const CANARY = "SECRET-INTERNAL-abc123-do-not-publish";
+
+  const makeFakeCache = () => {
+    const store = new Map();
+    return {
+      seen: () => [...store.values()].join("\n"),
+      async match(key) { return store.has(key) ? new Response(store.get(key)) : undefined; },
+      async put(key, res) { store.set(key, await res.text()); },
+    };
+  };
+
+  it("a non-200 docs fetch classifies as docs_unavailable and does not publish the status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 503 })));
+    await runAndRecordCrawlerListCheck();
+    const raw = await (await crawlerListStatusResponse()).text();
+    expect(JSON.parse(raw).last_check).toMatchObject({ ok: false, error: "docs_unavailable" });
+    // The upstream status code is an upstream detail; the class is the signal.
+    expect(raw).not.toContain("503");
+  });
+
+  it("an implausibly small parse classifies as docs_shape_changed", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(docsHtmlFor(["OnlyOne"]))));
+    await runAndRecordCrawlerListCheck();
+    const body = await (await crawlerListStatusResponse()).json();
+    expect(body.last_check).toMatchObject({ ok: false, error: "docs_shape_changed" });
+  });
+
+  // THE REGRESSION PIN. Not "does it return the right code" — does the raw
+  // message reach the wire AT ALL. Written against the property rather than
+  // the implementation, so it still holds if the classifier is rewritten.
+  it("an arbitrary runtime error never reaches the response OR the cache", async () => {
+    const cache = makeFakeCache();
+    _setCrawlerCacheForTests(cache);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error(CANARY)));
+    await runAndRecordCrawlerListCheck();
+
+    const raw = await (await crawlerListStatusResponse()).text();
+    expect(raw).not.toContain(CANARY);                       // sink 1: the response
+    expect(cache.seen()).not.toContain(CANARY);              // sink 2: the colo cache
+    expect(JSON.parse(raw).last_check).toMatchObject({ ok: false, error: "check_failed" });
+  });
+
+  // Negative control on the pin above: prove the canary WOULD have been
+  // visible if it were recorded, so a passing test means suppression, not a
+  // test that cannot see anything.
+  it("negative control: a canary placed in the verdict IS visible on the wire", async () => {
+    recordCrawlerListCheck({ ok: false, checked_at: "2026-08-14T00:00:00.000Z", error: CANARY });
+    const raw = await (await crawlerListStatusResponse()).text();
+    expect(raw).toContain(CANARY);
+  });
+
+  it("only published codes are honoured — an unrecognised tag degrades to check_failed", () => {
+    expect(classifyCheckFailure({ snCode: "docs_unavailable" })).toBe("docs_unavailable");
+    expect(classifyCheckFailure({ snCode: "something_new" })).toBe("check_failed");
+    expect(classifyCheckFailure(new Error("untagged"))).toBe("check_failed");
+    expect(classifyCheckFailure(null)).toBe("check_failed");
+    expect(CHECK_FAILURE_CODES).toContain("check_failed");
   });
 });

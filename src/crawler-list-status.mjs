@@ -21,6 +21,31 @@ const STALE_MS = 8 * 24 * 60 * 60 * 1000;
 // Per-isolate floor between attempts, whatever the outcome.
 const ATTEMPT_MIN_MS = 10 * 60 * 1000;
 
+// v1.4.4 — CodeQL js/stack-trace-exposure (this file's cache write and its
+// response body, both fed by the same field).
+//
+// The recorded verdict is served on a PUBLIC endpoint AND written to the colo
+// cache, so it must never carry a raw exception message: a `fetch` failure or
+// a runtime error can put arbitrary internals in that string. The full reason
+// still goes to console.error — Workers Logs is owner-only and is the durable
+// trail this module was always designed around (see the header). What crosses
+// to the public surface is one of a CLOSED set of codes, so the response can
+// only ever contain a string this file already knew.
+export const CHECK_FAILURE_CODES = Object.freeze([
+  "docs_unavailable",    // docs fetch threw, or answered non-200
+  "docs_shape_changed",  // parsed implausibly few crawlers — scrape likely broken
+  "check_failed",        // anything else, deliberately opaque
+]);
+
+// Reads the code the throw site attached, and ONLY honours it if it is one we
+// published. Validating against the closed set is what makes the property
+// airtight rather than merely intended — anything unrecognised, including an
+// untagged runtime error, becomes the opaque fallback.
+export function classifyCheckFailure(e) {
+  const code = e && typeof e.snCode === "string" ? e.snCode : "";
+  return CHECK_FAILURE_CODES.includes(code) ? code : "check_failed";
+}
+
 export function recordCrawlerListCheck(result) {
   lastCheck = result;
 }
@@ -89,9 +114,15 @@ export async function runAndRecordCrawlerListCheck() {
     }
     recordCrawlerListCheck({ ok: true, ...result });
   } catch (e) {
+    // The raw reason goes to the LOG (owner-only, durable). The recorded
+    // verdict — cached and published — carries only the classified code.
     const reason = e instanceof Error ? e.message : String(e);
     console.error(`crawler-list-sync: check failed: ${reason}`);
-    recordCrawlerListCheck({ ok: false, checked_at: new Date().toISOString(), error: reason });
+    recordCrawlerListCheck({
+      ok: false,
+      checked_at: new Date().toISOString(),
+      error: classifyCheckFailure(e),
+    });
   }
   await writeCachedCheck(lastCheck);
 }
