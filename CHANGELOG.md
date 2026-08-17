@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.13.1 - 2026-08-17
+
+**Headline:** R6c toolchain refresh.
+
+### Changed
+
+- **Lockfile updated within declared ranges.** 209 tests, dry-run build, 109/109 registry
+  signatures verified, 52 attested. R6c gate condition 1.
+
 All notable changes to sn-rights-signals are documented here.
 
 ### 1.13.0 - 2026-08-13 - the auto-deploy starts saying which build it is
