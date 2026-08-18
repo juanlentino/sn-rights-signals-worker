@@ -80,6 +80,20 @@ export function _setCrawlerCacheForTests(cache) {
   cacheProvider = () => cache;
 }
 
+// Test-only: the real colo cache deliberately OUTLIVES
+// _resetCrawlerListStateForTests (that helper simulates isolate eviction,
+// where memory is gone but the colo cache stays). vitest-pool-workers v4
+// isolates storage per test FILE rather than per test, so a healed verdict
+// now survives into the next case unless the suite purges it explicitly.
+export async function _purgeCrawlerCacheForTests() {
+  try {
+    const cache = typeof caches !== "undefined" && caches.default ? caches.default : null;
+    if (cache) await cache.delete(CACHE_KEY);
+  } catch {
+    // Best-effort: a pool without a usable Cache API has nothing to purge.
+  }
+}
+
 async function readCachedCheck() {
   const cache = cacheProvider();
   if (!cache) return null;
