@@ -24,15 +24,18 @@ describe("crawler list status", () => {
 // its stored result is missing, failed, or stale — answering immediately
 // with the current state; the caller's next poll sees the healed result.
 import { vi, afterEach } from "vitest";
-import { shouldSelfHeal, _resetCrawlerListStateForTests, runAndRecordCrawlerListCheck, _setCrawlerCacheForTests, classifyCheckFailure, CHECK_FAILURE_CODES } from "../src/crawler-list-status.mjs";
+import { shouldSelfHeal, _resetCrawlerListStateForTests, _purgeCrawlerCacheForTests, runAndRecordCrawlerListCheck, _setCrawlerCacheForTests, classifyCheckFailure, CHECK_FAILURE_CODES } from "../src/crawler-list-status.mjs";
 import { NAMED_CRAWLERS } from "../src/robots-block.mjs";
 
 const docsHtmlFor = (names) =>
   `<p>Managed robots.txt example</p><pre>${names.map((n) => `User-agent: ${n}\nDisallow: /`).join("\n\n")}</pre>`;
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals();
   _resetCrawlerListStateForTests();
+  // The real colo cache survives the memory wipe by design, so a healed
+  // verdict from one case would otherwise be adopted by the next.
+  await _purgeCrawlerCacheForTests();
 });
 
 describe("shouldSelfHeal", () => {

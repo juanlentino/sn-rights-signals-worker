@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.13.2 - 2026-08-18
+
+**Headline:** the nested-wrangler advisory closes — and a test isolation gap it was hiding.
+
+### Security
+
+- **Nested `wrangler` OS-command-injection advisory (high) closed.** `@cloudflare/vitest-pool-workers`
+  pinned its own `wrangler 4.44.0` beneath the patched top-level copy, so no lockfile refresh could
+  reach it. Deferred 2026-08-04 with a stated revisit condition; that condition is now met.
+  **Every** pool-workers release peering `vitest 3.x` tops out at `wrangler 4.57.0` — two releases
+  *below* the 4.59.1 fix — so the vitest 4 jump was not a preference but the only path. Moving to
+  `@cloudflare/vitest-pool-workers ^0.22.0` (ships `wrangler 4.124.0`) collapses the duplicate tree
+  to a single hoisted copy: the advisory closes by deduplication, not by an override.
+- `npm audit`: 0 vulnerabilities. Signatures 80/80 verified, 45 attested (was 52 of 109 — the tree
+  lost 38 packages, so coverage rises 47.7% → 56.3%). R6c gate condition 1.
+
+### Changed
+
+- **`vitest` 3 → 4, and the config moves to the plugin API.** v4 removes the
+  `@cloudflare/vitest-pool-workers/config` subpath: `defineWorkersConfig({ test.poolOptions.workers })`
+  becomes `defineConfig({ plugins: [cloudflareTest(...)] })`. The options object relocates verbatim —
+  same shape, new home. Matches the `vitest ^4.1.9` the analytics and login-guard workers already run.
+
+### Fixed
+
+- **Two self-heal tests were relying on isolation the pool no longer provides.** v4 isolates storage
+  **per test file**, not per test — Cloudflare's documented change, matching Vitest's own model, and
+  the `isolatedStorage` option is gone entirely. A healed `ok:true` verdict written to the colo cache
+  therefore survived into the following cases: one read that stale verdict as its own, the other
+  skipped a self-heal it should have kicked. The cache **outliving** the in-memory wipe is deliberate
+  — that is precisely how the eviction tests simulate a cold isolate — so the purge belongs in
+  `afterEach`, not in `_resetCrawlerListStateForTests()`. Added
+  [`_purgeCrawlerCacheForTests()`](src/crawler-list-status.mjs) and awaited it between cases.
+  209 tests pass, the same 209 as before the upgrade.
+
 ## 1.13.1 - 2026-08-17
 
 **Headline:** R6c toolchain refresh.
