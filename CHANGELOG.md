@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.14.0 - 2026-08-18
+
+**Headline:** R6c's gate lands — the dependency-provenance check that the 2026-08-14
+attestation audit licensed, now enforced on every run.
+
+### Added
+
+- **`scripts/attestation-gate.mjs` — the dependency-provenance gate.** Two legs, and only
+  two: (1) every installed package must carry a valid npm **registry signature** —
+  `invalid` or `missing` non-empty is a hard fail; (2) the set of packages lacking a
+  **provenance attestation** must not grow beyond `.attestation-allowlist.json`.
+- **`.attestation-allowlist.json` — 33 names, pinned BY NAME**, per the audit's condition.
+  Adding a name is a reviewed event, never a way to make CI green. When a package starts
+  attesting, the gate reports the stale entry as a NOTICE so the list shrinks on its own.
+
+### Notes on what this gate deliberately does NOT do
+
+- **It does not enforce a coverage percentage.** Coverage is reported (56.0%) and never
+  gated. This tree is pure toolchain — zero runtime dependencies — so the meaningful
+  question is "did the unattested set change?", not "is the ratio high?". Gating a ratio
+  creates pressure to push names onto the allowlist to move a number, which inverts an
+  allowlist into a pass-through.
+- The 2026-08-14 audit predicted low-80s coverage after a toolchain refresh. That
+  prediction is superseded, and not because the refresh failed: the vitest 4 jump
+  *removed* the `@esbuild/*` and `@cloudflare/workerd-*` families, which were exactly the
+  ones that would have started attesting. The tree got smaller and proportionally more
+  never-attests. Signatures are 100%; that is the leg with teeth.
+
+### Changed
+
+- **CI now runs node 24 (was 22) — required, not cosmetic.** The gate needs npm >= 11:
+  npm 10 accepts `--include-attestations` but silently omits the `verified` array, which
+  would make every package read as unattested. node 24 bundles npm 11 at no extra step,
+  where `npm i -g npm@11` would have added ~8s to a job already at 36-60s — enough to tip
+  a run into a second billed minute. The gate asserts the npm version rather than
+  trusting it, and exits 2 with a clear message if it is ever downgraded.
+- The gate runs as a **step in the existing job**, never its own job — Actions bills per
+  job rounded up to the whole minute.
+
 ## 1.13.2 - 2026-08-18
 
 **Headline:** the nested-wrangler advisory closes — and a test isolation gap it was hiding.
