@@ -41,6 +41,7 @@
     "fdir",
     "kleur",
     "lightningcss",
+    "lightningcss-linux-x64-gnu",
     "path-to-regexp",
     "pathe",
     "picocolors",
@@ -54,5 +55,8 @@
     "unenv",
     "why-is-node-running",
     "ws"
-  ]
+  ],
+  "_reviewed_additions": {
+    "lightningcss-linux-x64-gnu": "2026-08-18, first CI run. The CI runner installs this platform binary; a local `npm install --os=linux --cpu=x64` does not resolve it (libc gnu/musl is not simulated by the os/cpu override). Accepted as never-attests on the same basis as its parent `lightningcss`, already pinned here: a project that does not attest its main package does not attest its platform shims, and the 2026-08-14 audit listed lightningcss and its platform shims in the irreducible set. This is a REVIEWED addition, recorded so it is not mistaken for a green-the-build edit."
+  }
 }

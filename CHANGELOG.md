@@ -11,7 +11,12 @@ attestation audit licensed, now enforced on every run.
   two: (1) every installed package must carry a valid npm **registry signature** —
   `invalid` or `missing` non-empty is a hard fail; (2) the set of packages lacking a
   **provenance attestation** must not grow beyond `.attestation-allowlist.json`.
-- **`.attestation-allowlist.json` — 33 names, pinned BY NAME**, per the audit's condition.
+- **`.attestation-allowlist.json` — 34 names, pinned BY NAME**, per the audit's condition.
+  One name (`lightningcss-linux-x64-gnu`) was added as a **reviewed event** after the first
+  CI run, and the file records why: a local `npm install --os=linux --cpu=x64` does not
+  resolve that platform binary (libc gnu/musl is outside what the os/cpu override
+  simulates), so the gate caught a real gap between the simulated and actual runner
+  population. Accepted on the same basis as its already-pinned parent `lightningcss`.
   Adding a name is a reviewed event, never a way to make CI green. When a package starts
   attesting, the gate reports the stale entry as a NOTICE so the list shrinks on its own.
 
