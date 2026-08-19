@@ -37,9 +37,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
+      # R6c dependency-provenance gate. A STEP, not a job: Actions bills per job
+      # rounded up to the whole minute, so a separate job for a ~3s check would
+      # cost a full extra minute on every run for no added signal.
+      #
+      # node 24 is pinned above BECAUSE of this gate: it needs npm >= 11. npm 10
+      # accepts --include-attestations but silently omits the `verified` array,
+      # which would make every package read as unattested. The gate asserts that
+      # rather than trusting it, and exits 2 with a clear message if npm is old.
+      - name: Dependency-provenance gate
+        run: node scripts/attestation-gate.mjs
       # Includes test/rights-consistency.test.mjs — the STATIC rights check:
       # drives the real Worker over a stubbed origin and asserts all four
       # signal layers agree as composed. Fails the PR on drift.
