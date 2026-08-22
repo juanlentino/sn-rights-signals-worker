@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.14.1 - 2026-08-22
+
+**Headline:** the machine-readers bearer gate compares in constant time, like its siblings.
+
+### Changed
+
+- **`src/machine-readers.mjs` — `SN_MR_READ_TOKEN` is now compared via `safeEqual()`**,
+  the SHA-256-then-`crypto.subtle.timingSafeEqual` helper sn-analytics-worker and
+  sn-login-guard-worker already use for their bearer secrets, replacing a plain `!==`.
+  A 2026-08-22 cross-repo security review judged the timing channel not practically
+  exploitable through edge jitter, but this worker was the one deviation from the
+  family's own constant-time convention; now all three compare secrets the same way.
+
 ## 1.14.0 - 2026-08-18
 
 **Headline:** R6c's gate lands — the dependency-provenance check that the 2026-08-14
