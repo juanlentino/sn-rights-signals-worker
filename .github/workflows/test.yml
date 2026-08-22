@@ -5,10 +5,11 @@ on:
     branches: [main]
   pull_request:
   # Manual only. The live check reads the DEPLOYED site, so it is meaningless
-  # on a PR (nothing is deployed yet) and racy on a push to main (this Worker
-  # ships via `npm run deploy`, not Workers Builds). The deploy gate is the
-  # postdeploy hook in package.json; this is the on-demand "is prod still
-  # consistent right now?" button.
+  # on a PR (branch builds don't serve production) and racy on a push to main
+  # (this Worker ships via the Workers Builds git integration, which deploys
+  # asynchronously after the push lands — v1.14.1 confirmed this path). The
+  # `npm run deploy` flow still works and keeps its postdeploy gate; this is
+  # the on-demand "is prod still consistent right now?" button.
   workflow_dispatch:
     inputs:
       live:
