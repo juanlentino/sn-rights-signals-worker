@@ -292,6 +292,28 @@ function buildQuery(view, days) {
  *   SN_MR_SQL_TOKEN  — a Cloudflare API token with Analytics Engine read.
  *   CF_ACCOUNT_ID    — account id for the SQL API URL (a var, not a secret).
  */
+// Constant-time bearer comparison, ported from sn-analytics-worker's
+// safeEqual(): hash both sides to fixed-length SHA-256 digests, then compare
+// with the Workers-native primitive. Hashing first removes any length branch.
+async function safeEqual(a, b) {
+  const encoder = new TextEncoder();
+  const [aHash, bHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(String(a ?? ""))),
+    crypto.subtle.digest("SHA-256", encoder.encode(String(b ?? ""))),
+  ]);
+  if (typeof crypto.subtle.timingSafeEqual === "function") {
+    return crypto.subtle.timingSafeEqual(aHash, bHash);
+  }
+
+  // Node's Web Crypto does not yet expose the Workers-only primitive. Both
+  // digests are fixed at 32 bytes, so this fallback has no length branch.
+  const aBytes = new Uint8Array(aHash);
+  const bBytes = new Uint8Array(bHash);
+  let diff = 0;
+  for (let i = 0; i < aBytes.length; i += 1) diff |= aBytes[i] ^ bBytes[i];
+  return diff === 0;
+}
+
 export async function machineReadersResponse(request, env) {
   const json = (status, body) =>
     new Response(JSON.stringify(body), {
@@ -302,7 +324,7 @@ export async function machineReadersResponse(request, env) {
   const expected = env && env.SN_MR_READ_TOKEN;
   if (!expected) return json(503, { error: "not_configured" });
   const auth = request.headers.get("authorization") || "";
-  if (auth !== `Bearer ${expected}`) return json(401, { error: "unauthorized" });
+  if (!(await safeEqual(auth, `Bearer ${expected}`))) return json(401, { error: "unauthorized" });
 
   if (!env.CF_ACCOUNT_ID || !env.SN_MR_SQL_TOKEN) return json(503, { error: "not_configured" });
 
