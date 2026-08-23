@@ -11,6 +11,8 @@ import { bypassesRightsSignals } from "./admin-bypass.mjs";
 import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawler-list-status.mjs";
 import { machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
 import { taxonomyResponse } from "./taxonomy.mjs";
+import { prefersMarkdown } from "./accept-markdown.mjs";
+import { maybeMarkdown, withVaryAccept } from "./markdown-negotiation.mjs";
 
 // Content negotiation for /tdm-policy/, deliberately conservative: HTML is the
 // default and only an explicit JSON preference switches representation.
@@ -113,7 +115,22 @@ export default {
     // pointless transform on the hot path.
     const contentType = origin.headers.get("content-type") || "";
     if (!contentType.includes("text/html")) return withTdmHeaders(origin);
-    return withTdmHeaders(injectTdmMeta(origin));
+
+    // v1.16.0: Markdown for Agents, done here because the zone is not on a plan
+    // that includes Cloudflare's own implementation. accept-markdown.mjs matches
+    // its negotiation semantics exactly, so if the zone ever moves, this block
+    // and its two modules delete cleanly and behaviour does not change.
+    //
+    // Ordering matters: the markdown branch consumes `origin` directly and
+    // therefore must come BEFORE injectTdmMeta(), which would otherwise have
+    // spent an HTMLRewriter pass injecting <head> tags into a document about to
+    // be thrown away. The reservation still rides the markdown response —
+    // withTdmHeaders() wraps both branches, per the v1.5.0 rule that content
+    // taken in ANY representation is content taken.
+    const markdown = await maybeMarkdown(origin, prefersMarkdown(request.headers.get("accept")));
+    if (markdown) return withTdmHeaders(markdown);
+
+    return withTdmHeaders(withVaryAccept(injectTdmMeta(origin)));
   },
 
   // Weekly: diff robots-block.mjs's hand-maintained NAMED_CRAWLERS against
