@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.18.0 - 2026-08-23
+
+**Headline:** the markdown door gets a number. v1.16.0 opened it and left it
+unmeasurable.
+
+### Added
+
+- **`markdown_requested` — a tenth blob on the aggregate dataset**, and a new column
+  on the read query. `"1"` when the reader explicitly preferred `text/markdown`,
+  `"0"` otherwise.
+
+  Until now, *"how many agents actually use the markdown door?"* — the one number that
+  says whether v1.16.0 was worth building — had no answer. A markdown request lands on a
+  content page, so it classifies as `html` like any other page read, and the `Accept`
+  header is retained only for rights surfaces (`DETAIL_SURFACES`). The representation was
+  invisible.
+
+### Why a DIMENSION and not a new surface class
+
+A `markdown` surface class would drain reads **out of** `html`, changing the meaning and
+population of a value that already exists. This tree's additive rule (the v1.11.0 family
+note) forbids exactly that. A tenth blob changes nothing that already exists; it adds an
+axis, and old rows carry `""` and read as not-requested.
+
+Blob order **is** the read query's contract, so the new axis is APPENDED, never inserted —
+inserting one would silently relabel every column after it. Pinned positionally by test.
+
+### Why "requested" and not "served"
+
+The sensor runs before the origin fetch, so whether conversion succeeded is not yet known.
+That is *our* reliability and it is answerable from logs. **Adoption is a fact about the
+agent**, and the request alone states it.
+
+The metric calls the SAME `prefersMarkdown()` the Worker serves markdown with, rather than
+re-deriving the rule — a test pins that, because two copies of the predicate would report
+adoption of a door that was not actually opened for that request.
+
+### Notes
+
+- `observeMachineReader()`'s RETURN value is deliberately unchanged. Two tests pin its
+  shape and nothing in the Worker reads it; widening it would break an existing contract
+  to carry a field no caller wants.
+- **Cross-repo:** the plugin normalises the new field additively (v12.16.0). An older
+  plugin against this Worker simply drops the column — the readout degrades, never errors.
+
 ## 1.17.0 - 2026-08-23
 
 **Headline:** the agent-discovery documents get their own surface class — which stops

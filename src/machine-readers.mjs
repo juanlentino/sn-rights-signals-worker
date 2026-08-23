@@ -28,6 +28,7 @@ import {
   TAXONOMY_EFFECTIVE_DATE,
 } from "./taxonomy.mjs";
 import { observeRightsSurfaceDetail } from "./machine-readers-rights-detail.mjs";
+import { prefersMarkdown } from "./accept-markdown.mjs";
 
 /**
  * The one additive family value (v1.11.0). Carries rows the frozen classifier
@@ -207,6 +208,27 @@ export function observeMachineReader(request, env, pathname) {
     // allowlist, and MACHINE-READERS.md for the privacy trade this makes.
     const uaSample = vp === null ? sanitizeUnknownUa(ua) : "";
 
+    // v1.18.0: did this reader ASK for markdown?
+    //
+    // WHY THIS AXIS EXISTS: v1.16.0 opened a markdown door and left it
+    // unmeasurable. A markdown request lands on a content page, so it classifies
+    // as `html` like any other page read, and the Accept header is only retained
+    // for rights surfaces (DETAIL_SURFACES). "How many agents actually use the
+    // markdown door?" — the one number that says whether that build was worth
+    // anything — had no answer.
+    //
+    // WHY A NEW DIMENSION AND NOT A NEW SURFACE CLASS: a `markdown` surface
+    // would drain reads OUT of `html`, changing the meaning and population of an
+    // existing value. This tree's additive rule (see the v1.11.0 family note
+    // above) forbids that. A tenth blob changes nothing that already exists; it
+    // adds an axis. Old rows simply carry "" and read as not-requested.
+    //
+    // WHY "REQUESTED" AND NOT "SERVED": this runs before the origin fetch, so
+    // whether conversion succeeded is not yet known — but that is OUR
+    // reliability, answerable from logs. Adoption is a fact about the AGENT, and
+    // the request alone states it.
+    const markdownRequested = prefersMarkdown(request.headers.get("accept")) ? "1" : "0";
+
     env.SN_MR.writeDataPoint({
       blobs: [
         family,
@@ -223,6 +245,7 @@ export function observeMachineReader(request, env, pathname) {
         // trip to Workers Logs, which retains 7 days. This field means the next
         // such question is answerable from the dataset itself, for 90.
         vp?.id ?? "",
+        markdownRequested,
       ],
       doubles: [1],
       // Still exactly one index: Analytics Engine permits one per data point,
@@ -240,6 +263,10 @@ export function observeMachineReader(request, env, pathname) {
     sensorState.last_write_ok = true;
     sensorState.last_write_at = new Date().toISOString();
     sensorState.last_error = null;
+    // NOTE: markdownRequested is written to the dataset but deliberately NOT
+    // added to this return value. Two tests pin this shape with toEqual, nothing
+    // in the Worker consumes it, and widening it would break an existing
+    // contract to carry a field no caller reads — the opposite of additive.
     return { family, surface, vendor: vp?.vendor ?? null, purpose: vp?.purpose ?? "unknown" };
   } catch (err) {
     sensorState.last_write_ok = false;
@@ -299,11 +326,12 @@ function buildQuery(view, days) {
   return (
     "SELECT blob1 AS family, blob2 AS surface, blob3 AS vendor, blob4 AS purpose, " +
     "blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, " +
-    "blob9 AS agent, toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
+    "blob9 AS agent, blob10 AS markdown_requested, " +
+    "toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
     "FROM sn_machine_readers " +
     since +
     "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, " +
-    "first_party, agent, day ORDER BY day ASC FORMAT JSON"
+    "first_party, agent, markdown_requested, day ORDER BY day ASC FORMAT JSON"
   );
 }
 
