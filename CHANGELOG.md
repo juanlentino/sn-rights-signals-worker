@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.17.0 - 2026-08-23
+
+**Headline:** the agent-discovery documents get their own surface class — which stops
+them being counted as reads of the terms.
+
+### Fixed
+
+- **`/.well-known/mcp/server-card.json` and `/.well-known/api-catalog` were classifying as
+  `well-known`** — and `well-known` sits inside the plugin's `snt_mr_rights_surfaces()`,
+  the set published as *"a machine read the terms"*. So since v12.14.0, an agent fetching
+  a server card was being counted as a machine reading the TDM policy. It never was: a
+  server card is **discovery**, not terms.
+
+  `classifySurface()` now returns a new `agent-discovery` class for the three standard
+  discovery documents (server card, RFC 9727 api-catalog, ARD ai-catalog), and that class
+  is deliberately **absent** from the rights subset. The published rights-reads figure
+  therefore gets SMALLER for windows containing such reads. That is the correction, not a
+  regression.
+
+### Why it is also the thing that makes the doors measurable
+
+In one shared bucket with `security.txt`, `gpc.json`, `did.json` and `webfinger`, the
+question *"did any agent actually use the doors we opened?"* had no answer the sensor
+could give. It does now — `ai_surfaces` breaks out `agent-discovery` on its own.
+
+Opening a discovery surface and being unable to measure whether anything reads it is the
+same defect as shipping a setting with no control.
+
+### Notes
+
+- The match list is **EXACT, never a prefix**. A future file under `/.well-known/mcp/`
+  lands in `well-known` until someone classifies it deliberately, rather than silently
+  inheriting this class. Pinned by test.
+- **Cross-repo mirror:** `snt_mr_valid_surfaces()` in the plugin must carry the same
+  eleven values (plugin v12.15.0). The read path is fail-SOFT per row — an unrecognised
+  surface normalises to `html` — so an old plugin against this Worker misattributes those
+  rows briefly rather than blacking the readout out. Ship the plugin first anyway.
+
 ## 1.16.0 - 2026-08-22
 
 **Headline:** the site answers `Accept: text/markdown`. Cloudflare's own Markdown for

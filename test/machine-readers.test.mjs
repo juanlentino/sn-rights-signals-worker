@@ -42,6 +42,33 @@ describe("classifyMachineReader — fixed enum, raw UA never escapes", () => {
   });
 });
 
+describe("agent-discovery is separate from well-known (v1.17.0)", () => {
+  // The reason this class exists: "well-known" is inside the plugin's
+  // snt_mr_rights_surfaces(), the set published as "a machine read the terms".
+  // A server-card fetch is discovery, not terms, and was being counted as terms.
+  it("does not classify a discovery document as a rights-bearing well-known file", () => {
+    for (const p of ["/.well-known/mcp/server-card.json", "/.well-known/api-catalog", "/.well-known/ai-catalog.json"]) {
+      expect(classifySurface(p)).not.toBe("well-known");
+      expect(classifySurface(p)).not.toBe("rights");
+    }
+  });
+
+  it("leaves the genuinely rights-bearing well-known files alone", () => {
+    expect(classifySurface("/.well-known/tdmrep.json")).toBe("rights");
+    expect(classifySurface("/.well-known/gpc.json")).toBe("well-known");
+    expect(classifySurface("/.well-known/did.json")).toBe("well-known");
+    expect(classifySurface("/.well-known/security.txt")).toBe("well-known");
+  });
+
+  // EXACT match, never a prefix: an unknown future file under /.well-known/mcp/
+  // must land in "well-known" until someone classifies it deliberately.
+  it("does not prefix-match its way into claiming unknown files", () => {
+    expect(classifySurface("/.well-known/mcp/something-else.json")).toBe("well-known");
+    expect(classifySurface("/.well-known/api-catalog-v2")).toBe("well-known");
+    expect(classifySurface("/.well-known/ai-catalog.json.bak")).toBe("well-known");
+  });
+});
+
 describe("classifySurface — fixed enum of surface classes", () => {
   it("classifies the machine surfaces", () => {
     expect(classifySurface("/robots.txt")).toBe("robots");
@@ -52,6 +79,10 @@ describe("classifySurface — fixed enum of surface classes", () => {
     expect(classifySurface("/llms-full.txt")).toBe("llms");
     expect(classifySurface("/.well-known/agents.json")).toBe("agents-manifest");
     expect(classifySurface("/.well-known/gpc.json")).toBe("well-known");
+    // v1.17.0: the standard agent-discovery documents are their OWN class.
+    expect(classifySurface("/.well-known/mcp/server-card.json")).toBe("agent-discovery");
+    expect(classifySurface("/.well-known/api-catalog")).toBe("agent-discovery");
+    expect(classifySurface("/.well-known/ai-catalog.json")).toBe("agent-discovery");
     expect(classifySurface("/feed/")).toBe("feed");
     expect(classifySurface("/feed/json/")).toBe("feed");
     expect(classifySurface("/wp-json/wp/v2/posts")).toBe("wp-json");
