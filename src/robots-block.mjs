@@ -21,7 +21,7 @@ export const NAMED_CRAWLERS = [
 
 const CRAWLER_BLOCKS = NAMED_CRAWLERS.map((name) => `User-agent: ${name}\nDisallow: /`).join("\n\n");
 
-export const OWNED_ROBOTS_HEADER = `# As a condition of accessing this website, you agree to abide by the following
+const ROBOTS_PREAMBLE = `# As a condition of accessing this website, you agree to abide by the following
 # content signals:
 
 # (a)  If a Content-Signal = yes, you may collect content for the corresponding
@@ -64,15 +64,28 @@ export const OWNED_ROBOTS_HEADER = `# As a condition of accessing this website, 
 # at ${TDM_POLICY_URL}
 # ---------------------------------------------------------------------------
 
-# BEGIN Signal & Noise rights signals
+# BEGIN Signal & Noise rights signals`;
 
-User-agent: *
+// Kept separate from the preamble so origin-contributed bare rules can be
+// spliced INTO this group rather than stranded below the block — see
+// splitOriginTail for why that placement is the whole ballgame.
+const WILDCARD_GROUP = `User-agent: *
 Content-Signal: ${CONTENT_SIGNAL}
-Allow: /
+Allow: /`;
 
-${CRAWLER_BLOCKS}
+const BLOCK_FOOTER = "# END Signal & Noise rights signals";
 
-# END Signal & Noise rights signals`;
+// A hoisted rule goes AFTER "Allow: /" and still wins: RFC 9309 §2.2.2 picks
+// the most specific match by pattern length, not by order, so "/tools/" beats
+// "/" regardless of which line came first.
+function composeHeader(wildcardRules) {
+  const wildcard = wildcardRules.length
+    ? `${WILDCARD_GROUP}\n${wildcardRules.join("\n")}`
+    : WILDCARD_GROUP;
+  return `${ROBOTS_PREAMBLE}\n\n${wildcard}\n\n${CRAWLER_BLOCKS}\n\n${BLOCK_FOOTER}`;
+}
+
+export const OWNED_ROBOTS_HEADER = composeHeader([]);
 
 // The marker Cloudflare's OWN managed block ends with, live as of
 // 2026-07-23. Defensive only: strips a leftover Cloudflare block out of the
@@ -97,9 +110,46 @@ export function originTail(fetchedText) {
 // only when the composed output carries no Sitemap line from any source.
 export const SITEMAP_URL = "https://juanlentino.com/wp-sitemap.xml";
 
+const RULE_LINE = /^\s*(?:allow|disallow)\s*:/i;
+const USER_AGENT_LINE = /^\s*user-agent\s*:/i;
+
+// v1.15.0: bare origin rules are HOISTED into the User-agent: * group instead
+// of being appended below the block. A rule belongs to the nearest PRECEDING
+// user-agent line, and RFC 9309 §2.2.1 ends a group only at the next
+// user-agent line — blank lines and comments do not close one, so
+// "# END Signal & Noise rights signals" terminates nothing that a parser can
+// see. Appended below the block, the origin's bare "Disallow: /tools/" bound
+// to meta-externalagent (the last group opened, already under a blanket
+// Disallow: /) and never applied to Googlebot at all. Search Console does not
+// flag this: the line parses, so nothing is malformed — it simply governs an
+// agent nobody meant it to govern.
+//
+// Only rules BEFORE the tail's first user-agent line are hoisted. Once the
+// origin opens a group of its own, its rules belong to that group and moving
+// them would change their meaning rather than restore it. Everything that is
+// not a bare rule — comments, Sitemap:, the origin's own groups — stays in the
+// tail untouched, since those are group-independent or already bound.
+export function splitOriginTail(originTailText) {
+  const hoisted = [];
+  const rest = [];
+  let groupOpened = false;
+
+  for (const line of originTailText.split("\n")) {
+    if (USER_AGENT_LINE.test(line)) groupOpened = true;
+    if (!groupOpened && RULE_LINE.test(line)) {
+      hoisted.push(line.trim());
+      continue;
+    }
+    rest.push(line);
+  }
+
+  return { hoisted, rest: rest.join("\n").trim() };
+}
+
 export function fullRobotsTxt(originTailText) {
-  const tail = originTailText ? `\n\n${originTailText}` : "";
-  const composed = `${OWNED_ROBOTS_HEADER}${tail}\n\nLicense: ${LICENSE_URL}\n`;
+  const { hoisted, rest } = splitOriginTail(originTailText || "");
+  const tail = rest ? `\n\n${rest}` : "";
+  const composed = `${composeHeader(hoisted)}${tail}\n\nLicense: ${LICENSE_URL}\n`;
   if (composed.includes("Sitemap:")) return composed;
   return `${composed}Sitemap: ${SITEMAP_URL}\n`;
 }
