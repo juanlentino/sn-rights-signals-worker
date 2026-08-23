@@ -8,6 +8,7 @@ import {
   observeMachineReader,
 } from "../src/machine-readers.mjs";
 import { TAXONOMY_VERSION } from "../src/taxonomy.mjs";
+import { prefersMarkdown } from "../src/accept-markdown.mjs";
 
 describe("classifyMachineReader — fixed enum, raw UA never escapes", () => {
   it("maps AI crawler UAs to their families", () => {
@@ -39,6 +40,50 @@ describe("classifyMachineReader — fixed enum, raw UA never escapes", () => {
     ).toBeNull();
     expect(classifyMachineReader("")).toBeNull();
     expect(classifyMachineReader(null)).toBeNull();
+  });
+});
+
+describe("markdown adoption signal (v1.18.0)", () => {
+  // v1.16.0 opened a markdown door and left it unmeasurable: a markdown request
+  // lands on a content page, classifies as `html`, and Accept is only retained
+  // for rights surfaces. This axis is the answer to "does anyone use it?".
+  function writeFor(accept) {
+    const written = [];
+    const env = { SN_MR: { writeDataPoint: (d) => written.push(d) } };
+    const headers = { "user-agent": "Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)" };
+    if (accept !== null) headers.accept = accept;
+    observeMachineReader(new Request("https://juanlentino.com/notes/x/", { headers }), env, "/notes/x/");
+    return written[0];
+  }
+
+  it("records markdown_requested=1 when the reader asks for markdown", () => {
+    expect(writeFor("text/markdown").blobs[9]).toBe("1");
+  });
+
+  it("records markdown_requested=0 for an ordinary crawler fetch", () => {
+    expect(writeFor("*/*").blobs[9]).toBe("0");
+    expect(writeFor(null).blobs[9]).toBe("0");
+  });
+
+  it("uses the SAME predicate the Worker serves markdown with", () => {
+    // Not a reimplementation: if these two ever diverge, the metric would
+    // report adoption of a door that was not actually opened for that request.
+    expect(writeFor("text/markdown, text/html;q=0.9").blobs[9]).toBe(prefersMarkdown("text/markdown, text/html;q=0.9") ? "1" : "0");
+    expect(writeFor("text/html,application/xhtml+xml,*/*;q=0.8").blobs[9]).toBe("0");
+  });
+
+  it("is ADDITIVE — the first nine blobs keep their meaning and position", () => {
+    const d = writeFor("text/markdown");
+    expect(d.blobs).toHaveLength(10);
+    expect(d.blobs[1]).toBe("html");        // surface unchanged: NOT drained into a new class
+    expect(d.doubles).toEqual([1]);
+    expect(d.indexes).toEqual([d.blobs[0]]); // still exactly one index, still family
+  });
+
+  it("does not move a markdown read out of the html surface", () => {
+    // The whole reason this is a dimension and not a surface class.
+    expect(writeFor("text/markdown").blobs[1]).toBe("html");
+    expect(writeFor("*/*").blobs[1]).toBe("html");
   });
 });
 
@@ -106,7 +151,10 @@ describe("observeMachineReader — aggregate-only AE writes", () => {
     // would silently relabel every column downstream while still "passing" any
     // test that only checked the array length or the set of values.
     expect(writes[0]).toEqual({
-      blobs: ["openai", "llms", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot"],
+      // v1.18.0 appends blob10 (markdown_requested). APPENDED, never inserted:
+      // blob order IS the read query's contract, so a new axis may only ever go
+      // on the end — inserting one would silently relabel every column after it.
+      blobs: ["openai", "llms", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot", "0"],
       doubles: [1],
       indexes: ["openai"],
     });
