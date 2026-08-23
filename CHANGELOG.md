@@ -1,5 +1,71 @@
 # Changelog
 
+## 1.16.0 - 2026-08-22
+
+**Headline:** the site answers `Accept: text/markdown`. Cloudflare's own Markdown for
+Agents needs a Pro zone; this zone is not on one, and the criterion is about what the
+site ANSWERS, not about who converts.
+
+### Added
+
+- **Markdown content negotiation at the edge.** A request that explicitly prefers
+  `text/markdown` now receives the page as markdown; every other request receives exactly
+  the HTML it received before. Measured on a real Note: **138,512 bytes of HTML in,
+  6,622 bytes of markdown out — 95.2% smaller**, with headings, links, emphasis and
+  frontmatter intact.
+- **`src/accept-markdown.mjs`** — the negotiation predicate, deliberately matching
+  Cloudflare's four documented rows (`text/markdown` → markdown, `text/markdown,
+  text/html;q=0.9` → markdown, `text/*` → markdown, `*/*` → HTML). Matching their
+  semantics is the point: agents written against Cloudflare's implementation work here
+  unchanged, and if this zone ever moves to a plan that includes it, these three modules
+  delete cleanly and behaviour does not change.
+- **`src/html-to-markdown.mjs`** — an HTMLRewriter state machine. No dependency: every JS
+  html→markdown library assumes a DOM, and shipping a DOM shim into the Worker on the
+  site's wildcard route to serve a minority representation is a bad trade against ~200
+  lines.
+- **`src/markdown-negotiation.mjs`** — response construction and `Vary: Accept`.
+
+### Why the safety argument is the whole design
+
+Every human visit to this site flows through this Worker's wildcard route, so a
+negotiation predicate that is loose by one case turns the site into a text dump for real
+readers. `prefersMarkdown()` fails toward HTML in every ambiguous case, and the suite
+pins a **verbatim Chrome Accept header** as the case that must never convert. That
+assertion was mutation-tested: loosening the predicate turns it, and the end-to-end
+"serves untouched HTML to a real browser" test, red.
+
+`Vary: Accept` rides **both** representations. Putting it on only the markdown response is
+the bug, not half the fix — a downstream cache holding the HTML without it would replay
+that HTML to an agent, and a cached markdown body to a browser. Cloudflare's own edge
+cache is not the exposure: it stores this Worker's origin subrequest, which is always the
+HTML, and conversion happens after that lookup.
+
+### Notes
+
+- The reservation rides the markdown representation too (`TDM-Reservation`,
+  `Content-Signal`, `rel="license"`), per v1.5.0's rule that content taken in ANY
+  representation is content taken.
+- Non-200 responses are never converted: a Cloudflare 1xxx interstitial rendered as
+  markdown is a confident-looking document about nothing.
+- A conversion failure logs and falls back to HTML rather than 500-ing the page.
+  Observability is on, so a converter that starts failing is visible rather than quietly
+  serving HTML.
+- **Fidelity is a deliberate floor.** Tables, footnotes and definition lists come through
+  as their text. The consumer is an LLM reading prose, and a wrong table is worse than a
+  flat one.
+- **URL scheme allowlist on links and images.** The first version checked
+  `startsWith("javascript:")`; CodeQL flagged it (`js/incomplete-url-scheme-check`, high)
+  for missing `data:` and `vbscript:`, and it was right. The fix is not two more strings:
+  a denylist must enumerate every dangerous scheme forever, an allowlist only the few
+  that are useful (`http:`, `https:`, `mailto:`, and scheme-less relative URLs). This
+  matters even though the output is markdown — `[click](data:text/html;base64,...)` is a
+  live link in whatever renders it. Converting a document does not sanitize it.
+- Three defects were found only by converting **real** pages, after twelve synthetic
+  fixtures were green: HTMLRewriter does not entity-decode text or attributes
+  (`isn&#039;t` reached the markdown); a bare `title` selector also matched an inline
+  `<svg><title>` and concatenated both into the frontmatter; and skip links leaked in as
+  content. All three are now pinned.
+
 ## 1.15.0 - 2026-08-22
 
 **Headline:** `Disallow: /tools/` governs `*` again, instead of a bot that was already shut out.
