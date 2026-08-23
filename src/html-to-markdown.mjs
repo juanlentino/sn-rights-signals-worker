@@ -30,6 +30,31 @@ const SKIP =
 
 const HEADING = /^h([1-6])$/;
 
+// URL scheme ALLOWLIST, not a denylist.
+//
+// The first version of this checked `href.startsWith("javascript:")` and CodeQL
+// flagged it (js/incomplete-url-scheme-check, high) for missing `data:` and
+// `vbscript:`. It was right, and the fix is not "add two more strings": a
+// denylist has to enumerate every dangerous scheme forever, while an allowlist
+// only has to enumerate the few that are useful.
+//
+// This matters even though the output is markdown rather than HTML.
+// `[click](data:text/html;base64,...)` is a live link in whatever eventually
+// renders the markdown — converting a document does not sanitize it, it just
+// moves the payload into a format someone else will render.
+const SAFE_SCHEME = /^(?:https?:|mailto:)/i;
+const HAS_SCHEME = /^[a-z][a-z0-9+.\-]*:/i;
+
+export function safeUrl(raw) {
+  const url = (raw || "").trim();
+  if (!url) return "";
+  // In-page anchors carry no meaning once the page is a standalone document.
+  if (url.startsWith("#")) return "";
+  // No scheme => relative (or protocol-relative) => resolves against this site.
+  if (!HAS_SCHEME.test(url)) return url;
+  return SAFE_SCHEME.test(url) ? url : "";
+}
+
 // HTMLRewriter does NOT entity-decode text chunks or attribute values, and a
 // markdown document is not an HTML document: `isn&#039;t` is correct in HTML
 // source and simply wrong in markdown, where nothing will ever decode it. Found
@@ -206,15 +231,18 @@ export function markdownRewriter(md) {
     .on("em, i", openClose(md, "_"))
     .on("a", {
       element(el) {
-        const href = decodeEntities(el.getAttribute("href") || "");
-        if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+        const href = safeUrl(decodeEntities(el.getAttribute("href") || ""));
+        if (!href) return;
         md.push("[");
         el.onEndTag(() => md.push(`](${href})`));
       },
     })
     .on("img", {
       element(el) {
-        const src = decodeEntities(el.getAttribute("src") || "");
+        // Same allowlist for images. It also drops `data:` image URIs, which are
+        // legitimate HTML but would inline a base64 blob into a document whose
+        // whole purpose is to cost an agent fewer tokens than the HTML did.
+        const src = safeUrl(decodeEntities(el.getAttribute("src") || ""));
         if (!src) return;
         md.push(`![${decodeEntities(el.getAttribute("alt") || "")}](${src})`);
       },

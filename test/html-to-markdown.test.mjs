@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeEntities, htmlToMarkdown } from "../src/html-to-markdown.mjs";
+import { decodeEntities, htmlToMarkdown, safeUrl } from "../src/html-to-markdown.mjs";
 
 // Drives the REAL HTMLRewriter in the real workerd runtime (vitest.config.mjs
 // runs the Workers pool), never a DOM stub — the converter's whole behaviour
@@ -117,6 +117,36 @@ describe("htmlToMarkdown", () => {
     expect(decodeEntities("&notarealentity; &#99999999999; plain")).toBe("&notarealentity; &#99999999999; plain");
     expect(decodeEntities("&#x2197;")).toBe("↗");
     expect(decodeEntities("no ampersands here")).toBe("no ampersands here");
+  });
+
+  // CodeQL js/incomplete-url-scheme-check (high) caught the original
+  // `startsWith("javascript:")` denylist. These pin the allowlist that replaced it.
+  describe("URL scheme allowlist", () => {
+    it.each(["javascript:alert(1)", "data:text/html;base64,PHNjcmlwdD4=", "vbscript:msgbox", "JaVaScRiPt:alert(1)", "file:///etc/passwd"])(
+      "drops the dangerous scheme %s",
+      (u) => expect(safeUrl(u)).toBe(""),
+    );
+
+    it.each(["https://x.test/a", "http://x.test/a", "mailto:a@b.test", "/relative/path", "../up", "//protocol-relative.test/x"])(
+      "keeps the safe URL %s",
+      (u) => expect(safeUrl(u)).toBe(u),
+    );
+
+    it("drops in-page anchors, which mean nothing in a standalone document", () => {
+      expect(safeUrl("#section")).toBe("");
+    });
+
+    it("strips a dangerous link end to end, keeping its text", async () => {
+      const out = await md('<body><p>see <a href="javascript:alert(1)">this</a> and <a href="/ok">that</a></p></body>');
+      expect(out).not.toContain("javascript:");
+      expect(out).toContain("this");
+      expect(out).toContain("[that](/ok)");
+    });
+
+    it("drops a data: image rather than inlining a base64 blob", async () => {
+      const out = await md('<body><img src="data:image/png;base64,iVBORw0KGgo=" alt="x"></body>');
+      expect(out).not.toContain("base64");
+    });
   });
 
   it("never emits three consecutive newlines", async () => {

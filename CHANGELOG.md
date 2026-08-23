@@ -53,6 +53,13 @@ HTML, and conversion happens after that lookup.
 - **Fidelity is a deliberate floor.** Tables, footnotes and definition lists come through
   as their text. The consumer is an LLM reading prose, and a wrong table is worse than a
   flat one.
+- **URL scheme allowlist on links and images.** The first version checked
+  `startsWith("javascript:")`; CodeQL flagged it (`js/incomplete-url-scheme-check`, high)
+  for missing `data:` and `vbscript:`, and it was right. The fix is not two more strings:
+  a denylist must enumerate every dangerous scheme forever, an allowlist only the few
+  that are useful (`http:`, `https:`, `mailto:`, and scheme-less relative URLs). This
+  matters even though the output is markdown — `[click](data:text/html;base64,...)` is a
+  live link in whatever renders it. Converting a document does not sanitize it.
 - Three defects were found only by converting **real** pages, after twelve synthetic
   fixtures were green: HTMLRewriter does not entity-decode text or attributes
   (`isn&#039;t` reached the markdown); a bare `title` selector also matched an inline
