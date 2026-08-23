@@ -100,6 +100,29 @@ export function classifySurface(pathname) {
   if (p === "/.well-known/tdmrep.json" || p === "/license.xml" || p === "/tdm-policy" || p === "/tdm-policy/") return "rights";
   if (p === "/llms.txt" || p === "/llms-full.txt") return "llms";
   if (p === "/.well-known/agents.json") return "agents-manifest";
+  // v1.17.0: the STANDARD-named agent discovery documents get their own class.
+  //
+  // Not cosmetic. Until now these fell into the generic "well-known" bucket —
+  // which sits INSIDE snt_mr_rights_surfaces() in the plugin, the set whose
+  // reads are published as "a machine read the terms". An agent fetching the
+  // MCP server card was therefore being counted as a machine reading our TDM
+  // policy. It never was: a server card is discovery, not terms.
+  //
+  // Splitting them out does two things at once — it stops that over-count, and
+  // it makes "did any agent actually USE the doors we opened?" a question the
+  // sensor can answer at all. In one shared bucket with security.txt and
+  // gpc.json it could not.
+  //
+  // Keep this list EXACT (no prefix match on /.well-known/mcp/): a new
+  // well-known file should land in "well-known" until someone decides which
+  // class it belongs to, not silently inherit this one.
+  if (
+    p === "/.well-known/mcp/server-card.json" ||
+    p === "/.well-known/api-catalog" ||
+    p === "/.well-known/ai-catalog.json"
+  ) {
+    return "agent-discovery";
+  }
   if (p.startsWith("/.well-known/")) return "well-known";
   if (p === "/feed" || p === "/feed/" || p.startsWith("/feed/") || p.endsWith("/feed/")) return "feed";
   if (p === "/wp-json" || p.startsWith("/wp-json/")) return "wp-json";
