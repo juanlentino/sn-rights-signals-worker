@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.15.0 - 2026-08-22
+
+**Headline:** `Disallow: /tools/` governs `*` again, instead of a bot that was already shut out.
+
+### Fixed
+
+- **Bare origin rules are hoisted into the `User-agent: *` group** rather than appended
+  below the rights-signals block. A rule belongs to the nearest **preceding** `user-agent`
+  line, and RFC 9309 §2.2.1 ends a group only at the next `user-agent` line — a blank line,
+  a comment, and the `# END Signal & Noise rights signals` marker all close nothing that a
+  parser can see. So the origin's bare `Disallow: /tools/`, appended after the block, bound
+  itself to `meta-externalagent` — the last group opened, and one already under a blanket
+  `Disallow: /`. `/tools/` was therefore never disallowed for Googlebot.
+- Only rules **before** the tail's first `user-agent` line are hoisted; once the origin opens
+  a group of its own, its rules stay in it. Comments, `Sitemap:`, and the origin's own groups
+  are left in the tail untouched.
+
+### Notes
+
+- **Search Console could not have caught this.** It flagged the two deliberately non-standard
+  lines it does not implement (`Content-Signal`, line 47, and `License:`, line 81 — both
+  ignored per RFC 9309 §2.2.4, both harmless) and said nothing about the one rule that parses
+  perfectly and governs the wrong agent. Well-formed and wrong is invisible to a linter.
+- **The tests could not have caught it either, as written.** They asserted the composed string
+  and `toContain("Disallow: /tools/")` — presence, never binding. The line was always there.
+  `groupFor()` in `test/robots-block.test.mjs` now resolves a rule to its owning group the way
+  the RFC does, and is checked against the pre-fix layout to confirm it fails on it.
+- This was never a regression the Worker introduced: before composition the origin's rule
+  preceded every group, which RFC 9309 discards outright. It went from ignored to misbound —
+  both equally not what it looked like.
+
 ## 1.14.1 - 2026-08-22
 
 **Headline:** the machine-readers bearer gate compares in constant time, like its siblings.

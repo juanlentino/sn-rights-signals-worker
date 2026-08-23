@@ -15,10 +15,45 @@ describe("originTail", () => {
   });
 });
 
+// Resolves which group a rule actually lands in, the way RFC 9309 §2.2.1
+// does: a rule belongs to the nearest PRECEDING user-agent line, and only a
+// user-agent line closes a group — not a blank line, not a comment, not an
+// "# END ..." marker. A toContain() assertion cannot see any of this, which
+// is exactly how the misbinding survived: the line was always present, it
+// just governed meta-externalagent instead of *.
+function groupFor(robotsTxt, rule) {
+  let agent = null;
+  for (const line of robotsTxt.split("\n")) {
+    const ua = line.match(/^\s*user-agent\s*:\s*(.+)$/i);
+    if (ua) agent = ua[1].trim();
+    else if (line.trim().toLowerCase() === rule.toLowerCase()) return agent;
+  }
+  return null;
+}
+
 describe("fullRobotsTxt", () => {
-  it("is exactly the owned header + tail + License: + Sitemap: lines when there is a tail (v1.6.1 contract)", () => {
+  // v1.15.0: the bare rule is spliced into the wildcard group, so it is no
+  // longer a separate tail below the block. Derived from OWNED_ROBOTS_HEADER
+  // rather than retyped so the two can never drift apart.
+  it("is exactly the owned header with the hoisted rule + License: + Sitemap: lines (v1.15.0 contract)", () => {
     const out = fullRobotsTxt("Disallow: /tools/");
-    expect(out).toBe(`${OWNED_ROBOTS_HEADER}\n\nDisallow: /tools/\n\nLicense: https://juanlentino.com/license.xml\nSitemap: https://juanlentino.com/wp-sitemap.xml\n`);
+    const withTools = OWNED_ROBOTS_HEADER.replace("Allow: /\n", "Allow: /\nDisallow: /tools/\n");
+    expect(out).toBe(`${withTools}\n\nLicense: https://juanlentino.com/license.xml\nSitemap: https://juanlentino.com/wp-sitemap.xml\n`);
+  });
+
+  it("binds a bare origin rule to User-agent: *, not to the last crawler block", () => {
+    expect(groupFor(fullRobotsTxt("Disallow: /tools/"), "Disallow: /tools/")).toBe("*");
+  });
+
+  it("leaves a rule that already belongs to an origin group where the origin put it", () => {
+    const out = fullRobotsTxt("User-agent: Foo\nDisallow: /bar");
+    expect(groupFor(out, "Disallow: /bar")).toBe("Foo");
+  });
+
+  it("keeps group-independent origin records in the tail rather than hoisting them", () => {
+    const out = fullRobotsTxt("# origin note\nDisallow: /tools/");
+    expect(out).toContain("# origin note");
+    expect(groupFor(out, "Disallow: /tools/")).toBe("*");
   });
 
   it("omits the blank tail gap when there is no origin tail (v1.6.1 contract)", () => {
