@@ -33,3 +33,30 @@ export const SIG_UNKNOWN_KEY = "unknown-key";
 export function hasWebBotAuthHeaders(request) {
   return !!(request.headers.get("signature-input") && request.headers.get("signature"));
 }
+
+/**
+ * The Signature-Agent header is a structured STRING — double-quoted — not a
+ * dictionary. Cloudflare's own troubleshooting list names the unquoted form as
+ * the most common integration error, so an unquoted value is treated as ABSENT
+ * rather than repaired: guessing what a malformed header meant is how a sensor
+ * starts reporting things that were never sent.
+ */
+export function signatureAgentOrigin(request) {
+  const raw = request.headers.get("signature-agent");
+  if (!raw) return null;
+  const m = /^"([^"]+)"$/.exec(raw.trim());
+  if (!m) return null;
+  try {
+    const url = new URL(m[1]);
+    return url.protocol === "https:" ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The keyid is the JWK thumbprint of the signing key, not a free-form name. */
+export function keyIdFromSignatureInput(header) {
+  if (typeof header !== "string") return null;
+  const m = /;keyid="([^"]+)"/.exec(header);
+  return m ? m[1] : null;
+}

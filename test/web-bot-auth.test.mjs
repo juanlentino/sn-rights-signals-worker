@@ -19,3 +19,35 @@ describe("hasWebBotAuthHeaders", () => {
     ).toBe(true);
   });
 });
+
+import { keyIdFromSignatureInput, signatureAgentOrigin } from "../src/web-bot-auth.mjs";
+
+describe("signatureAgentOrigin", () => {
+  it("reads a structured string in double quotes", () => {
+    expect(signatureAgentOrigin(req({ "signature-agent": '"https://signature-agent.test"' })))
+      .toBe("https://signature-agent.test");
+  });
+
+  it("rejects an unquoted value (a dictionary, not a structured string)", () => {
+    expect(signatureAgentOrigin(req({ "signature-agent": "https://signature-agent.test" }))).toBe(null);
+  });
+
+  it("rejects a non-https scheme", () => {
+    expect(signatureAgentOrigin(req({ "signature-agent": '"http://insecure.test"' }))).toBe(null);
+  });
+
+  it("is null when the header is absent", () => {
+    expect(signatureAgentOrigin(req({}))).toBe(null);
+  });
+});
+
+describe("keyIdFromSignatureInput", () => {
+  it("extracts the thumbprint keyid", () => {
+    const h = 'sig2=("@authority" "signature-agent");created=1735689600;keyid="poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U";alg="ed25519";expires=1735693200;tag="web-bot-auth"';
+    expect(keyIdFromSignatureInput(h)).toBe("poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U");
+  });
+
+  it("is null when no keyid parameter is present", () => {
+    expect(keyIdFromSignatureInput('sig2=("@authority");alg="ed25519"')).toBe(null);
+  });
+});
