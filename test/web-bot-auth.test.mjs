@@ -89,3 +89,62 @@ describe("fetchDirectoryKeys", () => {
     await expect(fetchDirectoryKeys("https://agent-huge.test")).resolves.toEqual([]);
   });
 });
+
+import { signWithFixture } from "./helpers/sign-fixture.mjs";
+import {
+  resolveSignatureState,
+  SIG_INVALID,
+  SIG_UNKNOWN_KEY,
+  SIG_UNSIGNED,
+  SIG_VALID,
+} from "../src/web-bot-auth.mjs";
+
+describe("resolveSignatureState", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it("is unsigned, and performs NO fetch, when the headers are absent", async () => {
+    const spy = vi.spyOn(globalThis, "fetch");
+    expect(await resolveSignatureState(req({ "user-agent": "GPTBot" }))).toBe(SIG_UNSIGNED);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("is valid for a correctly signed request whose key is published", async () => {
+    const { request, directory } = await signWithFixture("https://juanlentino.com/n/1", "https://agent-valid.test");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(directory)));
+    expect(await resolveSignatureState(request)).toBe(SIG_VALID);
+  });
+
+  it("is invalid when the signature bytes are tampered with", async () => {
+    const { request, directory } = await signWithFixture("https://juanlentino.com/n/2", "https://agent-tampered.test");
+    const tampered = new Request("https://juanlentino.com/n/2", {
+      headers: {
+        "signature-agent": '"https://agent-tampered.test"',
+        "signature-input": request.headers.get("signature-input"),
+        signature: "sig1=:GhijKLmnOPqrSTuvWXyz0123456789abcdefGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789AB==:",
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(directory)));
+    expect(await resolveSignatureState(tampered)).toBe(SIG_INVALID);
+  });
+
+  it("is unknown-key when the directory publishes keys but not THIS one", async () => {
+    const { request } = await signWithFixture("https://juanlentino.com/n/3", "https://agent-nokey.test");
+    // A DIFFERENT signer's directory: well-formed, reachable, and simply does
+    // not vouch for the key that signed this request.
+    const other = await signWithFixture("https://juanlentino.com/n/3b", "https://agent-other.test");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(other.directory)));
+    expect(await resolveSignatureState(request)).toBe(SIG_UNKNOWN_KEY);
+  });
+
+  it("degrades to unsigned when the directory is empty — indistinguishable from a failed fetch", async () => {
+    const { request } = await signWithFixture("https://juanlentino.com/n/3c", "https://agent-empty.test");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ keys: [] })));
+    expect(await resolveSignatureState(request)).toBe(SIG_UNSIGNED);
+  });
+
+  it("degrades to unsigned when the directory is unreachable", async () => {
+    const { request } = await signWithFixture("https://juanlentino.com/n/4", "https://agent-down.test");
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network"));
+    expect(await resolveSignatureState(request)).toBe(SIG_UNSIGNED);
+  });
+});

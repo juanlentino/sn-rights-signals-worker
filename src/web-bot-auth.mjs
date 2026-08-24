@@ -17,6 +17,10 @@
  * @since 1.19.0
  */
 
+import { verify } from "web-bot-auth";
+import { helpers, verifierFromJWK } from "web-bot-auth/crypto";
+import { jwkThumbprint } from "jsonwebkey-thumbprint";
+
 export const SIG_UNSIGNED = "unsigned";
 export const SIG_VALID = "valid";
 export const SIG_INVALID = "invalid";
@@ -142,4 +146,57 @@ function emptyDirectory(ttl) {
   return new Response(JSON.stringify({ keys: [] }), {
     headers: { "content-type": "application/json", "cache-control": `public, max-age=${ttl}` },
   });
+}
+
+/**
+ * Four states, never two.
+ *
+ * Collapsing these to signed/unsigned would erase the two populations that
+ * would matter first if this ever became a gate: an agent signing incorrectly,
+ * and an agent signing with a key nobody vouches for.
+ *
+ * An EMPTY or unreachable directory reads as `unsigned`, not `unknown-key` —
+ * "the agent published nothing" and "we could not reach what it published" are
+ * the same evidence, and neither says anything about the key itself.
+ * `unknown-key` is reserved for a directory that answered, published keys, and
+ * did not include this one.
+ *
+ * Anything unexpected resolves to SIG_UNSIGNED. This function has no failure
+ * mode that reaches the caller.
+ */
+export async function resolveSignatureState(request) {
+  try {
+    if (!hasWebBotAuthHeaders(request)) return SIG_UNSIGNED;
+
+    const origin = signatureAgentOrigin(request);
+    const keyId = keyIdFromSignatureInput(request.headers.get("signature-input"));
+    if (!origin || !keyId) return SIG_UNSIGNED;
+
+    const keys = await fetchDirectoryKeys(origin);
+    if (keys.length === 0) return SIG_UNSIGNED;
+
+    let match = null;
+    for (const jwk of keys) {
+      if (jwk?.kty !== "OKP" || jwk?.crv !== "Ed25519" || typeof jwk?.x !== "string") continue;
+      const tp = await jwkThumbprint(
+        { kty: jwk.kty, crv: jwk.crv, x: jwk.x },
+        helpers.WEBCRYPTO_SHA256,
+        helpers.BASE64URL_DECODE
+      );
+      if (tp === keyId) { match = jwk; break; }
+    }
+    if (!match) return SIG_UNKNOWN_KEY;
+
+    try {
+      await verify(request, await verifierFromJWK({ ...match, kid: keyId }));
+      return SIG_VALID;
+    } catch {
+      // verify() throws on a bad signature, an expired `expires`, or a
+      // component mismatch. All three are the same finding: it signed, and the
+      // signature does not hold.
+      return SIG_INVALID;
+    }
+  } catch {
+    return SIG_UNSIGNED;
+  }
 }
