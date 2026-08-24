@@ -139,3 +139,47 @@ describe("scheduled: crawler-list-sync", () => {
     expect(body.last_check).toMatchObject({ ok: true, drift: false });
   });
 });
+
+describe("signature observation never blocks the response (v1.19.0)", () => {
+  const aeEnv = () => ({ SN_MR: { writeDataPoint() {} }, SN_MR_RIGHTS: { writeDataPoint() {} } });
+
+  it("observes synchronously and schedules nothing for an unsigned request", async () => {
+    stubOrigin("<html><body>hi</body></html>", { "content-type": "text/html" });
+    const waitUntil = vi.fn();
+    await worker.fetch(
+      new Request("https://juanlentino.com/notes/x", { headers: { "user-agent": "GPTBot/1.0" } }),
+      aeEnv(),
+      { waitUntil }
+    );
+    expect(waitUntil).not.toHaveBeenCalled();
+  });
+
+  it("defers the whole observation into waitUntil for a signed request", async () => {
+    stubOrigin("<html><body>hi</body></html>", { "content-type": "text/html" });
+    const waitUntil = vi.fn();
+    await worker.fetch(
+      new Request("https://juanlentino.com/notes/x", {
+        headers: {
+          "user-agent": "GPTBot/1.0",
+          signature: "sig1=:AAAA:",
+          "signature-input": 'sig1=("@authority");keyid="k";tag="web-bot-auth"',
+        },
+      }),
+      aeEnv(),
+      { waitUntil }
+    );
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+  });
+
+  it("still observes when no ctx is supplied, as older call sites do", async () => {
+    stubOrigin("<html><body>hi</body></html>", { "content-type": "text/html" });
+    const written = [];
+    const env = { SN_MR: { writeDataPoint: (d) => written.push(d) }, SN_MR_RIGHTS: { writeDataPoint() {} } };
+    await worker.fetch(
+      new Request("https://juanlentino.com/notes/x", { headers: { "user-agent": "GPTBot/1.0" } }),
+      env,
+      {}
+    );
+    expect(written).toHaveLength(1);
+  });
+});

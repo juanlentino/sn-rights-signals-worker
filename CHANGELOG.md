@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.19.0 - 2026-08-23
+
+**Headline:** the site can now tell a signed agent from one that merely says so.
+
+### Added
+
+- **`signed_agent` — an eleventh blob on the aggregate dataset.** Web Bot Auth
+  verification (RFC 9421 HTTP Message Signatures, carried in `Signature`,
+  `Signature-Input` and `Signature-Agent`), recorded as one of four states:
+  `unsigned`, `valid`, `invalid`, `unknown-key`.
+
+  Until now, every rights signal this worker ships has been a declaration
+  addressed to an agent whose identity was a string it typed itself. Nothing on
+  this site could distinguish an agent that *is* ChatGPT from one that says so
+  in a user-agent header. This is the first measurement that can.
+
+### Why four states and not a boolean
+
+`invalid` and `unknown-key` are the two populations that would matter first if
+this ever became a gate — an agent signing incorrectly, and an agent signing
+with a key no directory vouches for. A boolean erases both. An EMPTY or
+unreachable directory reads as `unsigned`, not `unknown-key`: "published
+nothing" and "we could not reach it" are the same evidence, and neither says
+anything about the key.
+
+### Why this changes no response
+
+Verification is a SENSOR. Every failure path in `src/web-bot-auth.mjs` resolves
+to `unsigned`, and nothing in it can alter a status, header or body. Signed
+requests defer their whole observation into `waitUntil`, so no reader waits on a
+key-directory fetch to get their bytes. An unsigned request — which is nearly
+all of them — costs two header reads and performs no fetch at all; a test
+asserts that by failing if `fetch` is called.
+
+### Why the packages
+
+`web-bot-auth` and `jsonwebkey-thumbprint` are this worker's first runtime
+dependencies. Both are Cloudflare-authored, and both are confined to
+`src/web-bot-auth.mjs`. Signature-base construction IS the security property
+here, and Cloudflare writes both the IETF draft and the implementation;
+hand-rolling it to preserve a zero-dependency count would have been vanity.
+
+Cloudflare exposes the same verdict as `cf.bot_management.signed_agent`, which
+requires Enterprise with Bot Management. This zone does not have it — the same
+reason markdown negotiation lives in this worker rather than in a plan tier.
+
+### Notes
+
+- Blob order **is** the read query's contract, so the new axis is APPENDED,
+  never inserted. Old rows carry `""` and read as not-measured, which is a
+  different fact from `unsigned`, itself a measurement.
+- **Cross-repo:** the plugin's read query gains the column separately. An older
+  plugin against this worker drops it and degrades the readout, never errors.
+
 ## 1.18.0 - 2026-08-23
 
 **Headline:** the markdown door gets a number. v1.16.0 opened it and left it
