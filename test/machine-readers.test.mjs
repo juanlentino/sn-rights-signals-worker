@@ -323,3 +323,38 @@ describe("blob11 — signature state", () => {
     expect(written[0].blobs[10]).toBe("unsigned");
   });
 });
+
+import { buildQuery } from "../src/machine-readers.mjs";
+
+describe("read query exposes what the write path records (v1.20.0)", () => {
+  const aggregate = () => buildQuery("aggregate", 30);
+
+  it("selects blob11 as signed_agent", () => {
+    expect(aggregate()).toContain("blob11 AS signed_agent");
+  });
+
+  it("groups by it, or the column collapses across signature states", () => {
+    // Without this the aggregate sums valid and unsigned into one row and the
+    // whole point of the dimension is lost.
+    expect(aggregate()).toMatch(/GROUP BY[^F]*signed_agent/);
+  });
+
+  it("is ADDITIVE — every column v1.18.0 exposed is still exposed", () => {
+    const q = aggregate();
+    for (const col of [
+      "blob1 AS family", "blob2 AS surface", "blob3 AS vendor", "blob4 AS purpose",
+      "blob5 AS taxonomy_version", "blob6 AS training_corpus_source",
+      "blob7 AS first_party", "blob9 AS agent", "blob10 AS markdown_requested",
+    ]) {
+      expect(q).toContain(col);
+    }
+  });
+
+  it("still never selects blob8 — the raw UA sample does not escape the aggregate", () => {
+    expect(aggregate()).not.toContain("blob8");
+  });
+
+  it("leaves the rights view alone — a different dataset with its own blob order", () => {
+    expect(buildQuery("rights", 30)).not.toContain("signed_agent");
+  });
+});
