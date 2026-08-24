@@ -72,9 +72,9 @@ describe("markdown adoption signal (v1.18.0)", () => {
     expect(writeFor("text/html,application/xhtml+xml,*/*;q=0.8").blobs[9]).toBe("0");
   });
 
-  it("is ADDITIVE — the first nine blobs keep their meaning and position", () => {
+  it("is ADDITIVE — the first ten blobs keep their meaning and position", () => {
     const d = writeFor("text/markdown");
-    expect(d.blobs).toHaveLength(10);
+    expect(d.blobs).toHaveLength(11);
     expect(d.blobs[1]).toBe("html");        // surface unchanged: NOT drained into a new class
     expect(d.doubles).toEqual([1]);
     expect(d.indexes).toEqual([d.blobs[0]]); // still exactly one index, still family
@@ -154,7 +154,7 @@ describe("observeMachineReader — aggregate-only AE writes", () => {
       // v1.18.0 appends blob10 (markdown_requested). APPENDED, never inserted:
       // blob order IS the read query's contract, so a new axis may only ever go
       // on the end — inserting one would silently relabel every column after it.
-      blobs: ["openai", "llms", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot", "0"],
+      blobs: ["openai", "llms", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot", "0", "unsigned"],
       doubles: [1],
       indexes: ["openai"],
     });
@@ -288,5 +288,38 @@ describe("machineReadersResponse — token-auth read path", () => {
     expect((await machineReadersResponse(mkReq("x"), {})).status).toBe(503);
     const env = { SN_MR_READ_TOKEN: "secret" }; // no account id / SQL token
     expect((await machineReadersResponse(mkReq("secret"), env)).status).toBe(503);
+  });
+});
+
+import { SIG_VALID } from "../src/web-bot-auth.mjs";
+
+describe("blob11 — signature state", () => {
+  const envWith = (sink) => ({
+    SN_MR: { writeDataPoint: (dp) => sink.push(dp) },
+    SN_MR_RIGHTS: { writeDataPoint() {} },
+  });
+
+  it("appends the signature state as blob11 and leaves blobs 1-10 in place", () => {
+    const written = [];
+    const request = new Request("https://juanlentino.com/notes/x", {
+      headers: { "user-agent": "Mozilla/5.0 (compatible; GPTBot/1.0)" },
+    });
+
+    observeMachineReader(request, envWith(written), "/notes/x", SIG_VALID);
+
+    expect(written[0].blobs).toHaveLength(11);
+    expect(written[0].blobs[0]).toBe("openai");
+    expect(written[0].blobs[9]).toBe("0");
+    expect(written[0].blobs[10]).toBe("valid");
+  });
+
+  it("defaults to unsigned when no state is passed, so old call sites keep working", () => {
+    const written = [];
+    observeMachineReader(
+      new Request("https://juanlentino.com/notes/x", { headers: { "user-agent": "GPTBot/1.0" } }),
+      envWith(written),
+      "/notes/x"
+    );
+    expect(written[0].blobs[10]).toBe("unsigned");
   });
 });

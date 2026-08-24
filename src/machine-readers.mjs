@@ -29,6 +29,7 @@ import {
 } from "./taxonomy.mjs";
 import { observeRightsSurfaceDetail } from "./machine-readers-rights-detail.mjs";
 import { prefersMarkdown } from "./accept-markdown.mjs";
+import { SIG_UNSIGNED } from "./web-bot-auth.mjs";
 
 /**
  * The one additive family value (v1.11.0). Carries rows the frozen classifier
@@ -170,7 +171,7 @@ export function _resetSensorStateForTests() {
  *
  * @returns {{family:string, surface:string}|null} What was recorded, or null.
  */
-export function observeMachineReader(request, env, pathname) {
+export function observeMachineReader(request, env, pathname, signatureState = SIG_UNSIGNED) {
   try {
     const bound = !!(env && env.SN_MR && typeof env.SN_MR.writeDataPoint === "function");
     sensorState.ae_bound = bound;
@@ -246,6 +247,13 @@ export function observeMachineReader(request, env, pathname) {
         // such question is answerable from the dataset itself, for 90.
         vp?.id ?? "",
         markdownRequested,
+        // v1.19.0: blob11, the Web Bot Auth signature state -- one of
+        // unsigned / valid / invalid / unknown-key. APPENDED, never inserted:
+        // blob order is the read query's contract, and inserting would
+        // silently relabel every column after it. Old rows carry "" and read
+        // as NOT MEASURED, which is a different fact from "unsigned", itself a
+        // measurement that the agent did not sign.
+        signatureState,
       ],
       doubles: [1],
       // Still exactly one index: Analytics Engine permits one per data point,
