@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "Dependency-provenance gate \u2014 the REVIEWED set of packages that carry no",
+    "Dependency-provenance gate — the REVIEWED set of packages that carry no",
     "provenance attestation. Enforced by scripts/attestation-gate.mjs.",
     "",
     "Adding a name here is a REVIEWED EVENT, never a way to make CI green.",
@@ -8,7 +8,7 @@
     "allowlist reused as a silent pass-through inverts into the opposite of a gate.",
     "",
     "Pinned BY NAME, not by count (condition from the 2026-08-14 attestation",
-    "audit). Removing a name is safe and encouraged \u2014 the gate reports stale",
+    "audit). Removing a name is safe and encouraged — the gate reports stale",
     "entries as a NOTICE when a package starts attesting.",
     "",
     "PLATFORM-BOUND: optional platform packages differ per OS. This list is",
@@ -39,6 +39,8 @@
     "estree-walker",
     "expect-type",
     "fdir",
+    "http-message-sig",
+    "jsonwebkey-thumbprint",
     "kleur",
     "lightningcss",
     "lightningcss-linux-x64-gnu",
@@ -50,6 +52,7 @@
     "source-map-js",
     "stackback",
     "std-env",
+    "structured-headers",
     "supports-color",
     "tinybench",
     "unenv",
@@ -57,6 +60,9 @@
     "ws"
   ],
   "_reviewed_additions": {
-    "lightningcss-linux-x64-gnu": "2026-08-18, first CI run. The CI runner installs this platform binary; a local `npm install --os=linux --cpu=x64` does not resolve it (libc gnu/musl is not simulated by the os/cpu override). Accepted as never-attests on the same basis as its parent `lightningcss`, already pinned here: a project that does not attest its main package does not attest its platform shims, and the 2026-08-14 audit listed lightningcss and its platform shims in the irreducible set. This is a REVIEWED addition, recorded so it is not mistaken for a green-the-build edit."
+    "lightningcss-linux-x64-gnu": "2026-08-18, first CI run. The CI runner installs this platform binary; a local `npm install --os=linux --cpu=x64` does not resolve it (libc gnu/musl is not simulated by the os/cpu override). Accepted as never-attests on the same basis as its parent `lightningcss`, already pinned here: a project that does not attest its main package does not attest its platform shims, and the 2026-08-14 audit listed lightningcss and its platform shims in the irreducible set. This is a REVIEWED addition, recorded so it is not mistaken for a green-the-build edit.",
+    "http-message-sig": "2026-08-23, adding the Web Bot Auth sensor (v1.19.0). Sibling package in the SAME monorepo (cloudflareresearch/web-bot-auth) as `web-bot-auth`, which DOES attest and is the package we deliberately adopted rather than hand-roll RFC 9421. Trusting the parent while refusing a sibling built and released by the same pipeline would be incoherent, not stricter. Checked 2026-08-23: 0.2.0 is the latest version and no version attests, so this is not fixable by upgrading.",
+    "jsonwebkey-thumbprint": "2026-08-23, adding the Web Bot Auth sensor (v1.19.0). Same monorepo and same basis as `http-message-sig` above. Direct dependency, used only to derive a JWK thumbprint so a Signature-Input `keyid` can be matched against a published key directory. Checked 2026-08-23: 0.1.0 is the latest version and no version attests.",
+    "structured-headers": "2026-08-23, transitive via `http-message-sig`. The reference RFC 8941 structured-headers implementation (evert/structured-header); parsing structured fields is exactly the part of RFC 9421 that must not be hand-rolled. Checked 2026-08-23: installed 2.0.2, latest 2.0.3, neither attests."
   }
 }
