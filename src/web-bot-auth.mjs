@@ -60,3 +60,86 @@ export function keyIdFromSignatureInput(header) {
   const m = /;keyid="([^"]+)"/.exec(header);
   return m ? m[1] : null;
 }
+
+const DIRECTORY_PATH = "/.well-known/http-message-signatures-directory";
+const DIRECTORY_TTL_S = 21600;       // 6 hours, positive
+const DIRECTORY_FAIL_TTL_S = 900;    // 15 minutes, negative
+const MAX_DIRECTORY_BYTES = 64 * 1024;
+const FETCH_TIMEOUT_MS = 2000;
+
+/**
+ * Resolve an agent's published Ed25519 keys.
+ *
+ * Cached in the Cache API keyed by directory URL — a directory IS an HTTP
+ * response, and colo-local caching is sufficient for a key set that rotates on
+ * the order of months. FAILURES ARE CACHED TOO, on a shorter TTL: without that,
+ * one broken or hostile directory means one outbound fetch per request, which
+ * is the cost failure this whole design exists to avoid.
+ *
+ * Every failure returns [] rather than throwing. A caller cannot distinguish
+ * "no keys" from "fetch failed", and must not: both mean the signature cannot
+ * be checked, and both resolve to unsigned.
+ */
+export async function fetchDirectoryKeys(origin) {
+  const url = origin + DIRECTORY_PATH;
+  const cache = caches.default;
+  const cacheKey = new Request(url, { method: "GET" });
+
+  const hit = await cache.match(cacheKey);
+  if (hit) {
+    try {
+      const body = await hit.json();
+      return Array.isArray(body?.keys) ? body.keys : [];
+    } catch {
+      return [];
+    }
+  }
+
+  let res;
+  try {
+    res = await fetch(url, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { accept: "application/http-message-signatures-directory+json, application/json" },
+    });
+  } catch {
+    await cache.put(cacheKey, emptyDirectory(DIRECTORY_FAIL_TTL_S));
+    return [];
+  }
+
+  if (!res.ok) {
+    await cache.put(cacheKey, emptyDirectory(DIRECTORY_FAIL_TTL_S));
+    return [];
+  }
+
+  const text = await res.text();
+  if (text.length > MAX_DIRECTORY_BYTES) {
+    await cache.put(cacheKey, emptyDirectory(DIRECTORY_FAIL_TTL_S));
+    return [];
+  }
+
+  let keys = [];
+  try {
+    const body = JSON.parse(text);
+    keys = Array.isArray(body?.keys) ? body.keys : [];
+  } catch {
+    await cache.put(cacheKey, emptyDirectory(DIRECTORY_FAIL_TTL_S));
+    return [];
+  }
+
+  await cache.put(
+    cacheKey,
+    new Response(JSON.stringify({ keys }), {
+      headers: {
+        "content-type": "application/json",
+        "cache-control": `public, max-age=${DIRECTORY_TTL_S}`,
+      },
+    })
+  );
+  return keys;
+}
+
+function emptyDirectory(ttl) {
+  return new Response(JSON.stringify({ keys: [] }), {
+    headers: { "content-type": "application/json", "cache-control": `public, max-age=${ttl}` },
+  });
+}
