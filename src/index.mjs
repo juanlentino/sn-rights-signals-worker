@@ -12,6 +12,7 @@ import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawl
 import { machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
 import { taxonomyResponse } from "./taxonomy.mjs";
 import { prefersMarkdown } from "./accept-markdown.mjs";
+import { hasWebBotAuthHeaders, resolveSignatureState } from "./web-bot-auth.mjs";
 import { maybeMarkdown, withVaryAccept } from "./markdown-negotiation.mjs";
 
 // Content negotiation for /tdm-policy/, deliberately conservative: HTML is the
@@ -55,7 +56,24 @@ export default {
     // v1.4.0: machine-readership sensor — aggregate-only AE write when the UA
     // classifies into the fixed crawler-family enum; humans and internal /_sn/
     // paths are never recorded, and observation can never affect the response.
-    if (!pathname.startsWith("/_sn/")) observeMachineReader(request, env, pathname);
+    if (!pathname.startsWith("/_sn/")) {
+      // TWO PATHS ON PURPOSE (v1.19.0). An unsigned request observes exactly as
+      // it did before this feature existed: synchronous, no await, nothing
+      // scheduled. A signed one defers the WHOLE observation, because
+      // verification may fetch a key directory and no reader should wait on
+      // our telemetry to get their bytes.
+      if (hasWebBotAuthHeaders(request)) {
+        const observed = resolveSignatureState(request).then((state) =>
+          observeMachineReader(request, env, pathname, state)
+        );
+        // ctx is absent in some call sites and in older tests. Falling back to
+        // a floating promise keeps the observation best-effort rather than
+        // throwing on a shape we do not control.
+        if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(observed);
+      } else {
+        observeMachineReader(request, env, pathname);
+      }
+    }
 
     // Namespaced (not /_sn/version) because sn-analytics already owns that
     // exact path with its own more-specific Cloudflare route — bare
