@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.20.0 - 2026-08-23
+
+**Headline:** v1.19.0 recorded the signature state and then did not let anyone read it.
+
+### Added
+
+- **`signed_agent` on the aggregate read query.** v1.19.0 appended `blob11` to
+  the WRITE path and stopped there. The plugin reads this dataset through THIS
+  worker's `/machine-readers` endpoint, not by querying Analytics Engine
+  directly — so a column the read query does not select is a column that does
+  not exist as far as every consumer is concerned. The sensor was writing into
+  a room with no door.
+
+- **The first tests that pin the read query's shape at all.** blob10's
+  exposure was never covered either, so the same omission could have happened
+  twice. The suite now asserts that every column v1.18.0 exposed is still
+  exposed, that `signed_agent` is both selected AND grouped (without the GROUP
+  BY the aggregate sums valid and unsigned into one row, losing the dimension),
+  and that `blob8` is still never selected — the raw user-agent sample must not
+  escape the aggregate.
+
+### Notes
+
+- `buildQuery` is now exported. It is a pure function of (view, days); exporting
+  it is what makes the contract testable.
+- The RULE 3 rights-detail view is untouched: a different dataset with its own
+  blob order, asserted by test.
+
 ## 1.19.0 - 2026-08-23
 
 **Headline:** the site can now tell a signed agent from one that merely says so.

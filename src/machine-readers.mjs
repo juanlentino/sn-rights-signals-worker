@@ -301,7 +301,7 @@ const RIGHTS_LIMIT = 500;
  * @param {"aggregate"|"unknown"|"rights"} view
  * @param {number} days Already clamped to an integer in [1, 90].
  */
-function buildQuery(view, days) {
+export function buildQuery(view, days) {
   const since = `WHERE timestamp > NOW() - INTERVAL '${days}' DAY `;
 
   // RULE 2: the top unclassified UAs by volume, so other-bot can be reviewed
@@ -334,12 +334,12 @@ function buildQuery(view, days) {
   return (
     "SELECT blob1 AS family, blob2 AS surface, blob3 AS vendor, blob4 AS purpose, " +
     "blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, " +
-    "blob9 AS agent, blob10 AS markdown_requested, " +
+    "blob9 AS agent, blob10 AS markdown_requested, blob11 AS signed_agent, " +
     "toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
     "FROM sn_machine_readers " +
     since +
     "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, " +
-    "first_party, agent, markdown_requested, day ORDER BY day ASC FORMAT JSON"
+    "first_party, agent, markdown_requested, signed_agent, day ORDER BY day ASC FORMAT JSON"
   );
 }
 
