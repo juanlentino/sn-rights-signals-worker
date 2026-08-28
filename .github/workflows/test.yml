@@ -51,6 +51,12 @@ jobs:
       # rather than trusting it, and exits 2 with a clear message if npm is old.
       - name: Dependency-provenance gate
         run: node scripts/attestation-gate.mjs
+      # R6c leg 2: minimum-age cooldown (see sn-remote-mcp-worker v1.1.0 for
+      # the full rationale). No locked version younger than min_age_days;
+      # deliberate young bumps are accepted per version in
+      # .cooldown-accept.json with a reason. Fail-closed on unmeasured ages.
+      - name: Dependency cooldown gate
+        run: node scripts/dependency-cooldown.mjs
       # Includes test/rights-consistency.test.mjs — the STATIC rights check:
       # drives the real Worker over a stubbed origin and asserts all four
       # signal layers agree as composed. Fails the PR on drift.

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.21.0 - 2026-08-28
+
+**Headline:** the R6c minimum-age cooldown lands beside the attestation gate.
+
+### Added
+
+- `scripts/dependency-cooldown.mjs` + `.cooldown-accept.json` (min_age_days: 7), a CI
+  step after the attestation gate. No locked version may be younger than the policy's
+  minimum age; deliberate young bumps are accepted per `name@version` with a reason,
+  never silently; stale accepts are reported for pruning; unmeasured ages fail closed.
+  Full rationale and the negative-control proof (RED at 11d, per-version accept) live
+  in sn-remote-mcp-worker v1.1.0 — the script is byte-identical across all five
+  workers, like the attestation gate before it. Verified live against THIS repo's
+  tree: PASS at 7d.
+
 ## 1.20.0 - 2026-08-23
 
 **Headline:** v1.19.0 recorded the signature state and then did not let anyone read it.
