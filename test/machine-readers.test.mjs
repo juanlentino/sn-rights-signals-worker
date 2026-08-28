@@ -112,6 +112,15 @@ describe("agent-discovery is separate from well-known (v1.17.0)", () => {
     expect(classifySurface("/.well-known/api-catalog-v2")).toBe("well-known");
     expect(classifySurface("/.well-known/ai-catalog.json.bak")).toBe("well-known");
   });
+
+  // Task 4: the served WebMCP bridge script joins this bucket. Without it, a
+  // crawler fetch of /webmcp/bridge.js falls into the "html" catch-all and
+  // pollutes the surface-mix data the v1.5.0 per-response reservation
+  // rationale rests on.
+  it("classifies the served WebMCP bridge script as agent-discovery, not html", () => {
+    expect(classifySurface("/webmcp/bridge.js")).toBe("agent-discovery");
+    expect(classifySurface("/webmcp/bridge.js")).not.toBe("html");
+  });
 });
 
 describe("classifySurface — fixed enum of surface classes", () => {
