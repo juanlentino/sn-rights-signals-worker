@@ -12,52 +12,12 @@
 // adding a function, or a new branch inside one, means driving it from that
 // test or the guard cannot see a dropped reference in it.
 
+// See the SPEC-PIN comment above snWebmcpMain (bottom of this file) for the
+// registration surface this probes and why the precedence order below is
+// unchanged by that pin.
 export function snAgentApi(w) {
   var api = (w && w.navigator && w.navigator.modelContext) || (w && w.agent) || null;
   return api && typeof api.registerTool === "function" ? api : null;
-}
-
-/**
- * SPEC-PIN (2026-08-28). Current tool-registration surface for in-page agents
- * is `navigator.modelContext.registerTool({ name, description, inputSchema,
- * execute })` — a W3C WebMachineLearning Community Group Draft Report
- * (latest publication 2026-04-23; editors Brandon Walderman/Microsoft,
- * Khushal Sagar & Dominic Farolino/Google), shipped in Chrome 146
- * (2026-02) as `navigator.modelContext`. Cloudflare's own Browser Run
- * WebMCP developer preview (developers.cloudflare.com/browser-run/features/
- * webmcp/, blog.cloudflare.com/webmcp) targets this exact same surface —
- * their edge-injected bridge.js calls registerTool() the same way this file
- * does, which is the production precedent this task's design follows.
- * `provideContext()` is a sibling API on the same object for ambient (not
- * tool-call) context; unused here.
- *
- * The existing snAgentApi() probe — navigator.modelContext first, window.agent
- * as a fallback for pre-standardization or non-Chrome implementations, gated
- * on registerTool existing — is UNCHANGED by this pin: it already resolves to
- * the confirmed surface. Only the registration CALL SHAPE below is new.
- */
-export function snWebmcpMain(w) {
-  var win = w || (typeof window !== "undefined" ? window : null);
-  var doc = win && win.document;
-  if (!doc) return;
-  var api = snAgentApi(win);
-  if (!api) return;
-
-  api.registerTool({
-    name: "verify-page",
-    description:
-      "Verify this page's provenance: signature, content hash, live match, and anchor, computed in this browser from the page's own verification manifest. Returns the honest absence on unsigned pages.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    execute: function () { return snVerifyPage(); },
-  });
-
-  api.registerTool({
-    name: "get-rights-terms",
-    description:
-      "The machine-readable rights terms in force for this site: the ODRL policy (W3C TDMRep profile) plus pointers to license.xml, tdmrep.json, and the human-readable policy.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    execute: function () { return snGetRightsTerms(); },
-  });
 }
 
 export function snReadManifest(doc) {
@@ -521,4 +481,53 @@ export async function snVerifyPage(deps) {
       error: "verification failed: " + (e && e.message ? e.message : e),
     };
   }
+}
+
+/**
+ * SPEC-PIN (2026-08-28). Current tool-registration surface for in-page agents
+ * is `navigator.modelContext.registerTool({ name, description, inputSchema,
+ * execute })` — a W3C WebMachineLearning Community Group Draft Report
+ * (latest publication 2026-04-23; editors Brandon Walderman/Microsoft,
+ * Khushal Sagar & Dominic Farolino/Google), shipped in Chrome 146
+ * (2026-02) as `navigator.modelContext`. Cloudflare's own Browser Run
+ * WebMCP developer preview (developers.cloudflare.com/browser-run/features/
+ * webmcp/, blog.cloudflare.com/webmcp) targets this exact same surface —
+ * their edge-injected bridge.js calls registerTool() the same way this file
+ * does, which is the production precedent this task's design follows.
+ * `provideContext()` is a sibling API on the same object for ambient (not
+ * tool-call) context; unused here.
+ *
+ * The existing snAgentApi() probe — navigator.modelContext first, window.agent
+ * as a fallback for pre-standardization or non-Chrome implementations, gated
+ * on registerTool existing — is UNCHANGED by this pin: it already resolves to
+ * the confirmed surface. Only the registration CALL SHAPE below is new.
+ */
+export function snWebmcpMain(w) {
+  var win = w || (typeof window !== "undefined" ? window : null);
+  var doc = win && win.document;
+  if (!doc) return;
+  // Idempotence: a page that loads this tag twice (a duplicate injection, a
+  // second bridge from a different code path) must not double-register —
+  // registerTool has no dedup of its own, so two registrations would leave
+  // an agent choosing between two "verify-page" tools with identical names.
+  if (win.__snWebmcpRegistered) return;
+  var api = snAgentApi(win);
+  if (!api) return;
+  win.__snWebmcpRegistered = true;
+
+  api.registerTool({
+    name: "verify-page",
+    description:
+      "Verify this page's provenance: signature, content hash, live match, and anchor, computed in this browser from the page's own verification manifest. Returns the honest absence on unsigned pages.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    execute: function () { return snVerifyPage(); },
+  });
+
+  api.registerTool({
+    name: "get-rights-terms",
+    description:
+      "The machine-readable rights terms in force for this site: the ODRL policy (W3C TDMRep profile) plus pointers to license.xml, tdmrep.json, and the human-readable policy.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    execute: function () { return snGetRightsTerms(); },
+  });
 }

@@ -3,13 +3,22 @@ import { BRIDGE_SOURCE, BRIDGE_SRI, WEBMCP_SCRIPT_TAG, webmcpBridgeResponse } fr
 
 describe("composed bridge asset", () => {
   it("is a valid standalone script that no-ops headless (the self-containment gate)", () => {
-    // workerd DOES expose `navigator` on globalThis (unlike a browser lacking
-    // WebMCP support entirely), but it carries no `modelContext`, and workerd
-    // has no `document` at all. So the trailing snWebmcpMain() call must hit
-    // its "no usable agent API OR no document" guard and return silently —
-    // neither throwing nor registering anything. That silence, on real
-    // workerd globals, IS the headless no-op this test pins.
-    expect(() => new Function(BRIDGE_SOURCE)()).not.toThrow();
+    // workerd's globalThis carries no `document` at all — the trailing
+    // snWebmcpMain() call hits its FIRST guard (`if (!doc) return;`) and
+    // returns before it ever looks at `navigator`, so what navigator does or
+    // doesn't carry is irrelevant to this particular no-op. (It's exercised
+    // deliberately below instead: the "no usable agent API" branch is driven
+    // with a fake window that has a document but no modelContext/agent.)
+    // This test's job is narrower and blunter than that: prove the composed
+    // bytes evaluate as strict-mode-clean, self-contained JS AT ALL — no
+    // ReferenceError from a dropped module-scope reference (imports/consts)
+    // or from a bundler-injected helper (the __name hazard fixed in
+    // src/webmcp-bridge.mjs and wrangler.jsonc; see
+    // scripts/webmcp-bridge-bundle-gate.mjs for the gate that catches a
+    // regression on the ACTUAL bundled artifact, which this in-process
+    // evaluation cannot see). Evaluated strict (a real ES module always runs
+    // strict; a bare `new Function(src)()` would not).
+    expect(() => new Function('"use strict";' + BRIDGE_SOURCE)()).not.toThrow();
   });
 
   it("carries the registration marker the sweep validator and live check key on", () => {
@@ -40,12 +49,13 @@ describe("composed bridge asset", () => {
     // recording registerTool proves the trailing call in BRIDGE_SOURCE reaches
     // the registration branch (not just the early-return guard exercised by
     // the headless test above), and that both tools land with the described
-    // shape — including that `execute` is a callable function.
+    // shape — including that `execute` is a callable function. Strict mode,
+    // like every other composed-source evaluation in this file.
     const calls = [];
     const fakeApi = { registerTool: (spec) => calls.push(spec) };
     const fakeWindow = { document: {}, navigator: { modelContext: fakeApi } };
 
-    const src = BRIDGE_SOURCE.replace(
+    const src = '"use strict";\n' + BRIDGE_SOURCE.replace(
       /snWebmcpMain\(\);\s*$/,
       "return snWebmcpMain;"
     );
@@ -67,5 +77,23 @@ describe("composed bridge asset", () => {
       type: "object", properties: {}, additionalProperties: false,
     });
     expect(typeof byName["get-rights-terms"].execute).toBe("function");
+  });
+
+  it("does not double-register when the composed main runs twice on the same window", () => {
+    // A duplicate <script> injection (or any other double-invocation path)
+    // must not leave an agent choosing between two identically-named tools.
+    const calls = [];
+    const fakeApi = { registerTool: (spec) => calls.push(spec) };
+    const fakeWindow = { document: {}, navigator: { modelContext: fakeApi } };
+
+    const src = '"use strict";\n' + BRIDGE_SOURCE.replace(
+      /snWebmcpMain\(\);\s*$/,
+      "return snWebmcpMain;"
+    );
+    const composedMain = new Function(src)();
+    composedMain(fakeWindow);
+    composedMain(fakeWindow);
+
+    expect(calls).toHaveLength(2); // not 4
   });
 });

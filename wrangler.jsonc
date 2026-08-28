@@ -9,6 +9,20 @@
   "workers_dev": false,
   "preview_urls": false,
   "observability": { "enabled": true },
+  // esbuild's --keep-names (wrangler's default: true) rewrites nested named
+  // function expressions to `fn = __name(fn, "fn")` so Function.prototype.name
+  // survives minification. That helper call lands INSIDE the function bodies
+  // this repo composes into the served /webmcp/bridge.js asset via toString()
+  // (src/webmcp-bridge.mjs) — so the SHIPPED bytes reference a bundle-scope
+  // `__name` that does not exist in a browser. function.name is not
+  // load-bearing anywhere in webmcp-bridge-client.mjs (verified: the only
+  // `.name` access in that file is Error#name, unrelated) or webmcp-bridge.mjs,
+  // so disabling this repo-wide is free. Kept alongside a defensive `__name`
+  // shim prepended to BRIDGE_SOURCE itself (src/webmcp-bridge.mjs) as
+  // defense-in-depth against a future esbuild-injected helper this flag
+  // doesn't cover — see scripts/webmcp-bridge-bundle-gate.mjs, which builds
+  // this exact module through wrangler's own bundler to catch a regression.
+  "keep_names": false,
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
   // Weekly (Monday, off-hour) crawler-list drift check — see
   // src/crawler-list-sync.mjs. Low frequency on purpose: Cloudflare's

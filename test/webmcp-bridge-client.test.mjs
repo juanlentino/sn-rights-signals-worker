@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import * as client from "../src/webmcp-bridge-client.mjs";
 import {
   snAgentApi, snReadManifest, snRightsPointers, snGetRightsTerms,
   snLoadCore, snVerifyPage, snWebmcpMain,
@@ -43,9 +44,20 @@ describe("snWebmcpMain", () => {
   });
 
   it("resolves globalThis-ish window when no argument is passed (no-op in this test runtime)", () => {
-    // workerd has `navigator` but no `modelContext` and no `document` — the
-    // no-arg path must resolve internally and no-op without throwing.
+    // workerd has no `document` at all, so the no-arg path hits the
+    // no-document guard before it ever looks at `navigator` — it must
+    // resolve internally and no-op without throwing regardless of what
+    // navigator carries.
     expect(() => snWebmcpMain()).not.toThrow();
+  });
+
+  it("does not double-register when called twice on the same window", () => {
+    const calls = [];
+    const fakeApi = { registerTool: (spec) => calls.push(spec) };
+    const win = { document: {}, navigator: { modelContext: fakeApi } };
+    snWebmcpMain(win);
+    snWebmcpMain(win);
+    expect(calls).toHaveLength(2); // not 4
   });
 });
 
@@ -627,13 +639,20 @@ describe("serialization self-containment", () => {
   // load /webmcp/bridge.js). That specifier form is unsupported by this
   // repo's test runtime: tests run under @cloudflare/vitest-pool-workers'
   // real workerd runtime (see vitest.config.mjs), whose module resolver
-  // rejects "data:" specifiers for dynamic import() — confirmed by running
-  // it here, which throws "No such module ...data:text/javascript,...".
-  // `new Function(...)` gives the same guarantee without that dependency:
-  // a Function-constructor body executes with NO lexical access to this
-  // file's scope (imports, consts) — only globalThis — so a reference to a
-  // module-scope constant would throw ReferenceError here exactly as it
-  // would silently vanish in the real toString()-based composition.
+  // rejects "data:" specifiers for dynamic import() — RE-CONFIRMED 2026-08-28
+  // by running it here, which now throws via a path-mangled specifier
+  // ("Failed to import .../data:text/javascript,...") rather than the
+  // originally-observed "No such module" message. The wording moved (a
+  // vitest-pool-workers version bump changed how it reports the failure);
+  // the rejection itself did not. `new Function(...)` gives the same
+  // self-containment guarantee without that dependency: a Function-
+  // constructor body executes with NO lexical access to this file's scope
+  // (imports, consts) — only globalThis — so a reference to a module-scope
+  // constant would throw ReferenceError here exactly as it would silently
+  // vanish in the real toString()-based composition. It is evaluated in
+  // STRICT mode below (a real ES module always runs strict; a bare
+  // `new Function(src)()` would not) so a sloppy-only construct that a
+  // browser's module loader would reject passes here too.
   it("runs snRightsPointers and snReadManifest correctly when composed and executed standalone", async () => {
     // Coverage here is per EXECUTED BODY, not per declared function. Every
     // function appended to this array must also be INVOKED below, THROUGH
@@ -645,11 +664,17 @@ describe("serialization self-containment", () => {
     // leave the guard blind to exactly the failure mode it exists to catch,
     // which is why the signed path below is driven end to end and not just
     // the unsigned early return.
-    const fns = [snAgentApi, snReadManifest, snRightsPointers, snGetRightsTerms, snLoadCore, snVerifyPage, snWebmcpMain];
+    //
+    // Derived from the client module's namespace object (like PARTS in
+    // src/webmcp-bridge.mjs) rather than hand-listed, so this array, the
+    // served asset's composition list, and the module's actual export set
+    // cannot drift into three copies that silently disagree.
+    const fns = Object.values(client);
     const src = fns.map((f) => f.toString()).join("\n");
     const moduleSrc =
+      '"use strict";\n' +
       src +
-      "\nreturn { snAgentApi, snReadManifest, snRightsPointers, snGetRightsTerms, snLoadCore, snVerifyPage, snWebmcpMain };";
+      "\nreturn { " + fns.map((f) => f.name).join(", ") + " };";
     const composed = new Function(moduleSrc)();
 
     const p = composed.snRightsPointers();
@@ -756,5 +781,12 @@ describe("serialization self-containment", () => {
     // no-op guards, driven too: absent document, absent agent API.
     expect(() => composed.snWebmcpMain({ navigator: { modelContext: { registerTool: () => {} } } })).not.toThrow();
     expect(() => composed.snWebmcpMain({ document: {}, navigator: {} })).not.toThrow();
+    // Idempotence, on the COMPOSED source: a second call on the same window
+    // object must not add a second pair of registrations.
+    const idemWin = { document: {}, navigator: { modelContext: { registerTool: (spec) => registered.push(spec) } } };
+    const before = registered.length;
+    composed.snWebmcpMain(idemWin);
+    composed.snWebmcpMain(idemWin);
+    expect(registered.length - before).toBe(2); // not 4
   });
 });
