@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   snAgentApi, snReadManifest, snRightsPointers, snGetRightsTerms,
-  snLoadCore, snVerifyPage,
+  snLoadCore, snVerifyPage, snWebmcpMain,
 } from "../src/webmcp-bridge-client.mjs";
 import { TDM_POLICY_URL, LICENSE_URL, TDMREP_URL, ROBOTS_URL } from "../src/constants.mjs";
 
@@ -13,6 +13,39 @@ describe("snAgentApi", () => {
     expect(snAgentApi({ navigator: {}, agent: ag })).toBe(ag);
     expect(snAgentApi({ navigator: {} })).toBeNull();
     expect(snAgentApi({ navigator: { modelContext: {} } })).toBeNull(); // no registerTool
+  });
+});
+
+describe("snWebmcpMain", () => {
+  it("registers verify-page and get-rights-terms when an agent API and document are present", () => {
+    const calls = [];
+    const fakeApi = { registerTool: (spec) => calls.push(spec) };
+    snWebmcpMain({ document: {}, navigator: { modelContext: fakeApi } });
+    expect(calls).toHaveLength(2);
+    const byName = Object.fromEntries(calls.map((c) => [c.name, c]));
+    expect(byName["verify-page"].inputSchema).toEqual({
+      type: "object", properties: {}, additionalProperties: false,
+    });
+    expect(typeof byName["verify-page"].execute).toBe("function");
+    expect(byName["get-rights-terms"].inputSchema).toEqual({
+      type: "object", properties: {}, additionalProperties: false,
+    });
+    expect(typeof byName["get-rights-terms"].execute).toBe("function");
+  });
+
+  it("no-ops silently when there is no document", () => {
+    const fakeApi = { registerTool: () => { throw new Error("must not register"); } };
+    expect(() => snWebmcpMain({ navigator: { modelContext: fakeApi } })).not.toThrow();
+  });
+
+  it("no-ops silently when there is no usable agent API", () => {
+    expect(() => snWebmcpMain({ document: {}, navigator: {} })).not.toThrow();
+  });
+
+  it("resolves globalThis-ish window when no argument is passed (no-op in this test runtime)", () => {
+    // workerd has `navigator` but no `modelContext` and no `document` — the
+    // no-arg path must resolve internally and no-op without throwing.
+    expect(() => snWebmcpMain()).not.toThrow();
   });
 });
 
@@ -612,11 +645,11 @@ describe("serialization self-containment", () => {
     // leave the guard blind to exactly the failure mode it exists to catch,
     // which is why the signed path below is driven end to end and not just
     // the unsigned early return.
-    const fns = [snAgentApi, snReadManifest, snRightsPointers, snGetRightsTerms, snLoadCore, snVerifyPage];
+    const fns = [snAgentApi, snReadManifest, snRightsPointers, snGetRightsTerms, snLoadCore, snVerifyPage, snWebmcpMain];
     const src = fns.map((f) => f.toString()).join("\n");
     const moduleSrc =
       src +
-      "\nreturn { snAgentApi, snReadManifest, snRightsPointers, snGetRightsTerms, snLoadCore, snVerifyPage };";
+      "\nreturn { snAgentApi, snReadManifest, snRightsPointers, snGetRightsTerms, snLoadCore, snVerifyPage, snWebmcpMain };";
     const composed = new Function(moduleSrc)();
 
     const p = composed.snRightsPointers();
@@ -707,5 +740,21 @@ describe("serialization self-containment", () => {
     } finally {
       delete globalThis.window;
     }
+
+    // snWebmcpMain: drive the composed body's registration branch (not just
+    // its early-return guard) with a fake window whose registerTool records
+    // calls. This proves the composed source reaches api.registerTool for
+    // both tools, and that each execute handler is wired to the composed
+    // sibling functions — a dropped reference here would throw ReferenceError
+    // the moment registerTool's own recording call runs.
+    const registered = [];
+    composed.snWebmcpMain({
+      document: {},
+      navigator: { modelContext: { registerTool: (spec) => registered.push(spec) } },
+    });
+    expect(registered.map((r) => r.name).sort()).toEqual(["get-rights-terms", "verify-page"]);
+    // no-op guards, driven too: absent document, absent agent API.
+    expect(() => composed.snWebmcpMain({ navigator: { modelContext: { registerTool: () => {} } } })).not.toThrow();
+    expect(() => composed.snWebmcpMain({ document: {}, navigator: {} })).not.toThrow();
   });
 });
