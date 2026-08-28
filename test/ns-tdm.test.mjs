@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index.mjs";
-import { NS_TDM_JSON, nsTdmHtml } from "../src/ns-tdm.mjs";
+import { NS_TDM_JSON, nsTdmHtml, nsTdmResponse } from "../src/ns-tdm.mjs";
 import { NS_TDM_TERMS } from "../src/ns-tdm-terms.mjs";
 import { TDM_POLICY_ODRL_JSON } from "../src/tdm-policy-odrl.mjs";
+import { WEBMCP_SCRIPT_TAG } from "../src/webmcp-bridge.mjs";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -75,6 +76,12 @@ describe("the sn: vocabulary at /ns/tdm", () => {
     expect(graph.map((n) => n["@id"]).sort()).toEqual(
       NS_TDM_TERMS.map((t) => `sn:${t.term}`).sort(),
     );
+  });
+
+  it("HTML branch carries the tag exactly once; the negotiated JSON never does", async () => {
+    const html = await nsTdmResponse(false).text();
+    expect(html.split(WEBMCP_SCRIPT_TAG).length).toBe(2);
+    expect(await nsTdmResponse(true).text()).not.toContain("/webmcp/bridge.js");
   });
 
   describe("routing", () => {

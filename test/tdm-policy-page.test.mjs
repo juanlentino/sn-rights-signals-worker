@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { tdmPolicyHtml } from "../src/tdm-policy-page.mjs";
 import { POLICY_DATE, POLICY_STATUS, POLICY_VERSION } from "../src/constants.mjs";
 import { POLICY_SECTIONS } from "../src/tdm-policy-terms.mjs";
+import { WEBMCP_SCRIPT_TAG } from "../src/webmcp-bridge.mjs";
 
 // v1.7.0 REPLACED THIS FILE'S SUBJECT. It used to assert the page was a
 // placeholder — which it was, and which was the defect: every rights layer
@@ -138,5 +139,10 @@ describe("tdmPolicyHtml", () => {
   it("keeps the canonical link and the TDM meta tags", () => {
     expect(html).toContain('<meta name="tdm-reservation" content="1">');
     expect(html).toContain('<link rel="canonical" href="https://juanlentino.com/tdm-policy/">');
+  });
+
+  it("the policy HTML carries the WebMCP tag exactly once", () => {
+    expect(html.split('src="https://juanlentino.com/webmcp/bridge.js"').length).toBe(2);
+    expect(html.split(WEBMCP_SCRIPT_TAG).length).toBe(2);
   });
 });
