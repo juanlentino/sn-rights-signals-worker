@@ -13,6 +13,11 @@ import { contentSignalLines, header } from "./rights-checks-transport.mjs";
 
 const UNCONDITIONAL = ["search", "ai-input"];
 
+// The exact `src="..."` attribute the WebMCP script tag renders with. Hoisted
+// once so the "exactly once" and "every HTML surface" checks below can never
+// drift apart into two slightly different literals.
+const WEBMCP_TAG_SRC = 'src="https://juanlentino.com/webmcp/bridge.js"';
+
 function usageTokens(license) {
   return childrenNamed(license, "permits")
     .filter((p) => (p.attrs.type || "usage") === "usage")
@@ -32,9 +37,12 @@ function paymentType(license) {
  *
  * @param {object} a Artifact bundle from rights-assertions.mjs.
  * @param {(name: string, fn: () => void) => object} check Assertion runner.
+ * @param {string} bridgeSri sha384 digest of a.bridge.body, precomputed by
+ *   the caller (rights-assertions.mjs) since check() itself must stay
+ *   synchronous — see the comment on sriOf there.
  * @returns {object[]} Result records.
  */
-export function documentChecks(a, check) {
+export function documentChecks(a, check, bridgeSri) {
   const results = [];
 
   results.push(
@@ -378,6 +386,69 @@ export function documentChecks(a, check) {
       for (const tag of ['<meta name="tdm-reservation" content="1">', '<meta name="tdm-policy"']) {
         if (!html.includes(tag)) throw new Error(`missing ${tag} on ${a.note.url}`);
       }
+    }),
+
+    check("the WebMCP tag rides the policy HTML exactly once", () => {
+      const n = a.policy.body.split(WEBMCP_TAG_SRC).length - 1;
+      if (n !== 1) throw new Error(`found ${n} occurrences`);
+    }),
+
+    check("the WebMCP tag rides every HTML surface", () => {
+      // html-injector.mjs stamps every pass-through page; tdm-policy-page.mjs
+      // and ns-tdm.mjs each interpolate it into their own template. Three
+      // independent call sites, so each needs its own witness here — a check
+      // that only watched one HTML surface would stay green while another
+      // silently dropped the tag (this is exactly what happened to /ns/tdm
+      // before this loop existed).
+      const missing = ["html", "note", "nsTdm"].filter((k) => !a[k].body.includes(WEBMCP_TAG_SRC));
+      if (missing.length) throw new Error(`tag missing from: ${missing.join(", ")}`);
+    }),
+
+    check("no non-HTML representation carries the tag", () => {
+      // Deliberately broader than WEBMCP_TAG_SRC: a leak that lands as a
+      // relative src, a different quoting style, or inside a comment is still
+      // a leak, and this check exists to catch the tag turning up anywhere in
+      // a document that must stay tag-free — not just the one exact rendering.
+      const clean = ["wpjson", "policyOdrl", "license", "tdmrep", "robots", "nsTdmJson", "llms"];
+      const dirty = clean.filter((k) => a[k].body.includes("/webmcp/bridge.js"));
+      if (dirty.length) throw new Error(`tag leaked into: ${dirty.join(", ")}`);
+    }),
+
+    check("the bridge serves a JS content-type", () => {
+      const ct = header(a.bridge, "content-type");
+      if (!ct.includes("text/javascript")) throw new Error(`content-type is ${JSON.stringify(ct)}`);
+    }),
+
+    check("the served bridge registers both tools when driven (behavioral, not syntax)", () => {
+      // A syntax-only gate (`new Function(body)`) stayed GREEN on a real broken
+      // artifact earlier in this arc — bundler-injected `__name` refs that only
+      // fail when the registration path RUNS. So this check drives the source
+      // for real, with a fake window, instead of merely parsing it. Content-
+      // type is its own check above; this one stays purely behavioral.
+      const names = [];
+      const fakeWin = {
+        document: { getElementById: () => null, createElement: () => ({}), head: { appendChild: () => {} } },
+        navigator: { modelContext: { registerTool: (t) => names.push(t.name) } },
+      };
+      // The served source ends with a no-arg snWebmcpMain() call; strip that
+      // and drive registration with the fake window instead. A failed strip
+      // must fail LOUDLY (never silently drive nothing), because a check that
+      // quietly no-ops on an unexpected shape is exactly the failure mode this
+      // check exists to close off.
+      const src = a.bridge.body.replace(/snWebmcpMain\(\);\s*$/, "");
+      if (src === a.bridge.body) {
+        throw new Error("could not find the trailing snWebmcpMain(); call to strip — bridge shape changed?");
+      }
+      new Function('"use strict"; return function(win){' + src + '\nsnWebmcpMain(win);}')()(fakeWin);
+      if (names.join(",") !== "verify-page,get-rights-terms") {
+        throw new Error(`registered: [${names.join(", ")}]`);
+      }
+    }),
+
+    check("SRI parity: the tag's integrity equals the sha384 of the served bridge", () => {
+      const m = a.policy.body.match(/integrity="(sha384-[^"]+)"/);
+      if (!m) throw new Error("no integrity attribute in the policy HTML tag");
+      if (m[1] !== bridgeSri) throw new Error(`tag says ${m[1]}, served bytes hash to ${bridgeSri}`);
     }),
   );
 

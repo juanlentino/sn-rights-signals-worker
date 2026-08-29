@@ -71,7 +71,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("rights-signal consistency (static)", () => {
   async function collect() {
     stubOrigin();
-    const [html, wpjson, robots, tdmrep, license, policy, policyOdrl, nsTdm, nsTdmJson, llms, note] = await Promise.all([
+    const [html, wpjson, robots, tdmrep, license, policy, policyOdrl, nsTdm, nsTdmJson, llms, note, bridge] = await Promise.all([
       artifact("/"),
       artifact("/wp-json/wp/v2/posts"),
       artifact("/robots.txt"),
@@ -83,12 +83,13 @@ describe("rights-signal consistency (static)", () => {
       artifact("/ns/tdm", "application/ld+json"),
       artifact("/llms.txt"),
       artifact("/notes/a-note/"),
+      artifact("/webmcp/bridge.js"),
     ]);
-    return { html, wpjson, robots, tdmrep, license, policy, policyOdrl, nsTdm, nsTdmJson, llms, note };
+    return { html, wpjson, robots, tdmrep, license, policy, policyOdrl, nsTdm, nsTdmJson, llms, note, bridge };
   }
 
   it("every layer the Worker composes agrees with every other", async () => {
-    const report = runRightsChecks(await collect());
+    const report = await runRightsChecks(await collect());
     // The formatted report is the failure message, so a red run names the
     // drifted invariant instead of just saying `false !== true`.
     expect(report.ok, `\n${formatReport(report, "static")}`).toBe(true);
@@ -122,11 +123,26 @@ describe("rights-signal consistency (static)", () => {
     // The real regression, reproduced: the exception stated as the rule.
     ["llms.txt announces the training grant with no reservation", (a) => (a.llms.body = a.llms.body.replace(/AI training is reserved by default and permitted only[\s\S]*?TDM policy\./, "AI training permitted with attribution."))],
     ["llms.txt mentions training but drops the link to the conditions", (a) => (a.llms.body = a.llms.body.replace(/https:\/\/juanlentino\.com\/tdm-policy\//g, "https://example.invalid/"))],
+    ["the WebMCP tag is stripped from the policy page", (a) => (a.policy.body = a.policy.body.replace(/<script type="module"[^>]*webmcp[^>]*><\/script>/, ""))],
+    ["the tag's integrity attribute is corrupted", (a) => (a.policy.body = a.policy.body.replace(/integrity="sha384-/, 'integrity="sha384-AAAA'))],
+    ["the served bridge no longer registers tools", (a) => (a.bridge.body = a.bridge.body.replace(/registerTool/g, "registerT00l"))],
+    // Surgical: parses the ODRL doc, injects the substring into a real string
+    // field the doc's own JSON shape has to carry (assigner's vcard:fn — no
+    // other check reads it), and re-serializes valid JSON. Appending a raw
+    // <script> tag instead (an earlier version of this mutation) broke the
+    // JSON parse for six OTHER checks at once, which meant it wasn't pinning
+    // the exclusivity check at all — a red mutation is not a pinned property
+    // unless deleting the check it's meant to catch turns the mutation green.
+    ["the tag leaks into the ODRL representation", (a) => {
+      const doc = JSON.parse(a.policyOdrl.body);
+      doc.assigner["vcard:fn"] = doc.assigner["vcard:fn"] + " /webmcp/bridge.js";
+      a.policyOdrl.body = JSON.stringify(doc, null, 2);
+    }],
   ];
 
   it.each(mutations)("fails loudly when %s", async (_label, mutate) => {
     const artifacts = await collect();
     mutate(artifacts);
-    expect(runRightsChecks(artifacts).ok).toBe(false);
+    expect((await runRightsChecks(artifacts)).ok).toBe(false);
   });
 });
