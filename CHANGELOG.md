@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.22.0 - 2026-08-28
+
+**Headline:** the site hands browser agents its own provenance tools — from inside the
+anchored bytes.
+
+Born from the 2026-08-23 incident: Cloudflare's WebMCP preview injected a script tag at
+the zone layer, above the provenance sweep's vantage, leaving `/tdm-policy/` permanently
+un-anchorable until the toggle came off. The principle extracted there is now built in:
+**agent surfaces ship only from inside the anchored bytes.** Design and plan live in
+signal-and-noise-tools `docs/webmcp-native-design.md` / `docs/webmcp-native-plan.md`.
+
+### Added
+
+- **`/webmcp/bridge.js`** ([src/webmcp-bridge.mjs](src/webmcp-bridge.mjs)) — a
+  self-hosted WebMCP bridge registering two page-local tools with
+  `navigator.modelContext` (W3C draft, Chrome 146+; spec pinned in a comment):
+  `verify-page` (a DOM-free port of the /verify docket's four checks — signature,
+  content hash, live match, anchor — every verdict delegated to the plugin's
+  `prov-verify-core.js` decision core, loaded at runtime) and `get-rights-terms`
+  (the negotiated ODRL plus pointers). No MCP server connection
+  (`data-mcp-url="none"`); no agent API → silent no-op. Source of truth is
+  [src/webmcp-bridge-client.mjs](src/webmcp-bridge-client.mjs); the served asset is
+  composed via `Function.prototype.toString()` — no bundler — so the unit-tested
+  functions ARE the shipped bytes.
+- **The SRI-pinned tag on every HTML surface** ([src/html-injector.mjs](src/html-injector.mjs),
+  [src/tdm-policy-page.mjs](src/tdm-policy-page.mjs), [src/ns-tdm.mjs](src/ns-tdm.mjs)):
+  `integrity="sha384-…"` is computed at module scope from the exact served source, so
+  the tag — which lives inside anchored tdm-policy bytes — attests the exact executable
+  it loads. Deploying this mints tdm-policy v4 in the ledger within the hour, by design.
+  Non-HTML representations (ODRL, license.xml, tdmrep, robots, markdown, ns/tdm JSON)
+  stay tag-free, invariant-pinned.
+- **A bundled-artifact gate** ([scripts/webmcp-bridge-bundle-gate.mjs](scripts/webmcp-bridge-bundle-gate.mjs),
+  wired as `pretest`): builds through wrangler's real esbuild pipeline and drives the
+  composed registration behaviorally. Exists because esbuild's `keepNames` injected
+  `__name()` refs into `toString()` output — the served asset would have thrown for
+  exactly the Chrome 146+ agents it targets while every vitest-side gate stayed green.
+  Neutralized twice over: `keep_names: false` in wrangler.jsonc AND a defensive shim
+  baked into the source. The vitest artifact and the wrangler artifact are different
+  files; the gate is the one that watches the shipped one.
+- **Six new rights invariants + four mutations**
+  ([scripts/rights-checks-documents.mjs](scripts/rights-checks-documents.mjs)): tag on
+  the policy HTML exactly once; tag on every HTML surface (html, note, ns/tdm); no
+  non-HTML leak; JS content-type; behavioral registration of both tools (a syntax-only
+  gate was proven green on the broken artifact — this one runs it); SRI parity between
+  the tag and the served bytes. The live checker currently fails on exactly these six
+  against production — the guard proving it can go red before it gates a deploy.
+- `/webmcp/bridge.js` classifies as `agent-discovery` in the machine-readership sensor
+  ([src/machine-readers.mjs](src/machine-readers.mjs)) rather than falling into the
+  html catch-all bucket.
+
 ## 1.21.0 - 2026-08-28
 
 **Headline:** the R6c minimum-age cooldown lands beside the attestation gate.
