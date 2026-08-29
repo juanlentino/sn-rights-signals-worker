@@ -4,6 +4,7 @@ import {
   classifyMachineReader,
   classifySurface,
   getSensorState,
+  buildQuery,
   machineReadersResponse,
   observeMachineReader,
 } from "../src/machine-readers.mjs";
@@ -365,5 +366,36 @@ describe("read query exposes what the write path records (v1.20.0)", () => {
 
   it("leaves the rights view alone — a different dataset with its own blob order", () => {
     expect(buildQuery("rights", 30)).not.toContain("signed_agent");
+  });
+});
+
+describe("aggregate truncation (v1.23.0)", () => {
+  it("the aggregate declares its OWN cap instead of inheriting the API's silently", () => {
+    expect(buildQuery("aggregate", 30)).toMatch(/LIMIT 10000 FORMAT JSON$/);
+  });
+
+  it("EVERY view declares a LIMIT — the aggregate was the one that did not", () => {
+    for (const view of ["aggregate", "unknown", "rights", "totals"]) {
+      expect(buildQuery(view, 30)).toMatch(/LIMIT \d+/);
+    }
+  });
+
+  it("totals groups by DAY ONLY, so its row count cannot scale with the window", () => {
+    const q = buildQuery("totals", 90);
+    expect(q).toContain("GROUP BY day ");
+    // The eleven-dimension GROUP BY is what makes the aggregate truncate; the
+    // totals query must carry none of it.
+    for (const dim of ["family", "surface", "vendor", "purpose", "agent"]) {
+      expect(q).not.toContain(`AS ${dim}`);
+    }
+  });
+
+  it("totals is bounded by the DAY RANGE, so the bound can never bite", () => {
+    expect(buildQuery("totals", 90)).toMatch(/LIMIT 90 FORMAT JSON$/);
+  });
+
+  it("a wider window changes the interval, never the shape", () => {
+    expect(buildQuery("totals", 60)).toContain("INTERVAL '60' DAY");
+    expect(buildQuery("aggregate", 60)).toContain("INTERVAL '60' DAY");
   });
 });

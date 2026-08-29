@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.23.0 - 2026-08-29
+
+**Headline:** the aggregate read declares its own row cap, and a totals view that
+cannot truncate.
+
+The machine-readers sensor serves three views. Two declare a `LIMIT` and **report
+it** — the comment above them says why: *"a silently truncated leaderboard reads
+as 'that is all of them' when it is not."* The aggregate, the view every consumer
+sums to get a total, declared none, and therefore inherited the SQL API's own row
+cap silently while reporting `limit: null`.
+
+It groups by **eleven dimensions x day**, so its row count scales with the window.
+A wide window truncates, and because the consumer derives a total by summing the
+returned rows, a truncated read does not look degraded — it looks like less
+traffic.
+
+**Measured consequence:** a 60-day read summed to barely more than a 30-day read
+(69,216 vs 64,825), so a derived prior period reported a 15x surge that never
+happened. It also contradicted this site's own published figure of ~17,463 reads,
+which is what made it visible at all.
+
+- **`AGGREGATE_LIMIT = 10000`**, declared and reported. This makes truncation
+  ours and visible. It does NOT make a truncated total correct — dropped rows
+  stay dropped — which is what the next item is for.
+- **New `totals` view**: `sum(_sample_interval)` grouped by **day alone**, so a
+  90-day window returns at most 90 rows and the sum is exact however wide the
+  window gets. A separate query on purpose: the breakdown needs its dimensions,
+  and the total needs to not have them.
+- **`rows` and `truncated` in every response.** The upstream row count was
+  already present and was being discarded, which is why truncation has been
+  unobservable rather than merely unnoticed. A consumer can now refuse to derive
+  a total from a read that says it is truncated.
+
+Consumers reading `data` for breakdowns are unaffected. The plugin must adopt
+`totals` for its headline count before that number can be trusted — deploy this
+first.
+
 ## 1.22.0 - 2026-08-28
 
 **Headline:** the site hands browser agents its own provenance tools — from inside the
