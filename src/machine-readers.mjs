@@ -121,7 +121,17 @@ export function classifySurface(pathname) {
   if (
     p === "/.well-known/mcp/server-card.json" ||
     p === "/.well-known/api-catalog" ||
-    p === "/.well-known/ai-catalog.json"
+    p === "/.well-known/ai-catalog.json" ||
+    // Task 4: the served WebMCP bridge script. Not a well-known manifest, but
+    // this bucket fits it better than any alternative — a fetch here is not a
+    // rights-terms read ("rights"), not page content ("html"), and not a
+    // generic static file ("asset"); it is an agent exercising the door this
+    // Worker opened, exactly the population this class exists to isolate from
+    // the generic buckets per the v1.17.0 rationale above. Without this, every
+    // crawler fetch of the bridge script would silently fall through to the
+    // "html" catch-all and pollute the surface-mix data the v1.5.0 per-
+    // response reservation rationale rests on.
+    p === "/webmcp/bridge.js"
   ) {
     return "agent-discovery";
   }

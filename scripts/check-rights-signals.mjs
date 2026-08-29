@@ -159,7 +159,7 @@ async function collectAndCheck(origin, attempt, attempts) {
   let artifacts;
   try {
     const noteUrl = arg("note") || (await discoverNote(origin));
-    const [html, wpjson, robots, tdmrep, license, policy, policyOdrl, nsTdm, nsTdmJson, llms, note] = await Promise.all([
+    const [html, wpjson, robots, tdmrep, license, policy, policyOdrl, nsTdm, nsTdmJson, llms, note, bridge] = await Promise.all([
       get(`${origin}/`),
       get(`${origin}/wp-json/wp/v2/posts`, "application/json"),
       get(`${origin}/robots.txt`),
@@ -174,15 +174,16 @@ async function collectAndCheck(origin, attempt, attempts) {
       get(`${origin}/ns/tdm`, "application/ld+json"),
       get(`${origin}/llms.txt`),
       get(noteUrl),
+      get(`${origin}/webmcp/bridge.js`),
     ]);
-    artifacts = { html, wpjson, robots, tdmrep, license, policy, policyOdrl, nsTdm, nsTdmJson, llms, note };
+    artifacts = { html, wpjson, robots, tdmrep, license, policy, policyOdrl, nsTdm, nsTdmJson, llms, note, bridge };
   } catch (err) {
     process.stderr.write(`rights-signal check could not run against ${origin}\n  ${err.message}\n`);
     process.stderr.write("  (exit 2 = unreachable, NOT a pass — nothing was verified)\n");
     process.exit(2);
   }
 
-  const report = runRightsChecks(artifacts);
+  const report = await runRightsChecks(artifacts);
   const attemptNote = attempts > 1 ? ` · attempt ${attempt}/${attempts}` : "";
   const mode = `live · ${origin} · ${FRESH ? "revalidated" : "as cached"}${attemptNote} · note ${artifacts.note.url}`;
   return { report, mode };

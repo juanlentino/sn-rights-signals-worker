@@ -183,3 +183,19 @@ describe("signature observation never blocks the response (v1.19.0)", () => {
     expect(written).toHaveLength(1);
   });
 });
+
+describe("WebMCP bridge (Task 4)", () => {
+  it("serves the WebMCP bridge with rights headers riding it", async () => {
+    // Guards against a false green: without this, the route falling through
+    // to the (unstubbed) real fetch would still pass every assertion below
+    // once this deploys to production — the test would keep passing even if
+    // the local route were deleted.
+    stubOrigin("origin fallback", { "content-type": "text/html" });
+    const res = await worker.fetch(new Request("https://juanlentino.com/webmcp/bridge.js"), {});
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    // v1.5.0 rule: the reservation rides EVERY response.
+    expect(res.headers.get("tdm-reservation")).toBe("1");
+    expect(await res.text()).toContain("registerTool");
+  });
+});

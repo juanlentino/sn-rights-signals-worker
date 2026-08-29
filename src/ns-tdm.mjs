@@ -2,6 +2,7 @@ import { NS_TDM_TERMS, NS_TDM_URI, termUri } from "./ns-tdm-terms.mjs";
 import { SN_TDM_NS } from "./tdm-policy-odrl.mjs";
 import { STYLES } from "./tdm-policy-page.mjs";
 import { CONTACT_URL, RIGHTSHOLDER, TDM_POLICY_URL } from "./constants.mjs";
+import { WEBMCP_SCRIPT_TAG } from "./webmcp-bridge.mjs";
 
 // GET /ns/tdm — the vocabulary document for the `sn:` prefix.
 //
@@ -52,6 +53,8 @@ export function nsTdmHtml() {
 <title>sn: vocabulary — juanlentino.com</title>
 <meta name="description" content="Definitions of the locally-defined sn: terms used in the machine-readable TDM policy for juanlentino.com.">
 <link rel="canonical" href="${NS_TDM_URI}">
+<!-- HTML representation only; nsTdmJsonLd()/NS_TDM_JSON, the negotiated JSON-LD form below, stays tag-free. -->
+${WEBMCP_SCRIPT_TAG}
 <style>${STYLES}
 .term { border-top: 1px solid var(--rule); padding-top: .4rem; }
 .term h2 { font-size: 1.05rem; margin-top: 2.4rem; }

@@ -14,6 +14,7 @@ import {
   POLICY_SECTIONS,
   POLICY_TITLE,
 } from "./tdm-policy-terms.mjs";
+import { WEBMCP_SCRIPT_TAG } from "./webmcp-bridge.mjs";
 
 // The page shell for /tdm-policy/. Renders POLICY_SECTIONS; carries no terms of
 // its own. The terms live in tdm-policy-terms.mjs so they can be reviewed as a
@@ -147,6 +148,8 @@ export function tdmPolicyHtml() {
 ${TDM_META_TAGS}
 <meta name="tdm-policy-version" content="${POLICY_VERSION}">
 <meta name="tdm-policy-status" content="${POLICY_STATUS}">
+<!-- This page only ever renders as HTML; there is no negotiated JSON form to keep tag-free. -->
+${WEBMCP_SCRIPT_TAG}
 <style>${STYLES}</style>
 </head>
 <body>

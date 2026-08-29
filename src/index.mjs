@@ -14,6 +14,7 @@ import { taxonomyResponse } from "./taxonomy.mjs";
 import { prefersMarkdown } from "./accept-markdown.mjs";
 import { hasWebBotAuthHeaders, resolveSignatureState } from "./web-bot-auth.mjs";
 import { maybeMarkdown, withVaryAccept } from "./markdown-negotiation.mjs";
+import { webmcpBridgeResponse } from "./webmcp-bridge.mjs";
 
 // Content negotiation for /tdm-policy/, deliberately conservative: HTML is the
 // default and only an explicit JSON preference switches representation.
@@ -105,6 +106,11 @@ export default {
     if (pathname === "/ns/tdm" || pathname === "/ns/tdm/") {
       return withTdmHeaders(nsTdmResponse(prefersOdrl(request.headers.get("accept"))));
     }
+
+    // The self-hosted WebMCP bridge (design: signal-and-noise-tools
+    // docs/webmcp-native-design.md). Wrapped like every owned surface: content
+    // taken in ANY representation is content taken (v1.5.0), a script included.
+    if (pathname === "/webmcp/bridge.js") return withTdmHeaders(webmcpBridgeResponse());
 
     if (pathname === "/tdm-policy" || pathname === "/tdm-policy/") {
       if (prefersOdrl(request.headers.get("accept"))) return withTdmHeaders(tdmPolicyOdrlResponse());

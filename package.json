@@ -1,9 +1,10 @@
 {
   "name": "sn-rights-signals-worker",
-  "version": "1.21.0",
+  "version": "1.22.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "pretest": "node scripts/webmcp-bridge-bundle-gate.mjs",
     "test": "vitest run",
     "deploy": "wrangler deploy --var SN_VERSION:$npm_package_version",
     "postdeploy": "node scripts/check-rights-signals.mjs --fresh --await-version $npm_package_version",

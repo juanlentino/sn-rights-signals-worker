@@ -15,7 +15,7 @@
 // like a green live run unless you know the difference.
 //
 // Artifact bundle shape (every member optional except as used):
-//   { html, wpjson, note, robots, tdmrep, license, policy }
+//   { html, wpjson, note, robots, tdmrep, license, policy, bridge }
 // each: { url?, status?, headers?: Headers|object, body: string }
 
 import { transportChecks } from "./rights-checks-transport.mjs";
@@ -33,16 +33,52 @@ function check(name, fn) {
 }
 
 /**
+ * The sha384 digest of a string, base64-encoded, in the `sha384-...` shape an
+ * `integrity` attribute expects. Computed here — once, before the results
+ * array is built — rather than inside a check() body, because check() is a
+ * synchronous recorder (see above) and this is the one assertion that needs
+ * an async primitive (crypto.subtle.digest) to produce its expected value.
+ *
+ * @param {string} body Exact served bytes to hash.
+ * @returns {Promise<string>} `sha384-<base64>`.
+ */
+// Recomputes the digest from the served bytes rather than importing BRIDGE_SRI
+// from src/webmcp-bridge.mjs on purpose: the oracle must not import the value
+// it exists to verify, or a bug in that export would sail through unchecked.
+async function sriOf(body) {
+  const digest = await crypto.subtle.digest("SHA-384", new TextEncoder().encode(body));
+  return "sha384-" + btoa(String.fromCharCode(...new Uint8Array(digest)));
+}
+
+/**
  * Run every rights invariant against an artifact bundle.
  *
  * Never throws: a malformed artifact surfaces as a failed check carrying the
  * parse error as its detail.
  *
+ * ASYNC: the SRI-parity check needs a digest computed up front (see sriOf
+ * above); every check itself stays the same synchronous check(name, fn), so
+ * both drivers (the static test and the live script) only need one extra
+ * `await` at the call site — nothing else about check() or its callers changes.
+ *
  * @param {object} artifacts Bundle as described above.
- * @returns {{ok: boolean, passed: number, failed: number, results: object[]}} Report.
+ * @returns {Promise<{ok: boolean, passed: number, failed: number, results: object[]}>} Report.
  */
-export function runRightsChecks(artifacts) {
-  const required = ["html", "wpjson", "robots", "tdmrep", "license", "policy", "policyOdrl", "nsTdm", "nsTdmJson", "llms", "note"];
+export async function runRightsChecks(artifacts) {
+  const required = [
+    "html",
+    "wpjson",
+    "robots",
+    "tdmrep",
+    "license",
+    "policy",
+    "policyOdrl",
+    "nsTdm",
+    "nsTdmJson",
+    "llms",
+    "note",
+    "bridge",
+  ];
   const absent = required.filter((k) => !artifacts || !artifacts[k]);
 
   const results = absent.length
@@ -55,7 +91,7 @@ export function runRightsChecks(artifacts) {
           if (bad.length) throw new Error(bad.map(([k, s]) => `${k}=${s}`).join(", "));
         }),
         ...transportChecks(artifacts, check),
-        ...documentChecks(artifacts, check),
+        ...documentChecks(artifacts, check, await sriOf(artifacts.bridge.body)),
       ];
 
   const failed = results.filter((r) => !r.ok);
