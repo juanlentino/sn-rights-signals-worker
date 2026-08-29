@@ -299,13 +299,27 @@ const DAYS_MAX = 90;
 const DAYS_DEFAULT = 30;
 
 /** Fixed view allowlist — nothing from the query string is ever interpolated. */
-const VIEWS = new Set(["aggregate", "unknown", "rights"]);
+const VIEWS = new Set(["aggregate", "unknown", "rights", "totals"]);
 
 // How many unclassified user-agent strings the review view returns. Capped, and
 // the cap is REPORTED in the response, because a silently truncated leaderboard
 // reads as "that is all of them" when it is not.
 const UNKNOWN_LIMIT = 50;
 const RIGHTS_LIMIT = 500;
+
+// The aggregate had NO declared limit and therefore inherited the SQL API's own
+// row cap silently — the one view that skipped the discipline stated directly
+// above it. It groups by ELEVEN dimensions x day, so its row count scales with
+// the window, and a wide window truncates. The consumer sums those rows to get
+// a total, so a truncated read does not look degraded: it looks like less
+// traffic. Measured consequence: a 60-day read summed to barely more than a
+// 30-day read, which made a derived prior period report a 15x surge that never
+// happened.
+//
+// Declaring the cap makes truncation OURS and reportable. It does not make the
+// total correct — dropped rows are still dropped — which is what TOTALS_* below
+// is for.
+const AGGREGATE_LIMIT = 10000;
 
 /**
  * @param {"aggregate"|"unknown"|"rights"} view
@@ -339,6 +353,21 @@ export function buildQuery(view, days) {
     );
   }
 
+  // RULE 4 (v1.23.0): totals ONLY, one row per day. The aggregate above cannot
+  // answer "how many reads" reliably because its row count scales with the
+  // window; this groups by day alone, so a 90-day window returns at most 90
+  // rows and the sum is exact no matter how wide the window gets. It is a
+  // separate query on purpose: the breakdown needs its dimensions, and the
+  // total needs to not have them.
+  if (view === "totals") {
+    return (
+      "SELECT toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
+      "FROM sn_machine_readers " +
+      since +
+      `GROUP BY day ORDER BY day ASC LIMIT ${DAYS_MAX} FORMAT JSON`
+    );
+  }
+
   // Default: the aggregate. family and surface keep their original names and
   // meaning so existing consumers are unaffected; the rest are additive.
   return (
@@ -349,7 +378,7 @@ export function buildQuery(view, days) {
     "FROM sn_machine_readers " +
     since +
     "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, " +
-    "first_party, agent, markdown_requested, signed_agent, day ORDER BY day ASC FORMAT JSON"
+    `first_party, agent, markdown_requested, signed_agent, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
   );
 }
 
@@ -425,8 +454,22 @@ export async function machineReadersResponse(request, env) {
       taxonomy_version: TAXONOMY_VERSION,
       taxonomy_effective_date: TAXONOMY_EFFECTIVE_DATE,
       // Reported, never silent: a truncated leaderboard that does not say it is
-      // truncated reads as complete coverage.
-      limit: view === "unknown" ? UNKNOWN_LIMIT : view === "rights" ? RIGHTS_LIMIT : null,
+      // truncated reads as complete coverage. The aggregate reported `null`
+      // here — "no cap" — while silently inheriting the SQL API's own.
+      limit:
+        view === "unknown"
+          ? UNKNOWN_LIMIT
+          : view === "rights"
+            ? RIGHTS_LIMIT
+            : view === "totals"
+              ? DAYS_MAX
+              : AGGREGATE_LIMIT,
+      // The upstream row count was already in the response and was being
+      // discarded, which is why truncation has been unobservable rather than
+      // merely unnoticed. A consumer can now refuse to derive a total from a
+      // read that says it is truncated.
+      rows: Number.isFinite(data.rows) ? data.rows : (data.data || []).length,
+      truncated: ((data.data || []).length >= (view === "unknown" ? UNKNOWN_LIMIT : view === "rights" ? RIGHTS_LIMIT : view === "totals" ? DAYS_MAX : AGGREGATE_LIMIT)),
       data: data.data || [],
     });
   } catch {
