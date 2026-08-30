@@ -154,10 +154,25 @@ describe("signature observation never blocks the response (v1.19.0)", () => {
     expect(waitUntil).not.toHaveBeenCalled();
   });
 
-  it("defers the whole observation into waitUntil for a signed request", async () => {
+  // SUPERSEDED BY v1.24.0, deliberately. This assertion used to require that a
+  // signed request DEFER the whole observation into waitUntil, on the v1.19.0
+  // rule that no reader should wait on our telemetry to get their bytes. That
+  // rule was right while the signature state was ONLY telemetry.
+  //
+  // Under survey item A2 the state shapes the RESPONSE — it decides whether the
+  // licence offer rides these headers — so it must be known before the response
+  // is composed. A licence offer computed after the bytes have gone is not an
+  // offer. The verification is therefore awaited inline and nothing is deferred.
+  //
+  // What did NOT change is the part that protected readers: no UNSIGNED request
+  // pays anything (the assertion above still holds), and observation still
+  // cannot alter the body or status of any response.
+  it("awaits verification inline for a signed request, deferring nothing", async () => {
     stubOrigin("<html><body>hi</body></html>", { "content-type": "text/html" });
     const waitUntil = vi.fn();
-    await worker.fetch(
+    const written = [];
+    const env = { SN_MR: { writeDataPoint: (d) => written.push(d) }, SN_MR_RIGHTS: { writeDataPoint() {} } };
+    const res = await worker.fetch(
       new Request("https://juanlentino.com/notes/x", {
         headers: {
           "user-agent": "GPTBot/1.0",
@@ -165,10 +180,14 @@ describe("signature observation never blocks the response (v1.19.0)", () => {
           "signature-input": 'sig1=("@authority");keyid="k";tag="web-bot-auth"',
         },
       }),
-      aeEnv(),
+      env,
       { waitUntil }
     );
-    expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect(waitUntil).not.toHaveBeenCalled();
+    // Still observed, and the response still composed — the state moved from
+    // being deferred to being awaited, it did not stop being recorded.
+    expect(written).toHaveLength(1);
+    expect(res.headers.get("tdm-reservation")).toBe("1");
   });
 
   it("still observes when no ctx is supplied, as older call sites do", async () => {
@@ -197,5 +216,72 @@ describe("WebMCP bridge (Task 4)", () => {
     // v1.5.0 rule: the reservation rides EVERY response.
     expect(res.headers.get("tdm-reservation")).toBe("1");
     expect(await res.text()).toContain("registerTool");
+  });
+});
+
+
+// ── v1.24.0 (survey A2): the licence handshake, end to end ──────────────────
+//
+// licence-handshake.test.mjs pins the offer's CONTENT against the policy. This
+// pins the WIRING: that a real verified request actually receives it through
+// worker.fetch, and — the safety-critical half — that everything else does not.
+import { signWithFixture } from "./helpers/sign-fixture.mjs";
+
+describe("licence handshake wiring (v1.24.0)", () => {
+  const aeEnv = () => ({ SN_MR: { writeDataPoint() {} }, SN_MR_RIGHTS: { writeDataPoint() {} } });
+
+  // One stub serving BOTH hops: the agent's key directory and the origin. A
+  // stub that answered only the origin would resolve every signature to
+  // `unsigned` and this suite would pass while proving nothing about a verified
+  // request — the failure mode where the negative tests below are the only ones
+  // really running.
+  function stubDirectoryAndOrigin(directory, agentOrigin) {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.startsWith(agentOrigin)) return Promise.resolve(new Response(JSON.stringify(directory)));
+      return Promise.resolve(new Response("<html><body>hi</body></html>", { headers: { "content-type": "text/html" } }));
+    }));
+  }
+
+  it("offers the licence to an agent that actually proved who it is", async () => {
+    const agent = "https://agent-offer.test";
+    const { request, directory } = await signWithFixture("https://juanlentino.com/notes/x", agent);
+    stubDirectoryAndOrigin(directory, agent);
+    const res = await worker.fetch(request, aeEnv(), { waitUntil: () => {} });
+    expect(res.headers.get("tdm-licence-offer")).toBe("conditional");
+    expect(res.headers.get("tdm-licence-agent")).toBe(agent);
+    expect(res.headers.get("tdm-licence-version")).toBeTruthy();
+    // The declaration still rides alongside it — the offer is an addition to
+    // the reservation, never a replacement for it.
+    expect(res.headers.get("tdm-reservation")).toBe("1");
+  });
+
+  // FAIL OPEN. An agent whose signature does not hold gets the response it
+  // would have got before A2 existed: the declaration, and nothing keyed to it.
+  it("offers nothing to a signature that does not hold", async () => {
+    const agent = "https://agent-bad.test";
+    const { directory } = await signWithFixture("https://juanlentino.com/notes/x", agent);
+    stubDirectoryAndOrigin(directory, agent);
+    const tampered = new Request("https://juanlentino.com/notes/x", {
+      headers: {
+        "signature-agent": `"${agent}"`,
+        "signature-input": 'sig1=("@authority");keyid="nope";tag="web-bot-auth"',
+        signature: "sig1=:AAAA:",
+      },
+    });
+    const res = await worker.fetch(tampered, aeEnv(), { waitUntil: () => {} });
+    expect(res.headers.get("tdm-licence-offer")).toBeNull();
+    expect(res.headers.get("tdm-reservation")).toBe("1");
+  });
+
+  it("offers nothing to an ordinary unsigned crawler", async () => {
+    stubOrigin("<html><body>hi</body></html>", { "content-type": "text/html" });
+    const res = await worker.fetch(
+      new Request("https://juanlentino.com/notes/x", { headers: { "user-agent": "GPTBot/1.0" } }),
+      aeEnv(),
+      { waitUntil: () => {} }
+    );
+    expect(res.headers.get("tdm-licence-offer")).toBeNull();
+    expect(res.headers.get("tdm-reservation")).toBe("1");
   });
 });

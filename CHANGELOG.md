@@ -1,5 +1,90 @@
 # Changelog
 
+## 1.24.0 - 2026-08-30
+
+**Headline:** the rights position stops being purely declaratory — a verified
+agent is answered with a licence offer keyed to the identity it proved.
+
+Survey item **A2** (`signal-and-noise-tools`
+`docs/proposals/edge-capability-survey-2026-08-23.md`). Until now the position
+was a DECLARATION: `TDM-Reservation`, `TDM-Policy` and `Content-Signal` ride
+every response (v1.5.0), addressed to a reader who may or may not exist and who
+could not be identified either way. A1 (v1.19.0) made identity checkable —
+Ed25519 HTTP Message Signatures verified in this Worker rather than rented from
+a plan tier. This release spends that capability.
+
+**Built on a measurement, not on principle.** A2's gate was whether agents
+reaching this site sign at all. In the week to 2026-08-30 the sensor recorded
+**311 verified reads against a pre-ship forecast of ~0**, with the verified share
+rising across three readings (0.74% → 1.66% → 2.35%, marginal rate 2.57%).
+
+### Added — `src/licence-handshake.mjs`
+
+Five headers, and only for a proved identity:
+
+- `TDM-Licence-Offer: conditional` — **never** "granted". The §2 conditions are
+  conditions *precedent*; this Worker can observe who is asking, never whether
+  they will meet them. Any word implying the licence is held would be an
+  assertion the edge is in no position to make.
+- `TDM-Licence-Policy` / `TDM-Licence-Version` — where the operative text lives
+  and which version it is. §2 already requires a `POLICY_VERSION` bump on any
+  change to itself; an offer that did not name its version could not tell a
+  licensee *which* text they met.
+- `TDM-Licence-Conditions` — the five condition ids, C1–C5.
+- `TDM-Licence-Agent` — the verified `Signature-Agent` origin, echoed back. This
+  is the half that makes it a **handshake rather than a broadcast**.
+
+Nothing restates the terms. A header that paraphrased §2 would become a second,
+unversioned copy of a legal document — the exact drift this stack exists to
+avoid.
+
+**A HANDSHAKE, NOT A PAYWALL.** Cloudflare sells the paywall version (402 plus
+`crawler-price`, Stripe-backed). A homebrew charging mechanism is out of scope
+and off-brand, and a test asserts the emitted headers carry no price, payment,
+or purchase signal of any kind.
+
+**FAIL OPEN, like A1 itself.** Every state that is not a proved identity — did
+not sign, signature did not hold, key nobody vouches for — receives *exactly*
+the response it received before this release. There is no branch here that
+removes anything.
+
+### Changed — a signed request now awaits verification
+
+v1.19.0 deferred the whole observation into `waitUntil` on the rule that no
+reader should wait on our telemetry to get their bytes. **That rule is
+superseded, deliberately**, and its test is rewritten rather than deleted: the
+state now shapes the *response*, so it must be known before the response is
+composed. A licence offer computed after the bytes have gone is not an offer.
+
+The cost falls only on requests carrying Web Bot Auth headers, and key
+directories are Cache-API cached (6h positive, 15m negative) — so the common
+case is an edge-local lookup plus an Ed25519 verify. **No unsigned request pays
+anything**; that branch is untouched. The state is resolved **once** and reused
+for both the observation and the headers, so verification is never doubled and
+the recorded state can never disagree with the offered one.
+
+### Tests — 17 new, every guard negative-controlled
+
+- The offer's content is pinned against the policy, including a **bidirectional
+  drift guard**: every advertised condition must appear in §2, and every
+  condition §2 states must be advertised. Dropping C5 fails one direction;
+  inventing a C6 fails the other. A header advertising fewer conditions than the
+  grant requires would describe a licence the rightsholder never offered — the
+  same class of failure `constants.mjs` already names for `Content-Signal`,
+  where a header and a file stating different terms is "worse than saying
+  nothing".
+- A third assertion guards the guard: it fails if the prose regex ever stops
+  matching, so the two directions cannot pass vacuously.
+- End-to-end through `worker.fetch` with a really-signed request (the existing
+  `sign-fixture` helper), over a stub serving **both** the key directory and the
+  origin — a stub answering only the origin would resolve every signature to
+  `unsigned` and leave the negative tests as the only ones really running.
+- Leaking the offer to an unverified agent fails 3; dropping the offer from the
+  HTML branch fails the end-to-end pin; computing it without awaiting
+  verification fails it too.
+
+Suite: 368 passing.
+
 ## 1.23.0 - 2026-08-29
 
 **Headline:** the aggregate read declares its own row cap, and a totals view that

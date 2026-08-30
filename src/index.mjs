@@ -12,7 +12,8 @@ import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawl
 import { machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
 import { taxonomyResponse } from "./taxonomy.mjs";
 import { prefersMarkdown } from "./accept-markdown.mjs";
-import { hasWebBotAuthHeaders, resolveSignatureState } from "./web-bot-auth.mjs";
+import { hasWebBotAuthHeaders, resolveSignatureState, signatureAgentOrigin } from "./web-bot-auth.mjs";
+import { licenceOfferHeaders } from "./licence-handshake.mjs";
 import { maybeMarkdown, withVaryAccept } from "./markdown-negotiation.mjs";
 import { webmcpBridgeResponse } from "./webmcp-bridge.mjs";
 
@@ -31,9 +32,13 @@ export function prefersOdrl(accept) {
   return !/\btext\/html\b/i.test(accept);
 }
 
-function withTdmHeaders(response) {
+function withTdmHeaders(response, licenceOffer = {}) {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(TDM_RESERVATION_HEADERS)) headers.set(name, value);
+  // v1.24.0 (survey A2). EMPTY for every request that did not prove an
+  // identity, which is almost all of them — so this loop changes nothing on the
+  // hot path and the declaration above is what an unverified agent still gets.
+  for (const [name, value] of Object.entries(licenceOffer)) headers.set(name, value);
   // APPEND, never set. Link is a list header and WordPress emits its own
   // entries (REST discovery, shortlink); set() would clobber them and break
   // API autodiscovery. rel="license" is one more entry, not a replacement for
@@ -54,6 +59,12 @@ export default {
     const { pathname } = new URL(request.url);
     if (bypassesRightsSignals(pathname)) return fetch(request);
 
+    // v1.24.0 (survey A2). Null until a signed request resolves it; the offer
+    // stays {} for everything else, which is the fail-open path — an agent that
+    // did not prove an identity receives exactly the response it received
+    // before this feature existed.
+    let signatureState = null;
+
     // v1.4.0: machine-readership sensor — aggregate-only AE write when the UA
     // classifies into the fixed crawler-family enum; humans and internal /_sn/
     // paths are never recorded, and observation can never affect the response.
@@ -64,17 +75,32 @@ export default {
       // verification may fetch a key directory and no reader should wait on
       // our telemetry to get their bytes.
       if (hasWebBotAuthHeaders(request)) {
-        const observed = resolveSignatureState(request).then((state) =>
-          observeMachineReader(request, env, pathname, state)
-        );
-        // ctx is absent in some call sites and in older tests. Falling back to
-        // a floating promise keeps the observation best-effort rather than
-        // throwing on a shape we do not control.
-        if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(observed);
+        // v1.24.0: THIS REQUEST NOW AWAITS VERIFICATION, and v1.19.0's comment
+        // explaining why it did not is deliberately superseded. Then the state
+        // was only telemetry, and no reader should wait on our telemetry to get
+        // their bytes. Under A2 the state SHAPES THE RESPONSE, so it has to be
+        // known before the response is composed — a licence offer computed
+        // after the bytes have gone is not an offer.
+        //
+        // The cost falls only on requests that carry Web Bot Auth headers, and
+        // key directories are Cache-API cached (6h positive, 15m negative), so
+        // the common case is an edge-local lookup and an Ed25519 verify. No
+        // unsigned request pays anything: that branch is untouched below.
+        signatureState = await resolveSignatureState(request);
+        // Resolved ONCE and reused. Calling resolveSignatureState again for the
+        // headers would double every verification, and could report a different
+        // state from the one recorded if a directory rotated between the two.
+        observeMachineReader(request, env, pathname, signatureState);
       } else {
         observeMachineReader(request, env, pathname);
       }
     }
+
+    // Keyed to the identity that was actually proved, and empty otherwise. Built
+    // here so every branch below wraps the same object — a surface that forgot
+    // it would answer a verified agent with the bare declaration, which is a
+    // silent inconsistency rather than a visible failure.
+    const licenceOffer = licenceOfferHeaders(signatureState, signatureAgentOrigin(request));
 
     // Namespaced (not /_sn/version) because sn-analytics already owns that
     // exact path with its own more-specific Cloudflare route — bare
@@ -104,21 +130,22 @@ export default {
     // checkable. Negotiated identically to /tdm-policy/ — same clients, same
     // reason, and behaving differently between the two would be a trap.
     if (pathname === "/ns/tdm" || pathname === "/ns/tdm/") {
-      return withTdmHeaders(nsTdmResponse(prefersOdrl(request.headers.get("accept"))));
+      return withTdmHeaders(nsTdmResponse(prefersOdrl(request.headers.get("accept"))), licenceOffer);
     }
 
     // The self-hosted WebMCP bridge (design: signal-and-noise-tools
     // docs/webmcp-native-design.md). Wrapped like every owned surface: content
     // taken in ANY representation is content taken (v1.5.0), a script included.
-    if (pathname === "/webmcp/bridge.js") return withTdmHeaders(webmcpBridgeResponse());
+    if (pathname === "/webmcp/bridge.js") return withTdmHeaders(webmcpBridgeResponse(), licenceOffer);
 
     if (pathname === "/tdm-policy" || pathname === "/tdm-policy/") {
-      if (prefersOdrl(request.headers.get("accept"))) return withTdmHeaders(tdmPolicyOdrlResponse());
+      if (prefersOdrl(request.headers.get("accept"))) return withTdmHeaders(tdmPolicyOdrlResponse(), licenceOffer);
       return withTdmHeaders(
         new Response(tdmPolicyHtml(), {
           status: 200,
           headers: { "content-type": "text/html; charset=utf-8", vary: "Accept" },
         }),
+        licenceOffer,
       );
     }
 
@@ -138,7 +165,7 @@ export default {
     // nothing to rewrite in a PNG, and running it on non-HTML would be a
     // pointless transform on the hot path.
     const contentType = origin.headers.get("content-type") || "";
-    if (!contentType.includes("text/html")) return withTdmHeaders(origin);
+    if (!contentType.includes("text/html")) return withTdmHeaders(origin, licenceOffer);
 
     // v1.16.0: Markdown for Agents, done here because the zone is not on a plan
     // that includes Cloudflare's own implementation. accept-markdown.mjs matches
@@ -152,9 +179,9 @@ export default {
     // withTdmHeaders() wraps both branches, per the v1.5.0 rule that content
     // taken in ANY representation is content taken.
     const markdown = await maybeMarkdown(origin, prefersMarkdown(request.headers.get("accept")));
-    if (markdown) return withTdmHeaders(markdown);
+    if (markdown) return withTdmHeaders(markdown, licenceOffer);
 
-    return withTdmHeaders(withVaryAccept(injectTdmMeta(origin)));
+    return withTdmHeaders(withVaryAccept(injectTdmMeta(origin)), licenceOffer);
   },
 
   // Weekly: diff robots-block.mjs's hand-maintained NAMED_CRAWLERS against
