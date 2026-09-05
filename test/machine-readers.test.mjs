@@ -229,7 +229,7 @@ describe("sensor-alive state — dead sensor and quiet dataset are different ans
   });
 
   it("starts null across the board (never-attempted, not measured-dead)", () => {
-    expect(getSensorState()).toEqual({ ae_bound: null, last_write_ok: null, last_write_at: null, last_error: null });
+    expect(getSensorState()).toEqual({ ae_bound: null, last_write_ok: null, last_write_at: null, last_error: null, detail_last_write_ok: null });
   });
 
   it("records a successful write: bound, ok, timestamped, no error", () => {
@@ -397,5 +397,52 @@ describe("aggregate truncation (v1.23.0)", () => {
   it("a wider window changes the interval, never the shape", () => {
     expect(buildQuery("totals", 60)).toContain("INTERVAL '60' DAY");
     expect(buildQuery("aggregate", 60)).toContain("INTERVAL '60' DAY");
+  });
+});
+
+// v1.24.1: the rights-detail stream had no bookkeeping of its own; its failure
+// unwound through the aggregate's catch AFTER the aggregate row had landed, so
+// /_sn/rights-signals/version read the sensor as dead for a stream that sees
+// ~80 rows a month. Verified by mutation before the fix: aggregate ok + detail
+// throwing on /.well-known/tdmrep.json -> last_write_ok false.
+describe("v1.24.1: a detail-write failure is not the aggregate sensor dying", () => {
+  const rightsReq = () => new Request("https://juanlentino.com/.well-known/tdmrep.json", { headers: { "user-agent": "GPTBot/1.0" } });
+
+  it("aggregate lands, detail throws -> last_write_ok stays TRUE, detail_last_write_ok is false", () => {
+    _resetSensorStateForTests();
+    const written = [];
+    const err = console.error; const logged = []; console.error = (m) => logged.push(String(m));
+    try {
+      const env = { SN_MR: { writeDataPoint: (dp) => written.push(dp) }, SN_MR_RIGHTS: { writeDataPoint() { throw new Error("detail quota"); } } };
+      const out = observeMachineReader(rightsReq(), env, "/.well-known/tdmrep.json");
+      expect(out).not.toBe(null); // the observation itself succeeded
+      expect(written).toHaveLength(1);
+      const s = getSensorState();
+      expect(s.last_write_ok).toBe(true);
+      expect(s.last_error).toBe(null);
+      expect(s.detail_last_write_ok).toBe(false);
+      expect(logged.some((l) => l.includes("rights-detail write failed"))).toBe(true);
+    } finally { console.error = err; }
+  });
+
+  it("both streams land -> both true; a non-rights path leaves the detail outcome untouched (null)", () => {
+    _resetSensorStateForTests();
+    const env = { SN_MR: { writeDataPoint() {} }, SN_MR_RIGHTS: { writeDataPoint() {} } };
+    observeMachineReader(rightsReq(), env, "/.well-known/tdmrep.json");
+    expect(getSensorState().detail_last_write_ok).toBe(true);
+    _resetSensorStateForTests();
+    observeMachineReader(new Request("https://juanlentino.com/notes/x", { headers: { "user-agent": "GPTBot/1.0" } }), env, "/notes/x");
+    expect(getSensorState().last_write_ok).toBe(true);
+    expect(getSensorState().detail_last_write_ok).toBe(null);
+  });
+
+  it("the aggregate write failing is still the aggregate sensor dying", () => {
+    _resetSensorStateForTests();
+    const err = console.error; console.error = () => {};
+    try {
+      const env = { SN_MR: { writeDataPoint() { throw new Error("ae down"); } }, SN_MR_RIGHTS: { writeDataPoint() {} } };
+      expect(observeMachineReader(rightsReq(), env, "/.well-known/tdmrep.json")).toBe(null);
+      expect(getSensorState().last_write_ok).toBe(false);
+    } finally { console.error = err; }
   });
 });

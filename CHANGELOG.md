@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.24.1 - 2026-09-05
+
+**Headline:** a rights-detail write failure is no longer booked as the
+aggregate sensor dying.
+
+### Fixed
+
+- `observeMachineReader()` marks the aggregate write successful BEFORE calling the
+  rights-detail stream, and the detail call has its own try/catch and its own
+  outcome, `detail_last_write_ok`. It used to share the aggregate's bookkeeping:
+  a detail write that threw flipped `last_write_ok` to false after the aggregate
+  row had already landed, so `/_sn/rights-signals/version` read the sensor as dead
+  for a failure in a stream that sees ~80 rows a month. Verified by mutation before
+  the fix (aggregate ok + detail throwing on `/.well-known/tdmrep.json` gave
+  `last_write_ok: false`). The version endpoint's `sensor` block gains
+  `detail_last_write_ok` additively; `last_error` is still never serialised.
+
+### Tests
+
+- `machine-readers.test.mjs`: aggregate lands + detail throws keeps the aggregate
+  true and the detail false, with the failure logged; both land is both true; a
+  non-rights path leaves the detail outcome null; the aggregate failing is still
+  the aggregate dying.
+
 ## 1.24.0 - 2026-08-30
 
 **Headline:** the rights position stops being purely declaratory — a verified
