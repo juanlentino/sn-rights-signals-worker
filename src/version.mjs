@@ -32,6 +32,9 @@ export function versionResponse(request, env) {
         ae_bound: !!(env && env.SN_MR && typeof env.SN_MR.writeDataPoint === "function"),
         last_write_ok: sensor.last_write_ok,
         last_write_at: sensor.last_write_at,
+        // v1.24.1: additive. The rights-detail stream's own outcome; null until
+        // a rights-surface path has been observed in this isolate.
+        detail_last_write_ok: sensor.detail_last_write_ok,
       },
     },
     null,

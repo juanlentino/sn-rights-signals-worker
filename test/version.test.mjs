@@ -16,7 +16,7 @@ describe("versionResponse — sensor-alive block", () => {
 
   it("carries the sensor block, with ae_bound live from env before any write", async () => {
     const bound = await versionResponse(mkReq(), { SN_MR: { writeDataPoint: () => {} } }).json();
-    expect(bound.sensor).toEqual({ ae_bound: true, last_write_ok: null, last_write_at: null });
+    expect(bound.sensor).toEqual({ ae_bound: true, last_write_ok: null, last_write_at: null, detail_last_write_ok: null });
     const unbound = await versionResponse(mkReq(), {}).json();
     expect(unbound.sensor.ae_bound).toBe(false);
   });
@@ -56,7 +56,7 @@ describe("versionResponse — sensor-alive block", () => {
     const body = JSON.parse(text);
     expect(body.sensor.last_write_ok).toBe(false);
     expect(body.sensor.last_error).toBeUndefined();
-    expect(Object.keys(body.sensor).sort()).toEqual(["ae_bound", "last_write_at", "last_write_ok"]);
+    expect(Object.keys(body.sensor).sort()).toEqual(["ae_bound", "detail_last_write_ok", "last_write_at", "last_write_ok"]); // v1.24.1: detail outcome is additive; last_error still never serialised
     spy.mockRestore();
   });
 });

@@ -158,9 +158,14 @@ export function classifySurface(pathname) {
 //   last_error    — last failure message, LOG/MEMORY ONLY: never serialized
 //                   into a response (the getter's copy is for callers that
 //                   know the contract; version.mjs deliberately omits it).
-const sensorState = { ae_bound: null, last_write_ok: null, last_write_at: null, last_error: null };
+//   detail_last_write_ok — v1.24.1: the RIGHTS-DETAIL stream's own outcome.
+//                   It used to share the aggregate's bookkeeping: a detail
+//                   write that threw flipped last_write_ok to false AFTER the
+//                   aggregate row had landed, so the aggregate sensor read
+//                   dead for a failure in a stream that sees ~80 rows a month.
+const sensorState = { ae_bound: null, last_write_ok: null, last_write_at: null, last_error: null, detail_last_write_ok: null };
 
-/** @returns {{ae_bound:boolean|null, last_write_ok:boolean|null, last_write_at:string|null, last_error:string|null}} */
+/** @returns {{ae_bound:boolean|null, last_write_ok:boolean|null, last_write_at:string|null, last_error:string|null, detail_last_write_ok:boolean|null}} */
 export function getSensorState() {
   return { ...sensorState };
 }
@@ -172,6 +177,7 @@ export function _resetSensorStateForTests() {
   sensorState.last_write_ok = null;
   sensorState.last_write_at = null;
   sensorState.last_error = null;
+  sensorState.detail_last_write_ok = null;
 }
 
 /**
@@ -276,11 +282,20 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     // 30 days). Separate dataset, separate contract, never summed with the
     // aggregate above. Cheap because rare, and these are the events the
     // published claim actually rests on.
-    observeRightsSurfaceDetail(request, env, pathname, surface, family, vp);
-
+    // The aggregate row is written; say so BEFORE the detail stream runs, so
+    // a detail failure can never be booked against the aggregate sensor.
     sensorState.last_write_ok = true;
     sensorState.last_write_at = new Date().toISOString();
     sensorState.last_error = null;
+
+    try {
+      if (observeRightsSurfaceDetail(request, env, pathname, surface, family, vp)) {
+        sensorState.detail_last_write_ok = true;
+      }
+    } catch (err) {
+      sensorState.detail_last_write_ok = false;
+      console.error('[machine-readers] rights-detail write failed (aggregate row landed): ' + (err && err.message ? err.message : String(err)));
+    }
     // NOTE: markdownRequested is written to the dataset but deliberately NOT
     // added to this return value. Two tests pin this shape with toEqual, nothing
     // in the Worker consumes it, and widening it would break an existing
