@@ -1,3 +1,4 @@
+import { readSqlJson } from "./sql-response.mjs";
 // Machine-readership sensor (v1.4.0) — the edge half of the plugin's v10.0.0
 // Machine Readers surface. AI crawlers do not execute JavaScript, so the
 // beacon-based analytics pipeline is structurally blind to them; this Worker
@@ -453,11 +454,16 @@ export async function machineReadersResponse(request, env) {
   try {
     const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/analytics_engine/sql`, {
       method: "POST",
+      redirect: "manual",
+      signal: AbortSignal.timeout(10000),
       headers: { authorization: `Bearer ${env.SN_MR_SQL_TOKEN}` },
       body: query,
     });
-    if (!res.ok) return json(502, { error: "upstream", status: res.status });
-    const data = await res.json();
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      return json(502, { error: "upstream", status: res.status });
+    }
+    const data = await readSqlJson(res);
     // taxonomy_version rides the ENVELOPE as well as every row: the envelope
     // says which definition this Worker would write today, the row field says
     // which definition each historical row was written under. A window that

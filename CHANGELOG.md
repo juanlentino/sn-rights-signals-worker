@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.24.2 - 2026-09-08
+
+### Fixed
+- Pin authenticated Analytics Engine SQL requests against redirects, cap them at 10 seconds, and enforce a 10 MiB streamed response limit. Release rejected bodies and report upstream failures without changing taxonomy or SQL results.
+
 ## 1.24.1 - 2026-09-05
 
 **Headline:** a rights-detail write failure is no longer booked as the
