@@ -101,6 +101,7 @@ export async function fetchDirectoryKeys(origin) {
 
   let res;
   try {
+    // redirect-ok: public HTTP-message-signatures key directory, no credential.
     res = await fetch(url, {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: { accept: "application/http-message-signatures-directory+json, application/json" },

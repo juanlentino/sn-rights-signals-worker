@@ -45,6 +45,7 @@ function taggedError(message, snCode) {
 }
 
 export async function checkCrawlerListDrift() {
+  // redirect-ok: public Cloudflare docs page, no credential (User-Agent only).
   const res = await fetch(DOCS_URL, {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     headers: { "User-Agent": "sn-rights-signals/1.0 (crawler-list-sync; +https://juanlentino.com)" },

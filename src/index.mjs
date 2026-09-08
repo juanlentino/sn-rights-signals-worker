@@ -57,6 +57,7 @@ export default {
   // extra edge-local Worker hop, zero bytes changed.
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
+    // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
     if (bypassesRightsSignals(pathname)) return fetch(request);
 
     // v1.24.0 (survey A2). Null until a signed request resolves it; the offer
@@ -149,6 +150,7 @@ export default {
       );
     }
 
+    // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
     const origin = await fetch(request);
 
     // v1.5.0: the reservation rides EVERY response, not just HTML and REST.
