@@ -57,6 +57,13 @@ jobs:
       # .cooldown-accept.json with a reason. Fail-closed on unmeasured ages.
       - name: Dependency cooldown gate
         run: node scripts/dependency-cooldown.mjs
+      # Every outbound call in src/ must either set redirect:"manual"/"error" or
+      # carry a `redirect-ok:` comment saying why it needs no guard. A NEW call
+      # site fails until classified. A step, not a job: per-job billing rounds up,
+      # and this runs in ~1s. Plain Node on purpose — this repo's vitest may run
+      # inside workerd, where the parser's native binding cannot load.
+      - name: Outbound redirect gate
+        run: node scripts/outbound-redirect-gate.mjs
       # Includes test/rights-consistency.test.mjs — the STATIC rights check:
       # drives the real Worker over a stubbed origin and asserts all four
       # signal layers agree as composed. Fails the PR on drift.

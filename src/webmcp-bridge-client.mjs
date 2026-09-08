@@ -152,6 +152,7 @@ export function snLoadCore(doc, url) {
 export async function snVerifyPage(deps) {
   var options = deps || {};
   var doc = options.doc || (typeof document !== "undefined" ? document : null);
+  // redirect-ok: browser-side bridge default fetcher — runs in the visitor page, not the Worker.
   var fetchFn = options.fetchFn || function (u, init) { return fetch(u, init); };
   var loadCore =
     options.loadCore ||
@@ -242,6 +243,7 @@ export async function snVerifyPage(deps) {
       : null;
     return Promise.resolve()
       .then(function () {
+        // redirect-ok: browser-side bridge fetch with credentials:"omit"; no ambient credential can attach.
         return fetchFn(u, { signal: controller ? controller.signal : undefined, credentials: "omit" });
       })
       .then(function (res) {

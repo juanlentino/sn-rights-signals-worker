@@ -14,6 +14,7 @@ import { fullRobotsTxt, originTail } from "./robots-block.mjs";
 // revert this file to appendLicenseOnly(body) (see git history, v1.1.1)
 // before debugging anything else.
 export async function robotsResponse(request) {
+  // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
   const origin = await fetch(request);
 
   // RFC 9309 §2.3.1 gives 4xx and 5xx OPPOSITE meanings, so "not ok" is not one
