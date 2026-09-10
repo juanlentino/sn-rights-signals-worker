@@ -32,6 +32,25 @@ never be the thing that breaks login or the admin dashboard.
 | `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below). Isolate-memory, best-effort — resets on redeploy/eviction. |
 | `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`). `?days=N` clamped to 1–90, default 30. Queries the Analytics Engine SQL API; 503 when the read secrets aren't configured. |
 
+## Native WebMCP — the fifth rights surface
+
+The Worker injects an **anchored** WebMCP bridge, alongside `robots.txt`, the policy
+document, the agent-discovery documents and the machine-readership sensor.
+
+It is served by this Worker rather than by **Cloudflare's own WebMCP toggle, which
+must stay off**. Two injectors on one surface is the failure mode: the anchored
+bridge is the one that is versioned, SRI-pinned and deployed with the rest of this
+code, and the vendor toggle would put a second, unversioned one beside it.
+
+Gating is **behavioural, not user-agent string** — a UA allowlist is a guess about
+who is asking, and this Worker's whole posture is to measure rather than guess.
+
+Adoption is measured for the same reason: the sensor counts `markdown_requested`, so
+the markdown-for-agents negotiation is judged by what clients actually request. And
+agent-discovery documents carry their **own surface class** rather than being counted
+as ordinary page reads, because conflating "an agent fetched the manifest that
+describes our terms" with "an agent read an article" makes both numbers useless.
+
 ## The policy document, and its draft state
 
 `/tdm-policy/` is the human-readable end of the chain: the `TDM-Policy` header,
