@@ -80,7 +80,11 @@ describe("content negotiation", () => {
     [null, false, "no Accept header at all"],
     ["application/ld+json", true, "an explicit ld+json request"],
     ["application/json", true, "an explicit json request"],
-    ["application/ld+json,text/html;q=0.9", false, "html also acceptable — prose wins"],
+    ["application/ld+json,text/html", false, "html equally acceptable — prose wins the tie"],
+    // #54: q was ignored, so an explicit preference for JSON over HTML lost.
+    ["application/ld+json, text/html;q=0.5", true, "json outranks html"],
+    ["application/json;q=0.5, text/html", false, "html outranks json"],
+    ["application/ld+json;q=0", false, "json explicitly refused"],
   ])("Accept %j -> odrl=%s (%s)", (accept, expected) => {
     expect(prefersOdrl(accept)).toBe(expected);
   });
@@ -98,6 +102,16 @@ describe("content negotiation", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
     expect(res.headers.get("vary")).toBe("Accept");
     expect(await res.text()).toContain("<h1>Text and Data Mining Policy</h1>");
+  });
+
+  // #55: the policy page skipped the markdown negotiation every origin page gets.
+  it("serves the policy as markdown to an explicit text/markdown request", async () => {
+    const res = await policy("text/markdown");
+    expect(res.headers.get("content-type")).toContain("text/markdown");
+    expect(res.headers.get("tdm-reservation")).toBe("1");
+    const body = await res.text();
+    expect(body).toContain("# Text and Data Mining Policy");
+    expect(body).not.toContain("<h1>");
   });
 
   it("serves the ODRL policy to an explicit ld+json request, at the SAME url", async () => {

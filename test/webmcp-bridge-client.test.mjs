@@ -204,9 +204,32 @@ function fakeCore(overrides) {
       deriveBlockOnlyAnchor: rec("deriveBlockOnlyAnchor", { verdict: { state: STATE.NOTE, detail: "block only" } }),
       deriveLedgerTxAnchor: rec("deriveLedgerTxAnchor", { state: STATE.PASS, detail: "ledger tx" }),
       deriveTxAnchor: rec("deriveTxAnchor", { state: STATE.PASS, detail: "tx anchor" }),
-      deriveOverallVerdict: rec("deriveOverallVerdict", (states) => ({
-        level: "pass", word: "Authentic", line: "all four agree", caveats: [], states,
+      deriveOverallVerdict: rec("deriveOverallVerdict", (states, retractionState) => ({
+        level: retractionState && retractionState.retraction ? "retracted" : "pass",
+        word: retractionState && retractionState.retraction ? "Retracted" : "Authentic",
+        line: "all four agree", caveats: [], states, retractionState,
       })),
+      // Retraction helpers, behaviourally faithful to prov-verify-core.js so
+      // the port's sequencing (lookup -> relevance -> verify -> outcome) is
+      // exercised rather than stubbed flat.
+      base64ToBytes: (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)),
+      retractionUrl: rec("retractionUrl", (base, uid, version) =>
+        base.replace(/\/?$/, "") + "/retractions/" + encodeURIComponent(uid) + "/v" + Number(version) + ".json"),
+      deriveRetraction: rec("deriveRetraction", (res, uid, version) => {
+        if (res.status === 404) return { retraction: null, unknown: false, mismatched: false };
+        const payload = res.json && res.json.payload;
+        if (!payload || payload.kind !== "retraction") return { retraction: null, unknown: true, mismatched: false };
+        if (payload.note_uid !== uid || Number(payload.version) !== Number(version)) {
+          return { retraction: null, unknown: false, mismatched: true };
+        }
+        return { retraction: payload, unknown: false, mismatched: false };
+      }),
+      retractionOutcome: rec("retractionOutcome", (found, verified) => {
+        if (found.retraction) {
+          return verified === true ? { retraction: found.retraction, unknown: false } : { retraction: null, unknown: true };
+        }
+        return { retraction: null, unknown: !!(found.unknown || found.mismatched) };
+      }),
     },
     overrides || {}
   );
@@ -352,6 +375,10 @@ describe("snVerifyPage", () => {
       "live-match": STATE.UNREACHABLE,
       anchor: STATE.UNREACHABLE,
     });
+    // #52: with no credential the retraction could not be looked up either —
+    // the verdict is qualified, never clean.
+    expect(core.order[0].args[1]).toEqual({ retraction: null, unknown: true });
+    expect(out.retraction).toEqual({ retraction: null, unknown: true });
     expect(out.ledger_record).toBe(MANIFEST.calls.record.url);
     expect(out.docket).toBe(MANIFEST.spec);
   });
@@ -384,7 +411,7 @@ describe("snVerifyPage", () => {
     };
 
     const seen = [];
-    const cred = { proof: {}, credentialSubject: { url: "https://juanlentino.com/notes/hello/" } };
+    const cred = { proof: { pubkey_id: "k-2026-02" }, credentialSubject: { url: "https://juanlentino.com/notes/hello/" } };
     const out = await snVerifyPage({
       doc: docWith(MANIFEST),
       fetchFn: routedFetch(
@@ -425,9 +452,116 @@ describe("snVerifyPage", () => {
     // the manifest's record URL.
     expect(core.order.find((c) => c.name === "ledgerKeysUrl").args[0]).toBe("https://ledger.example/raw");
     expect(seen).toContain("https://ledger.example/raw/keys/provenance-keys.json");
-    expect(core.order.find((c) => c.name === "deriveKeyAgreement").args.length).toBe(3);
+    // #51: the credential NAMES its signing key; the agreement must resolve
+    // that key by id, not the did's first key, or a record signed under a
+    // rotated key fails "signature invalid" while the docket passes it.
+    expect(core.order.find((c) => c.name === "deriveKeyAgreement").args.length).toBe(4);
+    expect(core.order.find((c) => c.name === "deriveKeyAgreement").args[3]).toBe("k-2026-02");
     // Content hash: the actual digest hex and the credential's claim.
     expect(core.order.find((c) => c.name === "deriveContentHashVerdict").args).toEqual(["deadbeef", "deadbeef"]);
+  });
+
+  // #52: the docket consults the retraction record and a VERIFIED retraction
+  // dominates the verdict; the port never looked, so a withdrawn record read
+  // "Authentic".
+  describe("retraction state (#52)", () => {
+    const RETRACTION_URL = "https://ledger.example/raw/retractions/u1/v2.json";
+    const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    const b64 = (bytes) => btoa(String.fromCharCode(...bytes));
+
+    async function signedRetraction(tamper) {
+      const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+      const jwk = await crypto.subtle.exportKey("jwk", kp.publicKey);
+      const payload = { kind: "retraction", note_uid: "u1", version: 2, retracted_at: "2026-09-01", what_was_wrong: "a figure" };
+      const bytes = new TextEncoder().encode(JSON.stringify(payload));
+      const sig = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, kp.privateKey, bytes));
+      if (tamper) sig[0] ^= 0xff;
+      const rec = {
+        payload,
+        signed_payload_b64: b64(bytes),
+        signature: b64(sig),
+        content_hash: hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))),
+        pubkey_id: "k-retract",
+      };
+      return { jwk, rec, payload };
+    }
+
+    function coreWith(jwk) {
+      const core = fakeCore();
+      core.deriveKeyAgreement = (...args) => { core.order.push({ name: "deriveKeyAgreement", args }); return { jwk }; };
+      core.bytesToHex = (bytes) => hex(bytes);
+      return core;
+    }
+
+    const routes = (extra) => ({
+      [MANIFEST.calls.credential.url]: { proof: {} },
+      [MANIFEST.calls.did.url]: { verificationMethod: [{ publicKeyJwk: {} }] },
+      [MANIFEST.calls.key_history.url]: { keys: [] },
+      "https://ledger.example/raw/keys/provenance-keys.json": { keys: [] },
+      ...extra,
+    });
+
+    it("reads a 404 at the retraction path as not retracted, and says so to the verdict", async () => {
+      const core = fakeCore();
+      const seen = [];
+      const out = await snVerifyPage({ doc: docWith(MANIFEST), fetchFn: routedFetch(routes({}), seen), loadCore: async () => core });
+      expect(seen).toContain(RETRACTION_URL);
+      expect(out.retraction).toEqual({ retraction: null, unknown: false });
+      expect(core.order.find((c) => c.name === "deriveOverallVerdict").args[1]).toEqual({ retraction: null, unknown: false });
+      expect(out.overall.word).toBe("Authentic");
+    });
+
+    it("honours a retraction that hashes and verifies under the key it names", async () => {
+      const { jwk, rec, payload } = await signedRetraction(false);
+      const core = coreWith(jwk);
+      const out = await snVerifyPage({
+        doc: docWith(MANIFEST), fetchFn: routedFetch(routes({ [RETRACTION_URL]: rec })), loadCore: async () => core,
+      });
+      expect(out.retraction).toEqual({ retraction: payload, unknown: false });
+      expect(out.overall.word).toBe("Retracted");
+      // Verified under the key the RETRACTION names, resolved by id.
+      const agreements = core.order.filter((c) => c.name === "deriveKeyAgreement").map((c) => c.args[3]);
+      expect(agreements).toContain("k-retract");
+      expect(out.checks.signature).toBeTruthy(); // the four checks still run
+    });
+
+    it("does not honour a retraction whose signature fails, but does not wave it through either", async () => {
+      const { jwk, rec } = await signedRetraction(true);
+      const core = coreWith(jwk);
+      const out = await snVerifyPage({
+        doc: docWith(MANIFEST), fetchFn: routedFetch(routes({ [RETRACTION_URL]: rec })), loadCore: async () => core,
+      });
+      expect(out.retraction).toEqual({ retraction: null, unknown: true });
+      expect(core.order.find((c) => c.name === "deriveOverallVerdict").args[1]).toEqual({ retraction: null, unknown: true });
+    });
+
+    it("reads an unreachable retraction path as unknown, never as clean", async () => {
+      const core = fakeCore();
+      const out = await snVerifyPage({
+        doc: docWith(MANIFEST), fetchFn: routedFetch(routes({ [RETRACTION_URL]: new Error("blocked") })), loadCore: async () => core,
+      });
+      expect(out.retraction).toEqual({ retraction: null, unknown: true });
+    });
+
+    it("qualifies the verdict when the core predates retraction support", async () => {
+      const core = fakeCore();
+      delete core.retractionUrl;
+      const out = await snVerifyPage({ doc: docWith(MANIFEST), fetchFn: routedFetch(routes({})), loadCore: async () => core });
+      expect(out.retraction).toEqual({ retraction: null, unknown: true });
+    });
+  });
+
+  it("passes an empty key id when the credential names none", async () => {
+    const core = fakeCore();
+    await snVerifyPage({
+      doc: docWith(MANIFEST),
+      fetchFn: routedFetch({
+        [MANIFEST.calls.credential.url]: { proof: {} },
+        [MANIFEST.calls.did.url]: { verificationMethod: [{ publicKeyJwk: {} }] },
+      }),
+      loadCore: async () => core,
+    });
+    expect(core.order.find((c) => c.name === "deriveKeyAgreement").args[3]).toBe("");
   });
 
   it("walks the block-only anchor path: ledger record, then the ledger-supplied txid", async () => {

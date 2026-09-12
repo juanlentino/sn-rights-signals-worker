@@ -102,6 +102,12 @@ class Markdown {
     this.title = "";
     this.inTitle = false;
     this.titleDone = false;
+    // A text NODE can arrive as several chunks, split wherever the stream
+    // chunked the input — including mid-entity (`&am` | `p;`). Decoding per
+    // chunk emitted such an entity raw (#53); text is buffered here until
+    // HTMLRewriter marks the last chunk of the node, then decoded once.
+    this.text = "";
+    this.cell = 0;
   }
 
   push(s) {
@@ -127,11 +133,23 @@ class Markdown {
   }
 }
 
+// A self-closing FOREIGN element (`<svg/>`, or `<a/>`/`<p/>` inside an
+// <svg>/<math> subtree) has no end tag, and HTMLRewriter's onEndTag() throws
+// "No end tag" for it. The element is already over, so the close callback runs
+// immediately instead of aborting the whole conversion (#50).
+function onEnd(el, cb) {
+  try {
+    el.onEndTag(cb);
+  } catch {
+    cb();
+  }
+}
+
 function openClose(md, marker) {
   return {
     element(el) {
       md.push(marker);
-      el.onEndTag(() => md.push(marker));
+      onEnd(el, () => md.push(marker));
     },
   };
 }
@@ -143,7 +161,7 @@ export function markdownRewriter(md) {
     .on(SKIP, {
       element(el) {
         md.skip++;
-        el.onEndTag(() => {
+        onEnd(el, () => {
           md.skip--;
         });
       },
@@ -155,13 +173,17 @@ export function markdownRewriter(md) {
       element(el) {
         if (md.titleDone) return;
         md.inTitle = true;
-        el.onEndTag(() => {
+        onEnd(el, () => {
           md.inTitle = false;
           md.titleDone = true;
         });
       },
       text(t) {
-        if (md.inTitle) md.title += decodeEntities(t.text);
+        if (!md.inTitle) return;
+        md.text += t.text;
+        if (!t.lastInTextNode) return;
+        md.title += decodeEntities(md.text);
+        md.text = "";
       },
     })
     .on("h1, h2, h3, h4, h5, h6", {
@@ -169,20 +191,29 @@ export function markdownRewriter(md) {
         const level = Number.parseInt(HEADING.exec(el.tagName.toLowerCase())?.[1] ?? "1", 10);
         md.block();
         md.push("#".repeat(level) + " ");
-        el.onEndTag(() => md.block());
+        onEnd(el, () => md.block());
       },
     })
-    .on("p, div, section, article, tr, dt, dd", {
+    .on("p, div, section, article, tr, dt, dd, figure, figcaption", {
       element(el) {
         md.block();
-        el.onEndTag(() => md.block());
+        onEnd(el, () => md.block());
+      },
+    })
+    // Cells need a boundary of their own: `<td>2026</td><td>77 reads</td>`
+    // came through as `202677 reads` (#53). The table stays flat on purpose
+    // (see the fidelity note at the top); this is a separator, not a table.
+    .on("tr", { element() { md.cell = 0; } })
+    .on("td, th", {
+      element() {
+        if (md.cell++ > 0) md.push(" | ");
       },
     })
     .on("blockquote", {
       element(el) {
         md.quote++;
         md.block();
-        el.onEndTag(() => {
+        onEnd(el, () => {
           md.quote--;
           md.block();
         });
@@ -192,7 +223,7 @@ export function markdownRewriter(md) {
       element(el) {
         md.lists.push({ ordered: el.tagName.toLowerCase() === "ol", n: 0 });
         md.block();
-        el.onEndTag(() => {
+        onEnd(el, () => {
           md.lists.pop();
           md.block();
         });
@@ -203,7 +234,7 @@ export function markdownRewriter(md) {
         const list = md.lists[md.lists.length - 1];
         const marker = list && list.ordered ? `${++list.n}. ` : "- ";
         md.push("\n" + "> ".repeat(md.quote) + md.indent() + marker);
-        el.onEndTag(() => md.push(""));
+        onEnd(el, () => md.push(""));
       },
     })
     .on("pre", {
@@ -211,7 +242,7 @@ export function markdownRewriter(md) {
         md.pre++;
         md.block();
         md.push("```\n");
-        el.onEndTag(() => {
+        onEnd(el, () => {
           md.pre--;
           md.push("\n```");
           md.block();
@@ -224,7 +255,7 @@ export function markdownRewriter(md) {
       element(el) {
         if (md.pre > 0) return;
         md.push("`");
-        el.onEndTag(() => md.push("`"));
+        onEnd(el, () => md.push("`"));
       },
     })
     .on("strong, b", openClose(md, "**"))
@@ -234,7 +265,7 @@ export function markdownRewriter(md) {
         const href = safeUrl(decodeEntities(el.getAttribute("href") || ""));
         if (!href) return;
         md.push("[");
-        el.onEndTag(() => md.push(`](${href})`));
+        onEnd(el, () => md.push(`](${href})`));
       },
     })
     .on("img", {
@@ -252,14 +283,18 @@ export function markdownRewriter(md) {
     .on("*", {
       text(t) {
         if (md.inTitle) return;
+        md.text += t.text;
+        if (!t.lastInTextNode) return;
+        const decoded = decodeEntities(md.text);
+        md.text = "";
         if (md.pre > 0) {
-          md.push(decodeEntities(t.text));
+          md.push(decoded);
           return;
         }
         // Collapse runs of whitespace to a single space. Newlines in source
         // HTML are formatting, not content, and preserving them would turn
         // every wrapped paragraph into a ragged list of short lines.
-        const s = decodeEntities(t.text).replace(/\s+/g, " ");
+        const s = decoded.replace(/\s+/g, " ");
         if (s.trim() === "" && s !== " ") return;
         md.push(s);
       },

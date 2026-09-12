@@ -118,5 +118,21 @@ describe("the sn: vocabulary at /ns/tdm", () => {
       const res = await ns("/ns/tdm");
       expect(res.headers.get("tdm-reservation")).toBe("1");
     });
+
+    // #55: Worker-owned pages skipped the markdown negotiation every origin page gets.
+    it("answers markdown on an explicit ask, like every origin page", async () => {
+      const res = await ns("/ns/tdm", "text/markdown");
+      expect(res.headers.get("content-type")).toContain("text/markdown");
+      expect(res.headers.get("tdm-reservation")).toBe("1");
+      const body = await res.text();
+      expect(body).toContain("title: sn: vocabulary");
+      expect(body).toContain("# The `sn:` vocabulary");
+      expect(body).not.toContain("<h1>");
+    });
+
+    it("keeps the JSON-LD form when a client accepts both ld+json and markdown", async () => {
+      const res = await ns("/ns/tdm", "application/ld+json, text/markdown");
+      expect(res.headers.get("content-type")).toContain("application/ld+json");
+    });
   });
 });

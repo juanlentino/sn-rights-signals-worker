@@ -153,4 +153,53 @@ describe("htmlToMarkdown", () => {
     const out = await md("<body><div><div><p>a</p></div></div><section></section><p>b</p></body>");
     expect(/\n{3}/.test(out)).toBe(false);
   });
+
+  // #50: a self-closing foreign element (<svg/>, or <a/>/<p/> inside an
+  // <svg>/<math> subtree) has no end tag, and HTMLRewriter's onEndTag() throws
+  // "No end tag" for it. That must not abort the whole conversion.
+  it("survives self-closing foreign elements instead of aborting the conversion", async () => {
+    const out = await md(
+      "<body><p>before</p><svg/><p>middle</p>" +
+        '<svg viewBox="0 0 1 1"><a href="/x"/><p/><title>icon</title></svg><p>after</p></body>',
+    );
+    expect(out).toContain("before");
+    expect(out).toContain("middle");
+    expect(out).toContain("after");
+    expect(out).not.toContain("icon");
+  });
+
+  // #53: cells had no boundary, so adjacent cells fused into one token.
+  it("separates table cells instead of gluing them together", async () => {
+    const out = await md(
+      "<body><table><tr><th>Year</th><th>Reads</th></tr><tr><td>2026</td><td>77 reads</td></tr></table></body>",
+    );
+    expect(out).not.toContain("202677");
+    expect(out).not.toContain("YearReads");
+    expect(out).toContain("2026 | 77 reads");
+    expect(out).toContain("Year | Reads");
+  });
+
+  it("puts a figcaption on its own block, not glued to the image", async () => {
+    const out = await md('<body><figure><img src="/i.png" alt="a chart"><figcaption>Caption</figcaption></figure><p>x</p></body>');
+    expect(out).toContain("![a chart](/i.png)\n\nCaption");
+  });
+
+  // #53: entity decoding ran per text CHUNK, so an entity straddling a stream
+  // chunk boundary arrived as two halves and was emitted raw.
+  it("decodes an entity that straddles a stream chunk boundary", async () => {
+    const chunks = ["<html><head><title>A &am", "p; B</title></head><body><p>a &am", "p; b</p><pre>x &l", "t; y</pre></body></html>"];
+    const enc = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        for (const c of chunks) controller.enqueue(enc.encode(c));
+        controller.close();
+      },
+    });
+    const out = await htmlToMarkdown(new Response(stream, { headers: { "content-type": "text/html" } }));
+    expect(out).toContain("title: A & B");
+    expect(out).toContain("a & b");
+    expect(out).toContain("x < y");
+    expect(out).not.toContain("&amp;");
+    expect(out).not.toContain("&lt;");
+  });
 });

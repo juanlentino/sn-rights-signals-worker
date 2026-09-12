@@ -6,10 +6,10 @@ import { htmlToMarkdown } from "./html-to-markdown.mjs";
 // was already using it for (here, compressed-variant caching).
 export function withVaryAccept(response) {
   const headers = new Headers(response.headers);
-  const existing = headers.get("vary") || "";
-  if (!/\baccept\b/i.test(existing.replace(/accept-encoding/gi, ""))) {
-    headers.append("Vary", "Accept");
-  }
+  // Token comparison, not a substring match: `Accept-Language` is not
+  // `Accept` (#54).
+  const tokens = (headers.get("vary") || "").toLowerCase().split(",").map((t) => t.trim());
+  if (!tokens.includes("accept")) headers.append("Vary", "Accept");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
@@ -23,16 +23,23 @@ export function withVaryAccept(response) {
 // from this Worker's origin subrequest, which is always the HTML, and the
 // conversion happens after that lookup. Downstream caches are the ones that
 // need telling.
-export async function markdownResponse(origin, cacheControl) {
+//
+// The twin keeps the origin's cache and robots directives: a page the origin
+// marked private/no-store or noindex must not become a publicly cacheable,
+// indexable markdown document. The cache-control default applies only when
+// the origin sent none.
+export async function markdownResponse(origin) {
   const markdown = await htmlToMarkdown(origin);
-  return new Response(markdown, {
-    status: 200,
-    headers: {
-      "content-type": "text/markdown; charset=utf-8",
-      vary: "Accept",
-      "cache-control": cacheControl || "public, max-age=300",
-    },
+  const headers = new Headers({
+    "content-type": "text/markdown; charset=utf-8",
+    vary: "Accept",
+    "cache-control": "public, max-age=300",
   });
+  for (const name of ["cache-control", "x-robots-tag", "content-language"]) {
+    const value = origin.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  return new Response(markdown, { status: 200, headers });
 }
 
 // Convert when the client asked and the origin gave us a page to convert;
@@ -48,10 +55,21 @@ export async function maybeMarkdown(origin, wantsMarkdown) {
   // 200 only. Error pages are chrome, and a Cloudflare 1xxx interstitial
   // rendered as markdown would be a confident-looking document about nothing.
   if (origin.status !== 200) return null;
+  // Only an HTML page converts; a JSON-LD representation negotiated on the
+  // same URL is already the machine form.
+  if (!(origin.headers.get("content-type") || "").includes("text/html")) return null;
+  // The converter LOCKS the body it reads, so a failure mid-stream used to
+  // leave the caller's fallback with nothing to serve — a rejected fetch
+  // (1101) instead of the HTML promised above (#49). Convert a clone (a tee
+  // underneath) and keep `origin` untouched for the fallback; on success the
+  // unread branch is cancelled so the tee does not buffer the whole page.
+  let markdown;
   try {
-    return await markdownResponse(origin);
+    markdown = await markdownResponse(origin.clone());
   } catch (err) {
     console.error("markdown conversion failed", err && err.message ? err.message : err);
     return null;
   }
+  if (origin.body) origin.body.cancel().catch(() => {});
+  return markdown;
 }

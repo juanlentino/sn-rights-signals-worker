@@ -139,7 +139,9 @@ export function classifySurface(pathname) {
   if (p.startsWith("/.well-known/")) return "well-known";
   if (p === "/feed" || p === "/feed/" || p.startsWith("/feed/") || p.endsWith("/feed/")) return "feed";
   if (p === "/wp-json" || p.startsWith("/wp-json/")) return "wp-json";
-  if (p.includes("sitemap")) return "sitemap";
+  // The sitemap FILES, not any path mentioning the word: a note about
+  // sitemaps is content (#55).
+  if (/^\/(wp-)?sitemap[^/]*\.xml$/.test(p)) return "sitemap";
   if (p.startsWith("/wp-content/") || p.startsWith("/wp-includes/")) return "asset";
   return "html";
 }

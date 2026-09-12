@@ -1,6 +1,13 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import worker from "../src/index.mjs";
 import { withVaryAccept } from "../src/markdown-negotiation.mjs";
+import { htmlToMarkdown } from "../src/html-to-markdown.mjs";
+
+// The real converter by default; one test swaps in a failing one.
+vi.mock("../src/html-to-markdown.mjs", async (importOriginal) => {
+  const real = await importOriginal();
+  return { ...real, htmlToMarkdown: vi.fn(real.htmlToMarkdown) };
+});
 
 const PAGE =
   "<html><head><title>A Note</title></head><body><nav><a href='/'>MENU</a></nav>" +
@@ -79,6 +86,47 @@ describe("markdown negotiation at the edge", () => {
     expect(res.headers.get("tdm-reservation")).toBe("1");
   });
 
+  // #49: the fallback used to hand injectTdmMeta() the same Response whose
+  // body the converter had already locked, so a converter failure became a
+  // rejected fetch (1101) instead of the HTML this branch promises.
+  it("falls back to the HTML when the converter fails after reading the body", async () => {
+    stubOrigin(PAGE, { "content-type": "text/html" });
+    htmlToMarkdown.mockImplementationOnce(async (res) => {
+      await res.arrayBuffer(); // consume, then fail mid-conversion
+      throw new Error("converter edge case");
+    });
+    const res = await get("text/markdown");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const body = await res.text();
+    expect(body).toContain("<article>");
+    expect(body).toContain('<meta name="tdm-reservation" content="1">');
+  });
+
+  // The twin used to discard every origin header and hard-code a public
+  // cache-control, so a private/no-store page became publicly cacheable as
+  // markdown and a noindex page lost its X-Robots-Tag.
+  it("keeps the origin's cache-control and robots directives on the markdown twin", async () => {
+    stubOrigin(PAGE, {
+      "content-type": "text/html",
+      "cache-control": "private, no-store",
+      "x-robots-tag": "noindex, nofollow",
+      "content-language": "en-GB",
+    });
+    const res = await get("text/markdown");
+    expect(res.headers.get("content-type")).toContain("text/markdown");
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(res.headers.get("content-language")).toBe("en-GB");
+  });
+
+  it("defaults cache-control on the markdown twin only when the origin sent none", async () => {
+    stubOrigin(PAGE, { "content-type": "text/html" });
+    const res = await get("text/markdown");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
+    expect(res.headers.get("x-robots-tag")).toBeNull();
+  });
+
   it("never converts an admin surface, whatever the Accept header says", async () => {
     stubOrigin("<html><body>admin</body></html>", { "content-type": "text/html" });
     const res = await worker.fetch(
@@ -96,6 +144,15 @@ describe("withVaryAccept", () => {
     const vary = res.headers.get("vary");
     expect(vary).toMatch(/accept-encoding/i);
     expect(vary).toMatch(/(^|[\s,])accept([\s,]|$)/i);
+  });
+
+  // #54: the check matched any token containing "accept", so an origin
+  // Vary: Accept-Language suppressed the append.
+  it("appends Accept when the origin varies on other Accept-* headers", () => {
+    const res = withVaryAccept(new Response("x", { headers: { vary: "Accept-Encoding, Accept-Language" } }));
+    const tokens = res.headers.get("vary").toLowerCase().split(/\s*,\s*/);
+    expect(tokens).toContain("accept");
+    expect(tokens).toContain("accept-language");
   });
 
   it("does not add a duplicate Accept entry", () => {

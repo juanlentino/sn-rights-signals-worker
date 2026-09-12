@@ -11,7 +11,7 @@ import { bypassesRightsSignals } from "./admin-bypass.mjs";
 import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawler-list-status.mjs";
 import { machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
 import { taxonomyResponse } from "./taxonomy.mjs";
-import { prefersMarkdown } from "./accept-markdown.mjs";
+import { best, parseAccept, prefersMarkdown } from "./accept-markdown.mjs";
 import { hasWebBotAuthHeaders, resolveSignatureState, signatureAgentOrigin } from "./web-bot-auth.mjs";
 import { licenceOfferHeaders } from "./licence-handshake.mjs";
 import { maybeMarkdown, withVaryAccept } from "./markdown-negotiation.mjs";
@@ -25,11 +25,15 @@ import { webmcpBridgeResponse } from "./webmcp-bridge.mjs";
 // treated `*/*` as JSON-willing would hand every crawler the machine document
 // and never the terms a human reviewer reads. Requiring the JSON type to be
 // named EXPLICITLY, and to not be outranked by text/html, gets both right.
+//
+// Same parser as the markdown negotiation, so qvalues count (#54):
+// `application/ld+json, text/html;q=0.5` is a JSON preference. A tie stays
+// HTML — prose wins when the client is indifferent.
 export function prefersOdrl(accept) {
-  if (!accept) return false;
-  const wantsJson = /\bapplication\/(ld\+)?json\b/i.test(accept);
-  if (!wantsJson) return false;
-  return !/\btext\/html\b/i.test(accept);
+  const entries = parseAccept(accept);
+  const json = best(entries, ["application/ld+json", "application/json"]);
+  if (json === 0) return false;
+  return json > best(entries, ["text/html"]);
 }
 
 function withTdmHeaders(response, licenceOffer = {}) {
@@ -39,6 +43,9 @@ function withTdmHeaders(response, licenceOffer = {}) {
   // identity, which is almost all of them — so this loop changes nothing on the
   // hot path and the declaration above is what an unverified agent still gets.
   for (const [name, value] of Object.entries(licenceOffer)) headers.set(name, value);
+  // An offer is keyed to the identity in Signature-Agent, so a shared cache
+  // must not replay it to a different agent (or to nobody).
+  if (Object.keys(licenceOffer).length > 0) headers.append("Vary", "Signature-Agent");
   // APPEND, never set. Link is a list header and WordPress emits its own
   // entries (REST discovery, shortlink); set() would clobber them and break
   // API autodiscovery. rel="license" is one more entry, not a replacement for
@@ -130,8 +137,15 @@ export default {
     // argument on a site whose whole claim is that assertions should be
     // checkable. Negotiated identically to /tdm-policy/ — same clients, same
     // reason, and behaving differently between the two would be a trap.
+    // #55: the Worker-owned HTML pages go through the same markdown
+    // negotiation every origin page gets (the JSON representations do not —
+    // they are already the machine form).
+    const accept = request.headers.get("accept");
+    const wantsMarkdown = prefersMarkdown(accept);
     if (pathname === "/ns/tdm" || pathname === "/ns/tdm/") {
-      return withTdmHeaders(nsTdmResponse(prefersOdrl(request.headers.get("accept"))), licenceOffer);
+      const page = nsTdmResponse(prefersOdrl(accept));
+      const md = await maybeMarkdown(page, wantsMarkdown);
+      return withTdmHeaders(md || page, licenceOffer);
     }
 
     // The self-hosted WebMCP bridge (design: signal-and-noise-tools
@@ -140,14 +154,13 @@ export default {
     if (pathname === "/webmcp/bridge.js") return withTdmHeaders(webmcpBridgeResponse(), licenceOffer);
 
     if (pathname === "/tdm-policy" || pathname === "/tdm-policy/") {
-      if (prefersOdrl(request.headers.get("accept"))) return withTdmHeaders(tdmPolicyOdrlResponse(), licenceOffer);
-      return withTdmHeaders(
-        new Response(tdmPolicyHtml(), {
-          status: 200,
-          headers: { "content-type": "text/html; charset=utf-8", vary: "Accept" },
-        }),
-        licenceOffer,
-      );
+      if (prefersOdrl(accept)) return withTdmHeaders(tdmPolicyOdrlResponse(), licenceOffer);
+      const page = new Response(tdmPolicyHtml(), {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8", vary: "Accept" },
+      });
+      const md = await maybeMarkdown(page, wantsMarkdown);
+      return withTdmHeaders(md || page, licenceOffer);
     }
 
     // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
@@ -180,7 +193,7 @@ export default {
     // be thrown away. The reservation still rides the markdown response —
     // withTdmHeaders() wraps both branches, per the v1.5.0 rule that content
     // taken in ANY representation is content taken.
-    const markdown = await maybeMarkdown(origin, prefersMarkdown(request.headers.get("accept")));
+    const markdown = await maybeMarkdown(origin, wantsMarkdown);
     if (markdown) return withTdmHeaders(markdown, licenceOffer);
 
     return withTdmHeaders(withVaryAccept(injectTdmMeta(origin)), licenceOffer);
