@@ -329,7 +329,13 @@ export async function snVerifyPage(deps) {
         detail: "This runtime does not support Ed25519 verification, so no pass/fail verdict is reported for the signature.",
       };
     }
-    var agreement = Core.deriveKeyAgreement(results[0].json, results[1].json, results[2].json);
+    // The key the credential NAMES, resolved by id (plugin #874): a record
+    // signed under a rotated key must verify under that key, not under
+    // whichever key the did lists first (#51).
+    var agreement = Core.deriveKeyAgreement(
+      results[0].json, results[1].json, results[2].json,
+      String((cred && cred.proof && cred.proof.pubkey_id) || "")
+    );
     if (agreement.verdict) return agreement.verdict;
     var decoded = Core.decodeProofBytes(cred);
     if (decoded.malformed) return decoded.verdict;

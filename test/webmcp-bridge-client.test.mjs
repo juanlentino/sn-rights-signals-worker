@@ -384,7 +384,7 @@ describe("snVerifyPage", () => {
     };
 
     const seen = [];
-    const cred = { proof: {}, credentialSubject: { url: "https://juanlentino.com/notes/hello/" } };
+    const cred = { proof: { pubkey_id: "k-2026-02" }, credentialSubject: { url: "https://juanlentino.com/notes/hello/" } };
     const out = await snVerifyPage({
       doc: docWith(MANIFEST),
       fetchFn: routedFetch(
@@ -425,9 +425,26 @@ describe("snVerifyPage", () => {
     // the manifest's record URL.
     expect(core.order.find((c) => c.name === "ledgerKeysUrl").args[0]).toBe("https://ledger.example/raw");
     expect(seen).toContain("https://ledger.example/raw/keys/provenance-keys.json");
-    expect(core.order.find((c) => c.name === "deriveKeyAgreement").args.length).toBe(3);
+    // #51: the credential NAMES its signing key; the agreement must resolve
+    // that key by id, not the did's first key, or a record signed under a
+    // rotated key fails "signature invalid" while the docket passes it.
+    expect(core.order.find((c) => c.name === "deriveKeyAgreement").args.length).toBe(4);
+    expect(core.order.find((c) => c.name === "deriveKeyAgreement").args[3]).toBe("k-2026-02");
     // Content hash: the actual digest hex and the credential's claim.
     expect(core.order.find((c) => c.name === "deriveContentHashVerdict").args).toEqual(["deadbeef", "deadbeef"]);
+  });
+
+  it("passes an empty key id when the credential names none", async () => {
+    const core = fakeCore();
+    await snVerifyPage({
+      doc: docWith(MANIFEST),
+      fetchFn: routedFetch({
+        [MANIFEST.calls.credential.url]: { proof: {} },
+        [MANIFEST.calls.did.url]: { verificationMethod: [{ publicKeyJwk: {} }] },
+      }),
+      loadCore: async () => core,
+    });
+    expect(core.order.find((c) => c.name === "deriveKeyAgreement").args[3]).toBe("");
   });
 
   it("walks the block-only anchor path: ledger record, then the ledger-supplied txid", async () => {
