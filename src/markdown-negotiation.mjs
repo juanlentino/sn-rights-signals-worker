@@ -55,6 +55,9 @@ export async function maybeMarkdown(origin, wantsMarkdown) {
   // 200 only. Error pages are chrome, and a Cloudflare 1xxx interstitial
   // rendered as markdown would be a confident-looking document about nothing.
   if (origin.status !== 200) return null;
+  // Only an HTML page converts; a JSON-LD representation negotiated on the
+  // same URL is already the machine form.
+  if (!(origin.headers.get("content-type") || "").includes("text/html")) return null;
   // The converter LOCKS the body it reads, so a failure mid-stream used to
   // leave the caller's fallback with nothing to serve — a rejected fetch
   // (1101) instead of the HTML promised above (#49). Convert a clone (a tee

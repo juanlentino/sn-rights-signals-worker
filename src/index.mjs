@@ -137,8 +137,15 @@ export default {
     // argument on a site whose whole claim is that assertions should be
     // checkable. Negotiated identically to /tdm-policy/ — same clients, same
     // reason, and behaving differently between the two would be a trap.
+    // #55: the Worker-owned HTML pages go through the same markdown
+    // negotiation every origin page gets (the JSON representations do not —
+    // they are already the machine form).
+    const accept = request.headers.get("accept");
+    const wantsMarkdown = prefersMarkdown(accept);
     if (pathname === "/ns/tdm" || pathname === "/ns/tdm/") {
-      return withTdmHeaders(nsTdmResponse(prefersOdrl(request.headers.get("accept"))), licenceOffer);
+      const page = nsTdmResponse(prefersOdrl(accept));
+      const md = await maybeMarkdown(page, wantsMarkdown);
+      return withTdmHeaders(md || page, licenceOffer);
     }
 
     // The self-hosted WebMCP bridge (design: signal-and-noise-tools
@@ -147,14 +154,13 @@ export default {
     if (pathname === "/webmcp/bridge.js") return withTdmHeaders(webmcpBridgeResponse(), licenceOffer);
 
     if (pathname === "/tdm-policy" || pathname === "/tdm-policy/") {
-      if (prefersOdrl(request.headers.get("accept"))) return withTdmHeaders(tdmPolicyOdrlResponse(), licenceOffer);
-      return withTdmHeaders(
-        new Response(tdmPolicyHtml(), {
-          status: 200,
-          headers: { "content-type": "text/html; charset=utf-8", vary: "Accept" },
-        }),
-        licenceOffer,
-      );
+      if (prefersOdrl(accept)) return withTdmHeaders(tdmPolicyOdrlResponse(), licenceOffer);
+      const page = new Response(tdmPolicyHtml(), {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8", vary: "Accept" },
+      });
+      const md = await maybeMarkdown(page, wantsMarkdown);
+      return withTdmHeaders(md || page, licenceOffer);
     }
 
     // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
@@ -187,7 +193,7 @@ export default {
     // be thrown away. The reservation still rides the markdown response —
     // withTdmHeaders() wraps both branches, per the v1.5.0 rule that content
     // taken in ANY representation is content taken.
-    const markdown = await maybeMarkdown(origin, prefersMarkdown(request.headers.get("accept")));
+    const markdown = await maybeMarkdown(origin, wantsMarkdown);
     if (markdown) return withTdmHeaders(markdown, licenceOffer);
 
     return withTdmHeaders(withVaryAccept(injectTdmMeta(origin)), licenceOffer);

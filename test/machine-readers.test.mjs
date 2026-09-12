@@ -142,6 +142,12 @@ describe("classifySurface — fixed enum of surface classes", () => {
     expect(classifySurface("/feed/json/")).toBe("feed");
     expect(classifySurface("/wp-json/wp/v2/posts")).toBe("wp-json");
     expect(classifySurface("/wp-sitemap.xml")).toBe("sitemap");
+    expect(classifySurface("/wp-sitemap-posts-post-1.xml")).toBe("sitemap");
+    expect(classifySurface("/sitemap.xml")).toBe("sitemap");
+    expect(classifySurface("/sitemap_index.xml")).toBe("sitemap");
+    // #55: a content path that merely mentions the word is content.
+    expect(classifySurface("/notes/why-the-sitemap-vanished/")).toBe("html");
+    expect(classifySurface("/wp-content/uploads/sitemap.png")).toBe("asset");
     expect(classifySurface("/wp-content/themes/x/style.css")).toBe("asset");
     expect(classifySurface("/notes/some-note/")).toBe("html");
   });

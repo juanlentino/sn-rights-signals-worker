@@ -104,6 +104,16 @@ describe("content negotiation", () => {
     expect(await res.text()).toContain("<h1>Text and Data Mining Policy</h1>");
   });
 
+  // #55: the policy page skipped the markdown negotiation every origin page gets.
+  it("serves the policy as markdown to an explicit text/markdown request", async () => {
+    const res = await policy("text/markdown");
+    expect(res.headers.get("content-type")).toContain("text/markdown");
+    expect(res.headers.get("tdm-reservation")).toBe("1");
+    const body = await res.text();
+    expect(body).toContain("# Text and Data Mining Policy");
+    expect(body).not.toContain("<h1>");
+  });
+
   it("serves the ODRL policy to an explicit ld+json request, at the SAME url", async () => {
     const res = await policy("application/ld+json");
     expect(res.headers.get("content-type")).toContain("application/ld+json");
