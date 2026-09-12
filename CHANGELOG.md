@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- Markdown fallback: `maybeMarkdown()` converts a clone of the origin response, so a converter failure falls back to the HTML instead of rejecting with "ReadableStream has been locked" (a 1101 page). The unread branch is cancelled on success. (#49)
+- `html-to-markdown`: a self-closing foreign element (`<svg/>`, or `<a/>`/`<p/>` inside `<svg>`/`<math>`) no longer aborts the conversion — one `onEnd()` helper runs the close callback when HTMLRewriter reports "No end tag". (#50)
+- `verify-page`: the signature leg passes `cred.proof.pubkey_id` to `Core.deriveKeyAgreement()`, so a record signed under a rotated key verifies under the key it names rather than the did's first key. (#51)
+- `verify-page`: `checkRetraction` is ported from the docket as a fifth, non-check leg. The retraction record is fetched, classified (`Core.deriveRetraction`), and verified (content hash, then Ed25519 under the key it names) before `Core.retractionOutcome`'s state reaches `Core.deriveOverallVerdict`. A retraction that fails to verify, an unreachable path, a missing credential or a core without retraction support all yield `{ retraction: null, unknown: true }` — a qualified verdict, never a clean one. The tool result gains a top-level `retraction` field; key documents are fetched once and shared with the signature leg. (#52)
+- `html-to-markdown`: `td`/`th` are separated by ` | ` (reset per row), `figure`/`figcaption` are blocks, and text is buffered per text node before entity decoding so an entity split across stream chunks (`&am` | `p;`) decodes instead of being emitted raw. (#53)
+- Content negotiation: `withVaryAccept()` compares `Vary` tokens, so `Accept-Language` no longer suppresses the `Accept` append; `prefersOdrl()` reuses `parseAccept()` and honours q (`application/ld+json, text/html;q=0.5` is a JSON preference; a tie stays HTML); `prefersMarkdown()` lets an explicit `text/markdown` entry outrank the `text/*` range either way (so `text/markdown;q=0` is a refusal) and no longer lets `text/*` win a tie against an explicit `text/html`. (#54)
+- Rewritten HTML drops `Content-Length` and suffixes the `ETag` with the bridge SRI prefix, so a bridge release invalidates cached pages instead of a 304 keeping a stale `integrity` attribute; `/tdm-policy/` and `/ns/tdm` answer `Accept: text/markdown` through the same negotiation as origin pages (JSON-LD forms are never converted); the `sitemap` surface matches `^/(wp-)?sitemap[^/]*\.xml$` only, so a note mentioning the word is recorded as `html`. (#55)
+- The markdown twin keeps the origin's `cache-control`, `x-robots-tag` and `content-language` (defaulting `public, max-age=300` only when the origin sent none), so a private/no-store or noindex page does not become a public, indexable markdown document. A licence offer appends `Signature-Agent` to `Vary` on every surface that emits one.
+
 ## 1.24.2 - 2026-09-08
 
 ### Fixed
