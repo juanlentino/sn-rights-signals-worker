@@ -102,6 +102,12 @@ class Markdown {
     this.title = "";
     this.inTitle = false;
     this.titleDone = false;
+    // A text NODE can arrive as several chunks, split wherever the stream
+    // chunked the input — including mid-entity (`&am` | `p;`). Decoding per
+    // chunk emitted such an entity raw (#53); text is buffered here until
+    // HTMLRewriter marks the last chunk of the node, then decoded once.
+    this.text = "";
+    this.cell = 0;
   }
 
   push(s) {
@@ -173,7 +179,11 @@ export function markdownRewriter(md) {
         });
       },
       text(t) {
-        if (md.inTitle) md.title += decodeEntities(t.text);
+        if (!md.inTitle) return;
+        md.text += t.text;
+        if (!t.lastInTextNode) return;
+        md.title += decodeEntities(md.text);
+        md.text = "";
       },
     })
     .on("h1, h2, h3, h4, h5, h6", {
@@ -184,10 +194,19 @@ export function markdownRewriter(md) {
         onEnd(el, () => md.block());
       },
     })
-    .on("p, div, section, article, tr, dt, dd", {
+    .on("p, div, section, article, tr, dt, dd, figure, figcaption", {
       element(el) {
         md.block();
         onEnd(el, () => md.block());
+      },
+    })
+    // Cells need a boundary of their own: `<td>2026</td><td>77 reads</td>`
+    // came through as `202677 reads` (#53). The table stays flat on purpose
+    // (see the fidelity note at the top); this is a separator, not a table.
+    .on("tr", { element() { md.cell = 0; } })
+    .on("td, th", {
+      element() {
+        if (md.cell++ > 0) md.push(" | ");
       },
     })
     .on("blockquote", {
@@ -264,14 +283,18 @@ export function markdownRewriter(md) {
     .on("*", {
       text(t) {
         if (md.inTitle) return;
+        md.text += t.text;
+        if (!t.lastInTextNode) return;
+        const decoded = decodeEntities(md.text);
+        md.text = "";
         if (md.pre > 0) {
-          md.push(decodeEntities(t.text));
+          md.push(decoded);
           return;
         }
         // Collapse runs of whitespace to a single space. Newlines in source
         // HTML are formatting, not content, and preserving them would turn
         // every wrapped paragraph into a ragged list of short lines.
-        const s = decodeEntities(t.text).replace(/\s+/g, " ");
+        const s = decoded.replace(/\s+/g, " ");
         if (s.trim() === "" && s !== " ") return;
         md.push(s);
       },
