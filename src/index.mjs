@@ -39,6 +39,9 @@ function withTdmHeaders(response, licenceOffer = {}) {
   // identity, which is almost all of them — so this loop changes nothing on the
   // hot path and the declaration above is what an unverified agent still gets.
   for (const [name, value] of Object.entries(licenceOffer)) headers.set(name, value);
+  // An offer is keyed to the identity in Signature-Agent, so a shared cache
+  // must not replay it to a different agent (or to nobody).
+  if (Object.keys(licenceOffer).length > 0) headers.append("Vary", "Signature-Agent");
   // APPEND, never set. Link is a list header and WordPress emits its own
   // entries (REST discovery, shortlink); set() would clobber them and break
   // API autodiscovery. rel="license" is one more entry, not a replacement for

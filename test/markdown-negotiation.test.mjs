@@ -103,6 +103,30 @@ describe("markdown negotiation at the edge", () => {
     expect(body).toContain('<meta name="tdm-reservation" content="1">');
   });
 
+  // The twin used to discard every origin header and hard-code a public
+  // cache-control, so a private/no-store page became publicly cacheable as
+  // markdown and a noindex page lost its X-Robots-Tag.
+  it("keeps the origin's cache-control and robots directives on the markdown twin", async () => {
+    stubOrigin(PAGE, {
+      "content-type": "text/html",
+      "cache-control": "private, no-store",
+      "x-robots-tag": "noindex, nofollow",
+      "content-language": "en-GB",
+    });
+    const res = await get("text/markdown");
+    expect(res.headers.get("content-type")).toContain("text/markdown");
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(res.headers.get("content-language")).toBe("en-GB");
+  });
+
+  it("defaults cache-control on the markdown twin only when the origin sent none", async () => {
+    stubOrigin(PAGE, { "content-type": "text/html" });
+    const res = await get("text/markdown");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
+    expect(res.headers.get("x-robots-tag")).toBeNull();
+  });
+
   it("never converts an admin surface, whatever the Accept header says", async () => {
     stubOrigin("<html><body>admin</body></html>", { "content-type": "text/html" });
     const res = await worker.fetch(

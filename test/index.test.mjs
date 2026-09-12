@@ -254,6 +254,9 @@ describe("licence handshake wiring (v1.24.0)", () => {
     // The declaration still rides alongside it — the offer is an addition to
     // the reservation, never a replacement for it.
     expect(res.headers.get("tdm-reservation")).toBe("1");
+    // An offer keyed to one agent must not be replayed by a shared cache to
+    // another: the response varies on the identity header that keyed it.
+    expect(res.headers.get("vary")).toMatch(/\bsignature-agent\b/i);
   });
 
   // FAIL OPEN. An agent whose signature does not hold gets the response it
@@ -283,5 +286,6 @@ describe("licence handshake wiring (v1.24.0)", () => {
     );
     expect(res.headers.get("tdm-licence-offer")).toBeNull();
     expect(res.headers.get("tdm-reservation")).toBe("1");
+    expect(res.headers.get("vary") || "").not.toMatch(/signature-agent/i);
   });
 });

@@ -23,16 +23,23 @@ export function withVaryAccept(response) {
 // from this Worker's origin subrequest, which is always the HTML, and the
 // conversion happens after that lookup. Downstream caches are the ones that
 // need telling.
-export async function markdownResponse(origin, cacheControl) {
+//
+// The twin keeps the origin's cache and robots directives: a page the origin
+// marked private/no-store or noindex must not become a publicly cacheable,
+// indexable markdown document. The cache-control default applies only when
+// the origin sent none.
+export async function markdownResponse(origin) {
   const markdown = await htmlToMarkdown(origin);
-  return new Response(markdown, {
-    status: 200,
-    headers: {
-      "content-type": "text/markdown; charset=utf-8",
-      vary: "Accept",
-      "cache-control": cacheControl || "public, max-age=300",
-    },
+  const headers = new Headers({
+    "content-type": "text/markdown; charset=utf-8",
+    vary: "Accept",
+    "cache-control": "public, max-age=300",
   });
+  for (const name of ["cache-control", "x-robots-tag", "content-language"]) {
+    const value = origin.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  return new Response(markdown, { status: 200, headers });
 }
 
 // Convert when the client asked and the origin gave us a page to convert;
