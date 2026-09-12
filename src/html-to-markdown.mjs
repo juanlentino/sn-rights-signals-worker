@@ -127,11 +127,23 @@ class Markdown {
   }
 }
 
+// A self-closing FOREIGN element (`<svg/>`, or `<a/>`/`<p/>` inside an
+// <svg>/<math> subtree) has no end tag, and HTMLRewriter's onEndTag() throws
+// "No end tag" for it. The element is already over, so the close callback runs
+// immediately instead of aborting the whole conversion (#50).
+function onEnd(el, cb) {
+  try {
+    el.onEndTag(cb);
+  } catch {
+    cb();
+  }
+}
+
 function openClose(md, marker) {
   return {
     element(el) {
       md.push(marker);
-      el.onEndTag(() => md.push(marker));
+      onEnd(el, () => md.push(marker));
     },
   };
 }
@@ -143,7 +155,7 @@ export function markdownRewriter(md) {
     .on(SKIP, {
       element(el) {
         md.skip++;
-        el.onEndTag(() => {
+        onEnd(el, () => {
           md.skip--;
         });
       },
@@ -155,7 +167,7 @@ export function markdownRewriter(md) {
       element(el) {
         if (md.titleDone) return;
         md.inTitle = true;
-        el.onEndTag(() => {
+        onEnd(el, () => {
           md.inTitle = false;
           md.titleDone = true;
         });
@@ -169,20 +181,20 @@ export function markdownRewriter(md) {
         const level = Number.parseInt(HEADING.exec(el.tagName.toLowerCase())?.[1] ?? "1", 10);
         md.block();
         md.push("#".repeat(level) + " ");
-        el.onEndTag(() => md.block());
+        onEnd(el, () => md.block());
       },
     })
     .on("p, div, section, article, tr, dt, dd", {
       element(el) {
         md.block();
-        el.onEndTag(() => md.block());
+        onEnd(el, () => md.block());
       },
     })
     .on("blockquote", {
       element(el) {
         md.quote++;
         md.block();
-        el.onEndTag(() => {
+        onEnd(el, () => {
           md.quote--;
           md.block();
         });
@@ -192,7 +204,7 @@ export function markdownRewriter(md) {
       element(el) {
         md.lists.push({ ordered: el.tagName.toLowerCase() === "ol", n: 0 });
         md.block();
-        el.onEndTag(() => {
+        onEnd(el, () => {
           md.lists.pop();
           md.block();
         });
@@ -203,7 +215,7 @@ export function markdownRewriter(md) {
         const list = md.lists[md.lists.length - 1];
         const marker = list && list.ordered ? `${++list.n}. ` : "- ";
         md.push("\n" + "> ".repeat(md.quote) + md.indent() + marker);
-        el.onEndTag(() => md.push(""));
+        onEnd(el, () => md.push(""));
       },
     })
     .on("pre", {
@@ -211,7 +223,7 @@ export function markdownRewriter(md) {
         md.pre++;
         md.block();
         md.push("```\n");
-        el.onEndTag(() => {
+        onEnd(el, () => {
           md.pre--;
           md.push("\n```");
           md.block();
@@ -224,7 +236,7 @@ export function markdownRewriter(md) {
       element(el) {
         if (md.pre > 0) return;
         md.push("`");
-        el.onEndTag(() => md.push("`"));
+        onEnd(el, () => md.push("`"));
       },
     })
     .on("strong, b", openClose(md, "**"))
@@ -234,7 +246,7 @@ export function markdownRewriter(md) {
         const href = safeUrl(decodeEntities(el.getAttribute("href") || ""));
         if (!href) return;
         md.push("[");
-        el.onEndTag(() => md.push(`](${href})`));
+        onEnd(el, () => md.push(`](${href})`));
       },
     })
     .on("img", {

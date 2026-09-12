@@ -153,4 +153,18 @@ describe("htmlToMarkdown", () => {
     const out = await md("<body><div><div><p>a</p></div></div><section></section><p>b</p></body>");
     expect(/\n{3}/.test(out)).toBe(false);
   });
+
+  // #50: a self-closing foreign element (<svg/>, or <a/>/<p/> inside an
+  // <svg>/<math> subtree) has no end tag, and HTMLRewriter's onEndTag() throws
+  // "No end tag" for it. That must not abort the whole conversion.
+  it("survives self-closing foreign elements instead of aborting the conversion", async () => {
+    const out = await md(
+      "<body><p>before</p><svg/><p>middle</p>" +
+        '<svg viewBox="0 0 1 1"><a href="/x"/><p/><title>icon</title></svg><p>after</p></body>',
+    );
+    expect(out).toContain("before");
+    expect(out).toContain("middle");
+    expect(out).toContain("after");
+    expect(out).not.toContain("icon");
+  });
 });
