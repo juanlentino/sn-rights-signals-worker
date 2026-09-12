@@ -37,6 +37,21 @@ describe("prefersMarkdown", () => {
     expect(prefersMarkdown("text/markdown;q=0")).toBe(false);
   });
 
+  // #54: a specific type beats a range at equal q, and an explicit refusal of
+  // text/markdown is not overridden by a text/* range.
+  it("lets an explicit text/html win a tie against the text/* range", () => {
+    expect(prefersMarkdown("text/html, text/*")).toBe(false);
+    expect(prefersMarkdown("text/*, text/html")).toBe(false);
+  });
+
+  it("honours an explicit text/markdown;q=0 even when text/* is also listed", () => {
+    expect(prefersMarkdown("text/markdown;q=0, text/*")).toBe(false);
+  });
+
+  it("still lets an explicit text/markdown win a tie against text/html", () => {
+    expect(prefersMarkdown("text/markdown, text/html")).toBe(true);
+  });
+
   it("is case-insensitive on the media type", () => {
     expect(prefersMarkdown("TEXT/MARKDOWN")).toBe(true);
   });

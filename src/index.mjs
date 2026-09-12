@@ -11,7 +11,7 @@ import { bypassesRightsSignals } from "./admin-bypass.mjs";
 import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawler-list-status.mjs";
 import { machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
 import { taxonomyResponse } from "./taxonomy.mjs";
-import { prefersMarkdown } from "./accept-markdown.mjs";
+import { best, parseAccept, prefersMarkdown } from "./accept-markdown.mjs";
 import { hasWebBotAuthHeaders, resolveSignatureState, signatureAgentOrigin } from "./web-bot-auth.mjs";
 import { licenceOfferHeaders } from "./licence-handshake.mjs";
 import { maybeMarkdown, withVaryAccept } from "./markdown-negotiation.mjs";
@@ -25,11 +25,15 @@ import { webmcpBridgeResponse } from "./webmcp-bridge.mjs";
 // treated `*/*` as JSON-willing would hand every crawler the machine document
 // and never the terms a human reviewer reads. Requiring the JSON type to be
 // named EXPLICITLY, and to not be outranked by text/html, gets both right.
+//
+// Same parser as the markdown negotiation, so qvalues count (#54):
+// `application/ld+json, text/html;q=0.5` is a JSON preference. A tie stays
+// HTML — prose wins when the client is indifferent.
 export function prefersOdrl(accept) {
-  if (!accept) return false;
-  const wantsJson = /\bapplication\/(ld\+)?json\b/i.test(accept);
-  if (!wantsJson) return false;
-  return !/\btext\/html\b/i.test(accept);
+  const entries = parseAccept(accept);
+  const json = best(entries, ["application/ld+json", "application/json"]);
+  if (json === 0) return false;
+  return json > best(entries, ["text/html"]);
 }
 
 function withTdmHeaders(response, licenceOffer = {}) {

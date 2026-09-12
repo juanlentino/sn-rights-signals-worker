@@ -146,6 +146,15 @@ describe("withVaryAccept", () => {
     expect(vary).toMatch(/(^|[\s,])accept([\s,]|$)/i);
   });
 
+  // #54: the check matched any token containing "accept", so an origin
+  // Vary: Accept-Language suppressed the append.
+  it("appends Accept when the origin varies on other Accept-* headers", () => {
+    const res = withVaryAccept(new Response("x", { headers: { vary: "Accept-Encoding, Accept-Language" } }));
+    const tokens = res.headers.get("vary").toLowerCase().split(/\s*,\s*/);
+    expect(tokens).toContain("accept");
+    expect(tokens).toContain("accept-language");
+  });
+
   it("does not add a duplicate Accept entry", () => {
     const res = withVaryAccept(new Response("x", { headers: { vary: "Accept" } }));
     expect(res.headers.get("vary").toLowerCase().split(/\s*,\s*/).filter((v) => v === "accept")).toHaveLength(1);

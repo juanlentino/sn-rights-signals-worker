@@ -48,7 +48,7 @@ export function parseAccept(accept) {
 
 // Highest q across entries whose type is in `types`. 0 when none match, which
 // is why `*/*` never lands in the markdown set: it is not listed.
-function best(entries, types) {
+export function best(entries, types) {
   let q = 0;
   for (const e of entries) if (types.includes(e.type) && e.q > q) q = e.q;
   return q;
@@ -57,9 +57,17 @@ function best(entries, types) {
 export function prefersMarkdown(accept) {
   const entries = parseAccept(accept);
   if (entries.length === 0) return false;
-  const md = best(entries, ["text/markdown", "text/*"]);
+  // An EXPLICIT text/markdown entry is the client's word on markdown, and it
+  // outranks the text/* range either way: `text/markdown;q=0, text/*` is a
+  // refusal, not a weak yes (#54). Only when markdown is unnamed does the
+  // range speak for it.
+  const explicit = entries.some((e) => e.type === "text/markdown");
+  const md = explicit ? best(entries, ["text/markdown"]) : best(entries, ["text/*"]);
   if (md === 0) return false;
   // A zero qvalue is an explicit REFUSAL of that type, not a weak preference.
   const html = best(entries, ["text/html"]);
-  return md >= html;
+  // RFC 9110 §12.5.1: a specific type beats a range at equal q, so an
+  // explicit text/html wins a tie against text/*, and an explicit
+  // text/markdown wins a tie against text/html.
+  return explicit ? md >= html : md > html;
 }

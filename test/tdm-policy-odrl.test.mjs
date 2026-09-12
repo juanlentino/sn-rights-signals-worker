@@ -80,7 +80,11 @@ describe("content negotiation", () => {
     [null, false, "no Accept header at all"],
     ["application/ld+json", true, "an explicit ld+json request"],
     ["application/json", true, "an explicit json request"],
-    ["application/ld+json,text/html;q=0.9", false, "html also acceptable — prose wins"],
+    ["application/ld+json,text/html", false, "html equally acceptable — prose wins the tie"],
+    // #54: q was ignored, so an explicit preference for JSON over HTML lost.
+    ["application/ld+json, text/html;q=0.5", true, "json outranks html"],
+    ["application/json;q=0.5, text/html", false, "html outranks json"],
+    ["application/ld+json;q=0", false, "json explicitly refused"],
   ])("Accept %j -> odrl=%s (%s)", (accept, expected) => {
     expect(prefersOdrl(accept)).toBe(expected);
   });

@@ -6,10 +6,10 @@ import { htmlToMarkdown } from "./html-to-markdown.mjs";
 // was already using it for (here, compressed-variant caching).
 export function withVaryAccept(response) {
   const headers = new Headers(response.headers);
-  const existing = headers.get("vary") || "";
-  if (!/\baccept\b/i.test(existing.replace(/accept-encoding/gi, ""))) {
-    headers.append("Vary", "Accept");
-  }
+  // Token comparison, not a substring match: `Accept-Language` is not
+  // `Accept` (#54).
+  const tokens = (headers.get("vary") || "").toLowerCase().split(",").map((t) => t.trim());
+  if (!tokens.includes("accept")) headers.append("Vary", "Accept");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
