@@ -48,10 +48,18 @@ export async function maybeMarkdown(origin, wantsMarkdown) {
   // 200 only. Error pages are chrome, and a Cloudflare 1xxx interstitial
   // rendered as markdown would be a confident-looking document about nothing.
   if (origin.status !== 200) return null;
+  // The converter LOCKS the body it reads, so a failure mid-stream used to
+  // leave the caller's fallback with nothing to serve — a rejected fetch
+  // (1101) instead of the HTML promised above (#49). Convert a clone (a tee
+  // underneath) and keep `origin` untouched for the fallback; on success the
+  // unread branch is cancelled so the tee does not buffer the whole page.
+  let markdown;
   try {
-    return await markdownResponse(origin);
+    markdown = await markdownResponse(origin.clone());
   } catch (err) {
     console.error("markdown conversion failed", err && err.message ? err.message : err);
     return null;
   }
+  if (origin.body) origin.body.cancel().catch(() => {});
+  return markdown;
 }

@@ -1,6 +1,13 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import worker from "../src/index.mjs";
 import { withVaryAccept } from "../src/markdown-negotiation.mjs";
+import { htmlToMarkdown } from "../src/html-to-markdown.mjs";
+
+// The real converter by default; one test swaps in a failing one.
+vi.mock("../src/html-to-markdown.mjs", async (importOriginal) => {
+  const real = await importOriginal();
+  return { ...real, htmlToMarkdown: vi.fn(real.htmlToMarkdown) };
+});
 
 const PAGE =
   "<html><head><title>A Note</title></head><body><nav><a href='/'>MENU</a></nav>" +
@@ -77,6 +84,23 @@ describe("markdown negotiation at the edge", () => {
     );
     expect(await res.text()).toBe("body{color:red}");
     expect(res.headers.get("tdm-reservation")).toBe("1");
+  });
+
+  // #49: the fallback used to hand injectTdmMeta() the same Response whose
+  // body the converter had already locked, so a converter failure became a
+  // rejected fetch (1101) instead of the HTML this branch promises.
+  it("falls back to the HTML when the converter fails after reading the body", async () => {
+    stubOrigin(PAGE, { "content-type": "text/html" });
+    htmlToMarkdown.mockImplementationOnce(async (res) => {
+      await res.arrayBuffer(); // consume, then fail mid-conversion
+      throw new Error("converter edge case");
+    });
+    const res = await get("text/markdown");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const body = await res.text();
+    expect(body).toContain("<article>");
+    expect(body).toContain('<meta name="tdm-reservation" content="1">');
   });
 
   it("never converts an admin surface, whatever the Accept header says", async () => {
