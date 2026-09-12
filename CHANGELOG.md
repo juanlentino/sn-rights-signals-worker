@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## 1.24.3 - 2026-09-12
 
 ### Fixed
 - Markdown fallback: `maybeMarkdown()` converts a clone of the origin response, so a converter failure falls back to the HTML instead of rejecting with "ReadableStream has been locked" (a 1101 page). The unread branch is cancelled on success. (#49)
