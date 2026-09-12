@@ -294,6 +294,65 @@ export async function snVerifyPage(deps) {
       .then(function () { return true; }, function () { return false; });
   }
 
+  /** did + this site's mirror + the ledger copy, fetched ONCE for both the
+   *  signature leg and the retraction leg (the docket fetches them once too). */
+  var keyDocs = null;
+  function keyDocuments(base) {
+    if (!keyDocs) {
+      keyDocs = Promise.all([
+        fetchJSON(callUrl("did")),
+        fetchJSON(callUrl("key_history")),
+        fetchJSON(Core.ledgerKeysUrl(base)),
+      ]);
+    }
+    return keyDocs;
+  }
+
+  /**
+   * Has the publisher WITHDRAWN this record? A port of checkRetraction
+   * (prov-verify.js:369), DOM-free: the retraction is fetched from the ledger
+   * and VERIFIED before it is honoured — signed bytes must hash to the claimed
+   * content_hash and the signature must verify under the key the retraction
+   * NAMES. One that fails is neither honoured nor waved through: it becomes
+   * UNKNOWN, which qualifies the verdict. Only a confirmed 404 is clean.
+   * Not one of the four checks — its result outranks them (#52).
+   */
+  async function retractionLeg(cred) {
+    var UNKNOWN = { retraction: null, unknown: true };
+    if ("function" !== typeof Core.retractionUrl || !subtle || !subtle.digest) return UNKNOWN;
+    var base = ledgerBase();
+    if (!base) return UNKNOWN;
+    var uid = (subject && subject.uid) || "";
+    var version =
+      (subject && subject.version) ||
+      (cred && cred.evidence && cred.evidence[0] && cred.evidence[0].version) ||
+      0;
+    var res = await fetchJSON(Core.retractionUrl(base, uid, version));
+    var found = Core.deriveRetraction(res, uid, version);
+    if (!found.retraction) return Core.retractionOutcome(found, null);
+    var rec = res.json || {};
+    var bytes;
+    try {
+      bytes = Core.base64ToBytes(rec.signed_payload_b64);
+    } catch (e) {
+      return Core.retractionOutcome(found, null); // present, unverifiable.
+    }
+    var keys = await keyDocuments(base);
+    var agreement = Core.deriveKeyAgreement(keys[0].json, keys[1].json, keys[2].json, String(rec.pubkey_id || ""));
+    if (agreement.verdict || !agreement.jwk) return Core.retractionOutcome(found, null);
+    try {
+      var digest = await subtle.digest("SHA-256", bytes);
+      if (Core.bytesToHex(new Uint8Array(digest)) !== String(rec.content_hash || "").toLowerCase()) {
+        return Core.retractionOutcome(found, false);
+      }
+      var key = await subtle.importKey("jwk", agreement.jwk, { name: "Ed25519" }, false, ["verify"]);
+      var valid = await subtle.verify("Ed25519", key, Core.base64ToBytes(rec.signature), bytes);
+      return Core.retractionOutcome(found, !!valid);
+    } catch (e2) {
+      return Core.retractionOutcome(found, null);
+    }
+  }
+
   async function signatureLeg(cred) {
     // THIS PORT'S OWN, no docket ancestor: a refusal to guess a URL. The key
     // check is three-way (did + this site's mirror + the independent ledger
@@ -310,11 +369,7 @@ export async function snVerifyPage(deps) {
           ", so the independent ledger copy of the key cannot be located. Refusing to guess: without that third copy this check would quietly become a two-way one and still report a pass.",
       };
     }
-    var results = await Promise.all([
-      fetchJSON(callUrl("did")),
-      fetchJSON(callUrl("key_history")),
-      fetchJSON(Core.ledgerKeysUrl(base)),
-    ]);
+    var results = await keyDocuments(base);
     if (!results[0].ok) {
       // prov-verify.js:558
       return {
@@ -417,17 +472,21 @@ export async function snVerifyPage(deps) {
     return Core.deriveTxAnchor(plan.anchor, plan.evidence, both[0], both[1]);
   }
 
-  function assemble(checks) {
+  function assemble(checks, retraction) {
     return {
       signed: true,
       subject: subject,
       checks: checks,
-      overall: Core.deriveOverallVerdict({
-        signature: checks.signature.state,
-        "content-hash": checks.contentHash.state,
-        "live-match": checks.liveMatch.state,
-        anchor: checks.anchor.state,
-      }),
+      retraction: retraction,
+      overall: Core.deriveOverallVerdict(
+        {
+          signature: checks.signature.state,
+          "content-hash": checks.contentHash.state,
+          "live-match": checks.liveMatch.state,
+          anchor: checks.anchor.state,
+        },
+        retraction
+      ),
       ledger_record: callUrl("record"),
       docket: manifest.spec,
     };
@@ -467,10 +526,14 @@ export async function snVerifyPage(deps) {
           detail: "Could not run: no credential to check." + why(credRes),
         };
       };
-      return assemble({
-        signature: noCredential(), contentHash: noCredential(),
-        liveMatch: noCredential(), anchor: noCredential(),
-      });
+      // Could not look for a retraction either: qualified, never clean.
+      return assemble(
+        {
+          signature: noCredential(), contentHash: noCredential(),
+          liveMatch: noCredential(), anchor: noCredential(),
+        },
+        { retraction: null, unknown: true }
+      );
     }
     var cred = credRes.json;
     var settled = await Promise.all([
@@ -478,10 +541,18 @@ export async function snVerifyPage(deps) {
       guard(function () { return contentHashLeg(cred); }, "The content-hash check could not be completed."),
       guard(function () { return liveMatchLeg(cred); }, "The live-match check could not be completed."),
       guard(function () { return anchorLeg(cred); }, "The anchor check could not be completed."),
+      // A retraction leg that blew up is an unknown withdrawal status.
+      Promise.resolve()
+        .then(function () { return retractionLeg(cred); })
+        .then(
+          function (r) { return r && "object" === typeof r ? r : { retraction: null, unknown: true }; },
+          function () { return { retraction: null, unknown: true }; }
+        ),
     ]);
-    return assemble({
-      signature: settled[0], contentHash: settled[1], liveMatch: settled[2], anchor: settled[3],
-    });
+    return assemble(
+      { signature: settled[0], contentHash: settled[1], liveMatch: settled[2], anchor: settled[3] },
+      settled[4]
+    );
   } catch (e) {
     return {
       signed: true,
