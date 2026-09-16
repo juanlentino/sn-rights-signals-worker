@@ -16,6 +16,7 @@ import { hasWebBotAuthHeaders, resolveSignatureState, signatureAgentOrigin } fro
 import { licenceOfferHeaders } from "./licence-handshake.mjs";
 import { maybeMarkdown, withVaryAccept } from "./markdown-negotiation.mjs";
 import { webmcpBridgeResponse } from "./webmcp-bridge.mjs";
+import { webmcpCallResponse, WEBMCP_CALL_PATH } from "./webmcp-call.mjs";
 
 // Content negotiation for /tdm-policy/, deliberately conservative: HTML is the
 // default and only an explicit JSON preference switches representation.
@@ -152,6 +153,8 @@ export default {
     // docs/webmcp-native-design.md). Wrapped like every owned surface: content
     // taken in ANY representation is content taken (v1.5.0), a script included.
     if (pathname === "/webmcp/bridge.js") return withTdmHeaders(webmcpBridgeResponse(), licenceOffer);
+    // v1.25.0: the bridge's beacon, one row per tool call; always 204.
+    if (pathname === WEBMCP_CALL_PATH) return webmcpCallResponse(request, env);
 
     if (pathname === "/tdm-policy" || pathname === "/tdm-policy/") {
       if (prefersOdrl(accept)) return withTdmHeaders(tdmPolicyOdrlResponse(), licenceOffer);

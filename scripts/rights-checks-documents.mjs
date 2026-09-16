@@ -419,7 +419,7 @@ export function documentChecks(a, check, bridgeSri) {
       if (!ct.includes("text/javascript")) throw new Error(`content-type is ${JSON.stringify(ct)}`);
     }),
 
-    check("the served bridge registers both tools when driven (behavioral, not syntax)", () => {
+    check("the served bridge registers the five tools when driven (behavioral, not syntax)", () => {
       // A syntax-only gate (`new Function(body)`) stayed GREEN on a real broken
       // artifact earlier in this arc — bundler-injected `__name` refs that only
       // fail when the registration path RUNS. So this check drives the source
@@ -440,7 +440,8 @@ export function documentChecks(a, check, bridgeSri) {
         throw new Error("could not find the trailing snWebmcpMain(); call to strip — bridge shape changed?");
       }
       new Function('"use strict"; return function(win){' + src + '\nsnWebmcpMain(win);}')()(fakeWin);
-      if (names.join(",") !== "verify-page,get-rights-terms") {
+      // v1.25.0 (bridge v2 arc one): five, in registration order.
+      if (names.join(",") !== "verify-page,get-rights-terms,related-notes,get-site-map,get-citation") {
         throw new Error(`registered: [${names.join(", ")}]`);
       }
     }),

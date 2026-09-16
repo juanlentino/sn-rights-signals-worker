@@ -44,7 +44,7 @@ describe("composed bridge asset", () => {
     expect(await res.text()).toBe(BRIDGE_SOURCE);
   });
 
-  it("registers both tools with the pinned shape when driven with a fake window", () => {
+  it("registers the five tools with the pinned shape when driven with a fake window", () => {
     // Positive path for snWebmcpMain's composed body: a fake window carrying a
     // recording registerTool proves the trailing call in BRIDGE_SOURCE reaches
     // the registration branch (not just the early-return guard exercised by
@@ -62,9 +62,17 @@ describe("composed bridge asset", () => {
     const composedMain = new Function(src)();
     composedMain(fakeWindow);
 
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(5);
     const byName = Object.fromEntries(calls.map((c) => [c.name, c]));
-    expect(Object.keys(byName).sort()).toEqual(["get-rights-terms", "verify-page"]);
+    expect(Object.keys(byName).sort()).toEqual(["get-citation", "get-rights-terms", "get-site-map", "related-notes", "verify-page"]);
+    // Bridge v2 arc one: every tool takes no input and reads public bytes.
+    for (const name of ["related-notes", "get-site-map", "get-citation"]) {
+      expect(byName[name].inputSchema).toEqual({ type: "object", properties: {}, additionalProperties: false });
+      expect(typeof byName[name].execute).toBe("function");
+    }
+    expect(byName["related-notes"].description).toContain("relatedness kernel");
+    expect(byName["get-site-map"].description).toContain("/notes/index.json");
+    expect(byName["get-citation"].description).toContain("BibTeX");
 
     expect(byName["verify-page"].description).toContain("signature, content hash, live match, and anchor");
     expect(byName["verify-page"].inputSchema).toEqual({
@@ -94,6 +102,6 @@ describe("composed bridge asset", () => {
     composedMain(fakeWindow);
     composedMain(fakeWindow);
 
-    expect(calls).toHaveLength(2); // not 4
+    expect(calls).toHaveLength(5); // not 10
   });
 });

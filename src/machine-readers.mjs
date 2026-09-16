@@ -378,10 +378,14 @@ export function buildQuery(view, days) {
   // separate query on purpose: the breakdown needs its dimensions, and the
   // total needs to not have them.
   if (view === "totals") {
+    // v1.25.0: the WebMCP beacon's rows (family webmcp, src/webmcp-call.mjs)
+    // are tool calls, not page reads; the exact total leaves them out, as the
+    // plugin's aggregate split does, so the two figures agree.
     return (
       "SELECT toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
       "FROM sn_machine_readers " +
       since +
+      "AND blob1 != 'webmcp' " +
       `GROUP BY day ORDER BY day ASC LIMIT ${DAYS_MAX} FORMAT JSON`
     );
   }

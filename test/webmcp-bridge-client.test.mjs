@@ -18,11 +18,11 @@ describe("snAgentApi", () => {
 });
 
 describe("snWebmcpMain", () => {
-  it("registers verify-page and get-rights-terms when an agent API and document are present", () => {
+  it("registers the five tools when an agent API and document are present", () => {
     const calls = [];
     const fakeApi = { registerTool: (spec) => calls.push(spec) };
     snWebmcpMain({ document: {}, navigator: { modelContext: fakeApi } });
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(5);
     const byName = Object.fromEntries(calls.map((c) => [c.name, c]));
     expect(byName["verify-page"].inputSchema).toEqual({
       type: "object", properties: {}, additionalProperties: false,
@@ -57,7 +57,7 @@ describe("snWebmcpMain", () => {
     const win = { document: {}, navigator: { modelContext: fakeApi } };
     snWebmcpMain(win);
     snWebmcpMain(win);
-    expect(calls).toHaveLength(2); // not 4
+    expect(calls).toHaveLength(5); // not 10
   });
 });
 
@@ -911,7 +911,7 @@ describe("serialization self-containment", () => {
       document: {},
       navigator: { modelContext: { registerTool: (spec) => registered.push(spec) } },
     });
-    expect(registered.map((r) => r.name).sort()).toEqual(["get-rights-terms", "verify-page"]);
+    expect(registered.map((r) => r.name).sort()).toEqual(["get-citation", "get-rights-terms", "get-site-map", "related-notes", "verify-page"]);
     // no-op guards, driven too: absent document, absent agent API.
     expect(() => composed.snWebmcpMain({ navigator: { modelContext: { registerTool: () => {} } } })).not.toThrow();
     expect(() => composed.snWebmcpMain({ document: {}, navigator: {} })).not.toThrow();
@@ -921,6 +921,6 @@ describe("serialization self-containment", () => {
     const before = registered.length;
     composed.snWebmcpMain(idemWin);
     composed.snWebmcpMain(idemWin);
-    expect(registered.length - before).toBe(2); // not 4
+    expect(registered.length - before).toBe(5); // not 10
   });
 });

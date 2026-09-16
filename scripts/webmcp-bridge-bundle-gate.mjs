@@ -144,11 +144,11 @@ try {
   } catch (e) {
     fail(`composed snWebmcpMain threw registering tools against the bundled artifact: ${e.message}`);
   }
-  if (registered.length !== 2) {
-    fail(`expected 2 tools registered, got ${registered.length}: ${registered.map((r) => r.name).join(", ")}`);
+  if (registered.length !== 5) {
+    fail(`expected 5 tools registered, got ${registered.length}: ${registered.map((r) => r.name).join(", ")}`);
   }
   const names = registered.map((r) => r.name).sort();
-  if (names.join(",") !== "get-rights-terms,verify-page") {
+  if (names.join(",") !== "get-citation,get-rights-terms,get-site-map,related-notes,verify-page") {
     fail(`unexpected tool names registered: ${names.join(", ")}`);
   }
   for (const spec of registered) {
@@ -169,7 +169,7 @@ try {
     fail(`expected verify-page execute() to report signed:false with no manifest, got ${JSON.stringify(unsignedResult)}`);
   }
 
-  console.log("PASS — the bundled /webmcp/bridge.js artifact registers both tools and runs its unsigned-page path without a bundler-injected reference error.");
+  console.log("PASS — the bundled /webmcp/bridge.js artifact registers the five tools and runs its unsigned-page path without a bundler-injected reference error.");
 } catch (e) {
   if (e instanceof GateError) {
     console.error(`\n${e.message}`);
