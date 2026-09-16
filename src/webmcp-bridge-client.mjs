@@ -666,11 +666,29 @@ export function snCiteKey(year, title) {
 }
 
 /**
- * get-citation (bridge v2, arc one): this note as BibTeX and CSL-JSON, from
- * the page's own JSON-LD (author, dates, headline, canonical) plus, on a
- * signed note, the ledger record's content hash and URL from the
- * verification manifest. Owner decisions 2026-09-16: author "Lentino, Juan",
- * ORCID on every note. Unsigned returns the citation without the anchor.
+ * BibTeX-escape a field value: the characters TeX reads as commands, and
+ * braces, which would unbalance the entry.
+ */
+export function snBibEscape(v) {
+  return String(v || "").replace(/[{}]/g, "").replace(/([&%$#_])/g, "\\$1");
+}
+
+/**
+ * Two-digit pad for dates.
+ */
+export function snPad2(n) {
+  var s = String(n);
+  return s.length < 2 ? "0" + s : s;
+}
+
+/**
+ * get-citation (bridge v2, arc one; fields widened v1.25.3): this note or
+ * essay as BibTeX, CSL-JSON and one plain line (APA-shaped), from the page's
+ * own JSON-LD Article (author, dates, headline, description, keywords,
+ * canonical) plus, on a signed page, the ledger record's content hash and URL
+ * from the verification manifest. Owner decisions 2026-09-16: author
+ * "Lentino, Juan", ORCID on every note. Unsigned returns the citation without
+ * the anchor. Dates are ISO and zero-padded everywhere.
  */
 export async function snGetCitation(doc, fetchFn) {
   var art = snReadArticle(doc);
@@ -679,9 +697,14 @@ export async function snGetCitation(doc, fetchFn) {
   var title = String(art.headline || "");
   var published = String(art.datePublished || "");
   var modified = String(art.dateModified || "");
+  var description = String(art.description || "");
+  var keywords = String(art.keywords || "").split(",").map(function (k) { return k.trim(); }).filter(Boolean);
   var year = published.slice(0, 4);
   var month = published.slice(5, 7);
   var day = published.slice(8, 10);
+  var now = new Date();
+  var accessed = [now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate()];
+  var accessedIso = accessed[0] + "-" + snPad2(accessed[1]) + "-" + snPad2(accessed[2]);
   var orcid = "https://orcid.org/0009-0006-8151-5920";
   var key = snCiteKey(year, title);
   var out = {
@@ -691,9 +714,12 @@ export async function snGetCitation(doc, fetchFn) {
       id: key, type: "post-weblog", title: title, "container-title": "Signal & Noise", URL: url,
       author: [{ family: "Lentino", given: "Juan", ORCID: orcid }],
       issued: { "date-parts": [[Number(year), Number(month), Number(day)]] },
-      accessed: { "date-parts": [[new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, new Date().getUTCDate()]] },
+      accessed: { "date-parts": [accessed] },
+      language: "en-US",
     },
   };
+  if (description) out.csl_json.abstract = description;
+  if (keywords.length) out.csl_json.keyword = keywords.join(", ");
   if (modified) out.csl_json.modified = modified;
   var m = snReadManifest(doc);
   if (m && m.calls && m.calls.record && m.calls.record.url) {
@@ -714,8 +740,28 @@ export async function snGetCitation(doc, fetchFn) {
       out.anchor_error = "ledger record fetch failed: " + (e && e.message ? e.message : e);
     }
   }
-  var note = out.anchored_hash ? " Content hash " + out.anchored_hash + ", record " + out.ledger_url + "." : "";
-  out.bibtex = "@online{" + key + ",\n  author = {Lentino, Juan},\n  title = {" + title.replace(/[{}]/g, "") + "},\n  year = {" + year + "},\n  month = {" + month + "},\n  url = {" + url + "},\n  urldate = {" + out.csl_json.accessed["date-parts"][0].join("-") + "},\n  note = {ORCID " + orcid + "." + note + "}\n}";
+  if (out.anchored_hash) out.csl_json.note = "Content hash " + out.anchored_hash + "; record " + out.ledger_url;
+  var note = "ORCID " + orcid + "." + (out.anchored_hash ? " Content hash " + out.anchored_hash + ", record " + out.ledger_url + "." : "");
+  var lines = [
+    "@online{" + key + ",",
+    "  author = {Lentino, Juan},",
+    "  title = {" + snBibEscape(title) + "},",
+    "  organization = {Signal \\& Noise},",
+    "  date = {" + published.slice(0, 10) + "},",
+    "  year = {" + year + "},",
+    "  month = {" + month + "},",
+    "  url = {" + url + "},",
+    "  urldate = {" + accessedIso + "},",
+  ];
+  if (keywords.length) lines.push("  keywords = {" + snBibEscape(keywords.join(", ")) + "},");
+  if (out.version) lines.push("  version = {" + out.version + "},");
+  lines.push("  language = {english},");
+  lines.push("  note = {" + snBibEscape(note) + "}");
+  lines.push("}");
+  out.bibtex = lines.join("\n");
+  var monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  var when = year ? year + (month ? ", " + (monthNames[Number(month) - 1] || month) + (day ? " " + Number(day) : "") : "") : "n.d.";
+  out.plain = "Lentino, J. (" + when + "). " + title + ". Signal & Noise. " + url;
   return out;
 }
 
