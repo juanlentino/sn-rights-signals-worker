@@ -8,11 +8,12 @@ import { buildQuery } from "../src/machine-readers.mjs";
 // are DOM-free by construction), every absence is a distinct answer, and the
 // beacon route writes nothing unless everything about the call is right.
 
-function docWith(blocks, ldjson) {
+function docWith(blocks, ldjson, canonical = "https://juanlentino.com/notes/two-kinds/") {
   return {
     getElementById: (id) => (id in blocks ? { textContent: blocks[id] } : null),
     querySelectorAll: () => (ldjson ? [{ textContent: ldjson }] : []),
-    location: { href: "https://juanlentino.com/notes/x/" },
+    querySelector: (sel) => (sel === 'link[rel="canonical"]' && canonical ? { getAttribute: () => canonical } : null),
+    location: { href: canonical || "https://juanlentino.com/notes/x/" },
   };
 }
 
@@ -82,10 +83,28 @@ describe("get-citation", () => {
     expect(snCiteKey("2026", "Falsifiability is the line")).toBe("lentino2026falsifiability");
     expect(snCiteKey("", "")).toBe("lentinonote");
   });
-  it("snReadArticle finds the Article in a graph or as a bare object, skips bad JSON", () => {
+  it("snReadArticle takes the page's OWN Article (mainEntityOfPage = canonical), in a graph or bare, skips bad JSON", () => {
     expect(snReadArticle(docWith({}, ld))["@type"]).toBe("Article");
-    expect(snReadArticle(docWith({}, JSON.stringify({ "@type": "Article", headline: "x" }))).headline).toBe("x");
+    expect(snReadArticle(docWith({}, JSON.stringify({ "@type": "Article", headline: "x", mainEntityOfPage: "https://juanlentino.com/notes/two-kinds/" }))).headline).toBe("x");
     expect(snReadArticle(docWith({}, "{bad"))).toBeNull();
+  });
+  it("v1.25.2: on the notes archive, the listed notes' Articles are NOT the page's; the archive is not a note", async () => {
+    const archive = JSON.stringify({ "@graph": [
+      { "@type": "CollectionPage", url: "https://juanlentino.com/notes/" },
+      { "@type": "ItemList", itemListElement: [{ "@type": "ListItem", position: 1 }] },
+      { "@type": "Article", headline: "First listed note", mainEntityOfPage: "https://juanlentino.com/notes/first/" },
+      { "@type": "Article", headline: "Second listed note", mainEntityOfPage: { "@id": "https://juanlentino.com/notes/second/" } },
+    ] });
+    expect(snReadArticle(docWith({}, archive, "https://juanlentino.com/notes/"))).toBeNull();
+    expect(await snGetCitation(docWith({}, archive, "https://juanlentino.com/notes/"))).toEqual({ reason: "not a note" });
+    // and the same graph, read from the second note's own page, cites the second note
+    const c = await snGetCitation(docWith({}, archive, "https://juanlentino.com/notes/second/"));
+    expect(c.bibtex).toContain("title = {Second listed note}");
+    expect(c.canonical_url).toBe("https://juanlentino.com/notes/second/");
+  });
+  it("a trailing slash or a fragment on either side does not break the match", () => {
+    const one = JSON.stringify({ "@type": "Article", headline: "x", "@id": "https://juanlentino.com/notes/two-kinds#article" });
+    expect(snReadArticle(docWith({}, one, "https://juanlentino.com/notes/two-kinds/"))).not.toBeNull();
   });
 });
 

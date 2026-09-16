@@ -623,17 +623,35 @@ export async function snGetSiteMap(fetchFn, w) {
 }
 
 /**
- * The page's JSON-LD Article, from the plugin's schema graph. null when the
- * page carries none (not a note).
+ * The page's own canonical URL, from <link rel="canonical">, else the
+ * location. Trailing slash kept as served; comparisons strip it.
+ */
+export function snCanonicalUrl(doc) {
+  var link = doc && doc.querySelector ? doc.querySelector('link[rel="canonical"]') : null;
+  var href = (link && link.getAttribute && link.getAttribute("href")) || (doc && doc.location && doc.location.href) || "";
+  return String(href).split("#")[0].split("?")[0];
+}
+
+/**
+ * The page's OWN JSON-LD Article: the one whose mainEntityOfPage (or @id,
+ * minus its fragment) is this page's canonical URL. null when the page has
+ * none (not a note). v1.25.2: the notes archive lists ten notes as Article
+ * items inside an ItemList, and "the first Article in the graph" cited the
+ * first listed note as if it were the page.
  */
 export function snReadArticle(doc) {
+  var canonical = snCanonicalUrl(doc).replace(/\/$/, "");
   var scripts = doc && doc.querySelectorAll ? doc.querySelectorAll('script[type="application/ld+json"]') : [];
+  var same = function (u) { return String(u || "").split("#")[0].split("?")[0].replace(/\/$/, "") === canonical; };
   for (var i = 0; i < scripts.length; i++) {
     var data;
     try { data = JSON.parse(scripts[i].textContent); } catch (e) { continue; }
     var graph = data && Array.isArray(data["@graph"]) ? data["@graph"] : [data];
     for (var j = 0; j < graph.length; j++) {
-      if (graph[j] && graph[j]["@type"] === "Article") return graph[j];
+      var node = graph[j];
+      if (!node || node["@type"] !== "Article") continue;
+      var main = node.mainEntityOfPage && typeof node.mainEntityOfPage === "object" ? node.mainEntityOfPage["@id"] : node.mainEntityOfPage;
+      if (canonical && (same(main) || same(node["@id"]) || same(node.url))) return node;
     }
   }
   return null;
@@ -657,7 +675,7 @@ export function snCiteKey(year, title) {
 export async function snGetCitation(doc, fetchFn) {
   var art = snReadArticle(doc);
   if (!art) return { reason: "not a note" };
-  var url = String(art.mainEntityOfPage || (doc.location && doc.location.href) || "");
+  var url = snCanonicalUrl(doc) || String((doc.location && doc.location.href) || "");
   var title = String(art.headline || "");
   var published = String(art.datePublished || "");
   var modified = String(art.dateModified || "");
