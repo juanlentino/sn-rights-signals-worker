@@ -120,10 +120,10 @@ describe("the beacon route, worker side", () => {
   const good = { tool: "related-notes", outcome: "ok", ms: 12 };
   const req = (over = {}) => new Request("https://juanlentino.com" + WEBMCP_CALL_PATH, {
     method: over.method || "POST",
-    headers: { origin: "https://juanlentino.com", "sec-fetch-site": "same-origin", "content-type": "application/json", ...(over.headers || {}) },
+    headers: { origin: "https://juanlentino.com", "sec-fetch-site": "same-origin", "content-type": "application/json", "cf-connecting-ip": "203.0.113.7", ...(over.headers || {}) },
     body: over.body === undefined ? JSON.stringify(good) : over.body,
   });
-  const envWith = () => { const points = []; return { env: { SN_MR: { writeDataPoint: (p) => points.push(p) } }, points }; };
+  const envWith = (limit = { limit: async () => ({ success: true }) }) => { const points = []; return { env: { SN_MR: { writeDataPoint: (p) => points.push(p) }, WEBMCP_LIMITER: limit }, points }; };
 
   it("a valid same-origin beacon writes one row: family webmcp, surface the tool, the outcome in the purpose slot, no UA, no IP", async () => {
     const { env, points } = envWith();
@@ -167,6 +167,22 @@ describe("the beacon route, worker side", () => {
   it("no binding: 204, nothing thrown", async () => {
     const res = await webmcpCallResponse(req(), {});
     expect(res.status).toBe(204);
+  });
+  it("v1.25.1: the per-IP limiter gates the write; over the limit, unbound, no IP, or a throwing limiter all write nothing, same 204", async () => {
+    const keys = [];
+    const { env, points } = envWith({ limit: async ({ key }) => { keys.push(key); return { success: keys.length <= 2 }; } });
+    for (let i = 0; i < 4; i++) await webmcpCallResponse(req(), env);
+    expect(points).toHaveLength(2);
+    expect(keys[0]).toBe("webmcp:203.0.113.7");
+    const unbound = envWith(undefined); delete unbound.env.WEBMCP_LIMITER;
+    expect((await webmcpCallResponse(req(), unbound.env)).status).toBe(204);
+    expect(unbound.points).toHaveLength(0);
+    const noIp = envWith();
+    await webmcpCallResponse(req({ headers: { "cf-connecting-ip": "" } }), noIp.env);
+    expect(noIp.points).toHaveLength(0);
+    const throwing = envWith({ limit: async () => { throw new Error("limiter down"); } });
+    expect((await webmcpCallResponse(req(), throwing.env)).status).toBe(204);
+    expect(throwing.points).toHaveLength(0);
   });
   it("parseWebmcpCall and isSameOriginBeacon are pure and strict", () => {
     expect(parseWebmcpCall(good)).toEqual(good);

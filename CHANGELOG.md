@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.25.1 - 2026-09-16
+
+### Fixed
+- The beacon route is rate-limited per client IP through the Workers Rate Limiting binding (`WEBMCP_LIMITER`, 10 per 10 seconds; the same infrastructure as rate-limiting rules, spending none of the zone's rules). Over the limit, unbound, without a connecting IP, or with a failing limiter, the route answers the same 204 and writes nothing: the write fails closed, a signal lost rather than a flood admitted. (#58)
+
 ## 1.25.0 - 2026-09-16
 
 ### Added

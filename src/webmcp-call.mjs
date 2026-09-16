@@ -51,6 +51,26 @@ export function isSameOriginBeacon(request) {
 }
 
 /**
+ * The per-IP limit, keyed on the connecting IP. A limiter that is not bound
+ * or throws answers false: the beacon then records nothing, which is the
+ * safe side (a signal lost, never a flood admitted).
+ * @param {Request} request
+ * @param {{WEBMCP_LIMITER?: {limit: Function}}} env
+ */
+export async function underWebmcpLimit(request, env) {
+  const limiter = env && env.WEBMCP_LIMITER;
+  if (!limiter || typeof limiter.limit !== "function") return false;
+  const ip = request.headers.get("cf-connecting-ip") || "";
+  if (!ip) return false;
+  try {
+    const { success } = await limiter.limit({ key: "webmcp:" + ip });
+    return !!success;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The route. Always 204 with no body; writes only on a valid, same-origin,
  * well-shaped POST.
  * @param {Request} request
@@ -78,6 +98,10 @@ export async function webmcpCallResponse(request, env) {
   }
   const call = parseWebmcpCall(data);
   if (!call) return noContent();
+  // v1.25.1: the per-IP limiter (WEBMCP_LIMITER, 10 per 10s). Over the limit
+  // is the same 204 and no write; an unbound or failing limiter fails CLOSED
+  // for the write, never open: a forger's ceiling is this, not the dataset.
+  if (!(await underWebmcpLimit(request, env))) return noContent();
   const bound = !!(env && env.SN_MR && typeof env.SN_MR.writeDataPoint === "function");
   if (!bound) return noContent();
   // The aggregate row shape (src/machine-readers.mjs): blob1 family, blob2
