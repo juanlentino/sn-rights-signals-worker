@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.25.0 - 2026-09-16
+
+### Added
+- WebMCP bridge v2, arc one (design: signal-and-noise-tools `docs/webmcp-bridge-v2-design.md`). Three tools join `verify-page` and `get-rights-terms`, each reading public bytes and calling no authenticated door: `related-notes` (the plugin's `#sn-related` manifest; not a note, not built and nothing related are three distinct answers), `get-site-map` (`/notes/index.json`, fetched once per page; 404 reads "not built"), `get-citation` (BibTeX and CSL-JSON from the page's JSON-LD, author "Lentino, Juan" with ORCID on every note, plus the ledger record's content hash and URL on a signed note; a failed record fetch is named, never fatal). Every tool's execute is wrapped by `snWebmcpMeasured`, which reports `{tool, outcome, ms}` and nothing else through `sendBeacon` to `POST /_sn/rights-signals/webmcp-call`; the route writes one row to the machine-readers dataset as family `webmcp`, surface the tool, the outcome in the purpose slot, and answers 204 whatever it did. It writes nothing unless the call is a same-origin POST (`Origin` the site, `Sec-Fetch-Site: same-origin`) under 256 bytes naming a known tool, a known outcome and an integer `ms` in range; each row counts one, never a client count, so a forger's ceiling is the edge's per-IP rate-limiting rule on the path. The totals view excludes the family, so the plugin's exact total agrees with its split aggregate. (#58)
+
 ## 1.24.3 - 2026-09-12
 
 ### Fixed

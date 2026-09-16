@@ -563,6 +563,184 @@ export async function snVerifyPage(deps) {
 }
 
 /**
+ * The bridge's tool names, one place. The beacon route on the worker
+ * (src/webmcp-call.mjs) accepts exactly these, so a forged beacon naming
+ * anything else writes nothing.
+ */
+export function snWebmcpTools() {
+  return ["verify-page", "get-rights-terms", "related-notes", "get-site-map", "get-citation"];
+}
+
+/**
+ * Read a data-shaped JSON block by id. null when absent or malformed.
+ */
+export function snReadJsonBlock(doc, id) {
+  var el = doc && doc.getElementById ? doc.getElementById(id) : null;
+  if (!el) return null;
+  try { return JSON.parse(el.textContent); } catch (e) { return null; }
+}
+
+/**
+ * related-notes (bridge v2, arc one): the kernel's stored top matches for
+ * this note, from the #sn-related manifest the plugin emits beside the
+ * verification one. Three absences, kept distinct: not a note (no manifest),
+ * not built (the artifacts were never built), nothing related (an answer).
+ */
+export function snRelatedNotes(doc) {
+  var m = snReadJsonBlock(doc, "sn-related");
+  if (!m) return { related: [], reason: "not a note" };
+  if (!m.built) return { related: [], reason: "not built" };
+  var rows = Array.isArray(m.related) ? m.related : [];
+  if (!rows.length) return { related: [], reason: "nothing related" };
+  return { related: rows.map(function (r) {
+    return { title: String(r.title || ""), url: String(r.url || ""), score: Number(r.score) || 0, shared_tags: Array.isArray(r.shared_tags) ? r.shared_tags.map(String) : [] };
+  }) };
+}
+
+/**
+ * get-site-map (bridge v2, arc one): /notes/index.json, the machine twin of
+ * the site, built by the plugin at each artifact rebuild. Fetched once per
+ * page (a module-scope cache would not survive toString composition, so the
+ * cache hangs off the window). 404 is "not built"; a failed fetch names the leg.
+ */
+export async function snGetSiteMap(fetchFn, w) {
+  var win = w || (typeof window !== "undefined" ? window : null);
+  if (win && win.__snSiteMap) return win.__snSiteMap;
+  var f = fetchFn || fetch;
+  var res;
+  try {
+    res = await f("/notes/index.json", { headers: { accept: "application/json" } });
+  } catch (e) {
+    return { error: "site map fetch failed: " + (e && e.message ? e.message : e) };
+  }
+  if (res.status === 404) return { error: "not built", reason: "not built" };
+  if (!res.ok) return { error: "site map fetch failed: " + res.status };
+  var map;
+  try { map = await res.json(); } catch (e) { return { error: "site map parse failed: " + (e && e.message ? e.message : e) }; }
+  var out = { site_map: map };
+  if (win) win.__snSiteMap = out;
+  return out;
+}
+
+/**
+ * The page's JSON-LD Article, from the plugin's schema graph. null when the
+ * page carries none (not a note).
+ */
+export function snReadArticle(doc) {
+  var scripts = doc && doc.querySelectorAll ? doc.querySelectorAll('script[type="application/ld+json"]') : [];
+  for (var i = 0; i < scripts.length; i++) {
+    var data;
+    try { data = JSON.parse(scripts[i].textContent); } catch (e) { continue; }
+    var graph = data && Array.isArray(data["@graph"]) ? data["@graph"] : [data];
+    for (var j = 0; j < graph.length; j++) {
+      if (graph[j] && graph[j]["@type"] === "Article") return graph[j];
+    }
+  }
+  return null;
+}
+
+/**
+ * A BibTeX key: surname, year, first word of the title.
+ */
+export function snCiteKey(year, title) {
+  var word = String(title || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\s+/).filter(function (x) { return x && ["a", "an", "the", "on", "of", "in", "and", "to", "is", "not"].indexOf(x) < 0; })[0] || "note";
+  return "lentino" + (year || "") + word;
+}
+
+/**
+ * get-citation (bridge v2, arc one): this note as BibTeX and CSL-JSON, from
+ * the page's own JSON-LD (author, dates, headline, canonical) plus, on a
+ * signed note, the ledger record's content hash and URL from the
+ * verification manifest. Owner decisions 2026-09-16: author "Lentino, Juan",
+ * ORCID on every note. Unsigned returns the citation without the anchor.
+ */
+export async function snGetCitation(doc, fetchFn) {
+  var art = snReadArticle(doc);
+  if (!art) return { reason: "not a note" };
+  var url = String(art.mainEntityOfPage || (doc.location && doc.location.href) || "");
+  var title = String(art.headline || "");
+  var published = String(art.datePublished || "");
+  var modified = String(art.dateModified || "");
+  var year = published.slice(0, 4);
+  var month = published.slice(5, 7);
+  var day = published.slice(8, 10);
+  var orcid = "https://orcid.org/0009-0006-8151-5920";
+  var key = snCiteKey(year, title);
+  var out = {
+    canonical_url: url,
+    orcid: orcid,
+    csl_json: {
+      id: key, type: "post-weblog", title: title, "container-title": "Signal & Noise", URL: url,
+      author: [{ family: "Lentino", given: "Juan", ORCID: orcid }],
+      issued: { "date-parts": [[Number(year), Number(month), Number(day)]] },
+      accessed: { "date-parts": [[new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, new Date().getUTCDate()]] },
+    },
+  };
+  if (modified) out.csl_json.modified = modified;
+  var m = snReadManifest(doc);
+  if (m && m.calls && m.calls.record && m.calls.record.url) {
+    out.ledger_url = String(m.calls.record.url);
+    out.uid = m.subject ? String(m.subject.uid || "") : "";
+    out.version = m.subject ? Number(m.subject.version) || 0 : 0;
+    var f = fetchFn || fetch;
+    try {
+      var res = await f(out.ledger_url, { headers: { accept: "application/json" } });
+      if (res.ok) {
+        var rec = await res.json();
+        if (rec && rec.content_hash) out.anchored_hash = String(rec.content_hash);
+        else out.anchor_error = "the ledger record carries no content_hash";
+      } else {
+        out.anchor_error = "ledger record fetch failed: " + res.status;
+      }
+    } catch (e) {
+      out.anchor_error = "ledger record fetch failed: " + (e && e.message ? e.message : e);
+    }
+  }
+  var note = out.anchored_hash ? " Content hash " + out.anchored_hash + ", record " + out.ledger_url + "." : "";
+  out.bibtex = "@online{" + key + ",\n  author = {Lentino, Juan},\n  title = {" + title.replace(/[{}]/g, "") + "},\n  year = {" + year + "},\n  month = {" + month + "},\n  url = {" + url + "},\n  urldate = {" + out.csl_json.accessed["date-parts"][0].join("-") + "},\n  note = {ORCID " + orcid + "." + note + "}\n}";
+  return out;
+}
+
+/**
+ * The beacon: one row per tool call, {tool, outcome, ms} and nothing else,
+ * to the rights-signals worker, which writes it to the machine-readers
+ * dataset as family webmcp. Fire-and-forget; a missing sendBeacon or a
+ * failure changes nothing for the caller. The figure this feeds is labelled
+ * "reported by browsers" on the admin side: a signal, never an audit.
+ */
+export function snWebmcpBeacon(w, tool, outcome, ms) {
+  try {
+    var nav = w && w.navigator;
+    if (!nav || typeof nav.sendBeacon !== "function") return false;
+    var body = JSON.stringify({ tool: String(tool), outcome: String(outcome), ms: Math.max(0, Math.min(60000, Math.round(Number(ms) || 0))) });
+    return nav.sendBeacon("/_sn/rights-signals/webmcp-call", new Blob([body], { type: "application/json" }));
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Wrap a tool's execute so every call reports itself: ok when the result
+ * carries neither error nor reason, absent when it carries a reason (not a
+ * note, not built, nothing related), error otherwise or on a throw.
+ */
+export function snWebmcpMeasured(w, tool, fn) {
+  return async function (input) {
+    var t0 = Date.now();
+    var result;
+    try {
+      result = await fn(input);
+    } catch (e) {
+      snWebmcpBeacon(w, tool, "error", Date.now() - t0);
+      throw e;
+    }
+    var outcome = result && result.error ? "error" : (result && result.reason ? "absent" : "ok");
+    snWebmcpBeacon(w, tool, outcome, Date.now() - t0);
+    return result;
+  };
+}
+
+/**
  * SPEC-PIN (2026-08-28). Current tool-registration surface for in-page agents
  * is `navigator.modelContext.registerTool({ name, description, inputSchema,
  * execute })` — a W3C WebMachineLearning Community Group Draft Report
@@ -594,19 +772,47 @@ export function snWebmcpMain(w) {
   if (!api) return;
   win.__snWebmcpRegistered = true;
 
+  var none = { type: "object", properties: {}, additionalProperties: false };
+
   api.registerTool({
     name: "verify-page",
     description:
       "Verify this page's provenance: signature, content hash, live match, and anchor, computed in this browser from the page's own verification manifest. Returns the honest absence on unsigned pages.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    execute: function () { return snVerifyPage(); },
+    inputSchema: none,
+    execute: snWebmcpMeasured(win, "verify-page", function () { return snVerifyPage(); }),
   });
 
   api.registerTool({
     name: "get-rights-terms",
     description:
       "The machine-readable rights terms in force for this site: the ODRL policy (W3C TDMRep profile) plus pointers to license.xml, tdmrep.json, and the human-readable policy.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    execute: function () { return snGetRightsTerms(); },
+    inputSchema: none,
+    execute: snWebmcpMeasured(win, "get-rights-terms", function () { return snGetRightsTerms(); }),
+  });
+
+  // Bridge v2, arc one (2026-09-16): the reader's agent gets the site's own
+  // arithmetic. Each reads public bytes and calls no authenticated door.
+  api.registerTool({
+    name: "related-notes",
+    description:
+      "The notes this site's own relatedness kernel ranks closest to the current note (title, url, score, shared tags), from the page's related manifest. Says so when the page is not a note, when the index is not built, or when nothing is related.",
+    inputSchema: none,
+    execute: snWebmcpMeasured(win, "related-notes", function () { return snRelatedNotes(doc); }),
+  });
+
+  api.registerTool({
+    name: "get-site-map",
+    description:
+      "What this site is, as structure: pillars with their notes, every published note (title, url, dates, tags, pillar, signed), every published page, the provenance papers, the feeds and the rights terms pointer. From /notes/index.json, built at each index rebuild.",
+    inputSchema: none,
+    execute: snWebmcpMeasured(win, "get-site-map", function () { return snGetSiteMap(null, win); }),
+  });
+
+  api.registerTool({
+    name: "get-citation",
+    description:
+      "Cite the current note: BibTeX and CSL-JSON with the canonical URL, the author's ORCID, and on a signed note the anchored content hash and its public ledger record. Says so when the page is not a note.",
+    inputSchema: none,
+    execute: snWebmcpMeasured(win, "get-citation", function () { return snGetCitation(doc); }),
   });
 }
