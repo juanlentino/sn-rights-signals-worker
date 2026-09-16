@@ -40,6 +40,13 @@
   // path, Accept and timestamp, but ONLY for rights-surface reads (~80 per
   // 30 days against 17,463 total). A separate dataset because it must never be
   // summed with the aggregate one and answers a different question.
+  // v1.25.1: the beacon's per-IP limiter, the Workers Rate Limiting binding
+  // (backed by the same infrastructure as rate-limiting rules; spends no
+  // dashboard rule). 10 per 10 seconds per client IP on the beacon route only;
+  // over it, the route answers 204 and writes nothing (src/webmcp-call.mjs).
+  "ratelimits": [
+    { "name": "WEBMCP_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 10 } }
+  ],
   "analytics_engine_datasets": [
     { "binding": "SN_MR", "dataset": "sn_machine_readers" },
     { "binding": "SN_MR_RIGHTS", "dataset": "sn_machine_readers_rights" }
