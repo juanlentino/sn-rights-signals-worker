@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.25.2 - 2026-09-16
+
+### Fixed
+- `get-citation`: the page's own Article is the one whose `mainEntityOfPage` (or `@id`, minus its fragment) equals the canonical URL, and the citation's URL is that canonical. On the notes archive, whose graph lists ten notes as `Article` items inside an `ItemList`, the bridge cited the first listed note as if it were the page; the archive now reads "not a note". Trailing slashes and fragments on either side do not break the match. (#61)
+
 ## 1.25.1 - 2026-09-16
 
 ### Fixed
