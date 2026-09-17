@@ -83,7 +83,7 @@ describe("get-citation", () => {
   });
   it("snBibEscape: a backslash cannot smuggle a TeX command; tilde and caret take their text forms; braces are stripped", async () => {
     const { snBibEscape } = await import("../src/webmcp-bridge-client.mjs");
-    expect(snBibEscape("a \\input{evil} b")).toBe("a \\textbackslash{}input evil b");
+    expect(snBibEscape("a \\input{evil} b")).toBe("a \\textbackslash{}inputevil b");
     expect(snBibEscape("x~y^z")).toBe("x\\textasciitilde{}y\\textasciicircum{}z");
     expect(snBibEscape("100% & #1 $_")).toBe("100\\% \\& \\#1 \\$\\_");
     expect(snBibEscape("")).toBe("");
