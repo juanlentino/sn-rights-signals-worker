@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.25.3 - 2026-09-16
+
+### Fixed
+- `get-citation`: `urldate` is zero-padded ISO (`2026-09-16`, not `2026-9-16`); BibTeX values are TeX-escaped (`& % $ # _`, braces stripped). (#61)
+
+### Added
+- `get-citation`: the BibTeX entry carries `organization = {Signal \& Noise}`, a biblatex `date` beside `year`/`month`, `keywords` from the Article's keywords, `version` from the ledger subject on a signed page, and `language`; the CSL-JSON carries `abstract`, `keyword`, `language` and, when anchored, a `note` with the content hash and record; and a `plain` line, APA-shaped: "Lentino, J. (2026, May 12). Title. Signal & Noise. URL". (#61)
+
 ## 1.25.2 - 2026-09-16
 
 ### Fixed

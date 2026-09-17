@@ -65,6 +65,35 @@ describe("get-citation", () => {
     expect(c.anchored_hash).toBeUndefined();
     expect(c.ledger_url).toBeUndefined();
   });
+  it("v1.25.3: dates are ISO and zero-padded, specials are TeX-escaped, and the plain line reads APA-shaped", async () => {
+    const ld2 = JSON.stringify({ "@graph": [{ "@type": "Article", headline: "Signal & Noise: 50% of #tags_here", datePublished: "2026-05-03T10:00:00+00:00", description: "An abstract.", keywords: "authorship, music-rights", mainEntityOfPage: "https://juanlentino.com/notes/two-kinds/" }] });
+    const c = await snGetCitation(docWith({}, ld2));
+    expect(c.bibtex).toMatch(/urldate = \{\d{4}-\d{2}-\d{2}\},/);
+    expect(c.bibtex).toContain("date = {2026-05-03},");
+    expect(c.bibtex).toContain("month = {05},");
+    expect(c.bibtex).toContain("title = {Signal \\& Noise: 50\\% of \\#tags\\_here},");
+    expect(c.bibtex).toContain("organization = {Signal \\& Noise},");
+    expect(c.bibtex).toContain("keywords = {authorship, music-rights},");
+    expect(c.bibtex).toContain("language = {english},");
+    expect(c.bibtex.trim().endsWith("}")).toBe(true);
+    expect(c.csl_json.abstract).toBe("An abstract.");
+    expect(c.csl_json.keyword).toBe("authorship, music-rights");
+    expect(c.csl_json.language).toBe("en-US");
+    expect(c.plain).toBe("Lentino, J. (2026, May 3). Signal & Noise: 50% of #tags_here. Signal & Noise. https://juanlentino.com/notes/two-kinds/");
+  });
+  it("snBibEscape: a backslash cannot smuggle a TeX command; tilde and caret take their text forms; braces are stripped", async () => {
+    const { snBibEscape } = await import("../src/webmcp-bridge-client.mjs");
+    expect(snBibEscape("a \\input{evil} b")).toBe("a \\textbackslash{}inputevil b");
+    expect(snBibEscape("x~y^z")).toBe("x\\textasciitilde{}y\\textasciicircum{}z");
+    expect(snBibEscape("100% & #1 $_")).toBe("100\\% \\& \\#1 \\$\\_");
+    expect(snBibEscape("")).toBe("");
+  });
+  it("v1.25.3: a signed page carries the version and the hash in BibTeX and CSL note", async () => {
+    const manifest = JSON.stringify({ subject: { uid: "u1", version: 3 }, calls: { record: { url: "https://ledger.example/u1/v3.json" } } });
+    const c = await snGetCitation(docWith({ "sn-verification-manifest": manifest }, ld), async () => ({ ok: true, status: 200, json: async () => ({ content_hash: "abc123" }) }));
+    expect(c.bibtex).toContain("version = {3},");
+    expect(c.csl_json.note).toBe("Content hash abc123; record https://ledger.example/u1/v3.json");
+  });
   it("a signed note carries the ledger record's content hash and URL; a failed record fetch names it, never breaks the citation", async () => {
     const manifest = JSON.stringify({ subject: { uid: "u1", version: 3 }, calls: { record: { url: "https://ledger.example/u1/v3.json" } } });
     const ok = async () => ({ ok: true, status: 200, json: async () => ({ content_hash: "abc123" }) });
