@@ -81,6 +81,13 @@ describe("get-citation", () => {
     expect(c.csl_json.language).toBe("en-US");
     expect(c.plain).toBe("Lentino, J. (2026, May 3). Signal & Noise: 50% of #tags_here. Signal & Noise. https://juanlentino.com/notes/two-kinds/");
   });
+  it("snBibEscape: a backslash cannot smuggle a TeX command; tilde and caret take their text forms; braces are stripped", async () => {
+    const { snBibEscape } = await import("../src/webmcp-bridge-client.mjs");
+    expect(snBibEscape("a \\input{evil} b")).toBe("a \\textbackslash{}input evil b");
+    expect(snBibEscape("x~y^z")).toBe("x\\textasciitilde{}y\\textasciicircum{}z");
+    expect(snBibEscape("100% & #1 $_")).toBe("100\\% \\& \\#1 \\$\\_");
+    expect(snBibEscape("")).toBe("");
+  });
   it("v1.25.3: a signed page carries the version and the hash in BibTeX and CSL note", async () => {
     const manifest = JSON.stringify({ subject: { uid: "u1", version: 3 }, calls: { record: { url: "https://ledger.example/u1/v3.json" } } });
     const c = await snGetCitation(docWith({ "sn-verification-manifest": manifest }, ld), async () => ({ ok: true, status: 200, json: async () => ({ content_hash: "abc123" }) }));

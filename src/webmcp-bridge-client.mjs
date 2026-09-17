@@ -670,7 +670,17 @@ export function snCiteKey(year, title) {
  * braces, which would unbalance the entry.
  */
 export function snBibEscape(v) {
-  return String(v || "").replace(/[{}]/g, "").replace(/([&%$#_])/g, "\\$1");
+  // Braces out first (they would unbalance the entry), then the backslash
+  // (CodeQL js/incomplete-sanitization, 2026-09-16: a title carrying one would
+  // otherwise smuggle a TeX command into the .bib file), then the specials;
+  // tilde and caret are accent commands when escaped with a backslash, so
+  // they take their text forms.
+  return String(v || "")
+    .replace(/[{}]/g, "")
+    .replace(/\\/g, "\\textbackslash{}")
+    .replace(/([&%$#_])/g, "\\$1")
+    .replace(/~/g, "\\textasciitilde{}")
+    .replace(/\^/g, "\\textasciicircum{}");
 }
 
 /**
