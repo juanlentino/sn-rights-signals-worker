@@ -675,12 +675,10 @@ export function snBibEscape(v) {
   // otherwise smuggle a TeX command into the .bib file), then the specials;
   // tilde and caret are accent commands when escaped with a backslash, so
   // they take their text forms.
-  return String(v || "")
-    .replace(/[{}]/g, "")
-    .replace(/\\/g, "\\textbackslash{}")
-    .replace(/([&%$#_])/g, "\\$1")
-    .replace(/~/g, "\\textasciitilde{}")
-    .replace(/\^/g, "\\textasciicircum{}");
+  // One pass over one character class, backslash included, so no step can
+  // re-escape another's output and CodeQL can see the backslash is covered.
+  var map = { "\\": "\\textbackslash{}", "{": "", "}": "", "&": "\\&", "%": "\\%", "$": "\\$", "#": "\\#", "_": "\\_", "~": "\\textasciitilde{}", "^": "\\textasciicircum{}" };
+  return String(v || "").replace(/[\\{}&%$#_~^]/g, function (c) { return map[c]; });
 }
 
 /**
