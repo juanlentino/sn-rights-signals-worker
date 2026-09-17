@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.25.4 - 2026-09-17
+
+### Security
+- The `sharp` override moves to `^0.35.4` (Dependabot #3, high: libheif GHSA-g89c-p67h-r497 and GHSA-2jg2-4ch7-h545, patched in 0.35.4). `sharp` is a dev-side transitive dependency (through miniflare and lightningcss); the runtime never loads it. Lockfile regenerated; `npm audit` reports 0.
+
 ## 1.25.3 - 2026-09-16
 
 ### Fixed
