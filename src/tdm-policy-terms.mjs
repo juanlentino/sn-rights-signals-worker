@@ -276,6 +276,14 @@ of this site, of the rightsholder, and of any log either controls. Superseded ve
 anchors, and <strong>no version is ever silently rewritten in place</strong>: a change to the terms
 produces a new version rather than an edit to a published one.</p>
 
+<p><strong>Reads are timestamped too.</strong> From September 2026, a record is anchored in the same
+ledger for each calendar month and each crawler family that read this site: which versions of this
+policy and of the machine-readable reservation were in force, how many times that family fetched
+them and on which days, and how much it crawled, with the share declared as training. The record
+carries counts and paths, never a browser string or an address. It is evidence of what was published
+and what was read while it was published; it is not a finding that any party accepted or breached
+these terms.</p>
+
 <p><strong>What the anchoring does not guarantee.</strong> Anchoring runs on a periodic sweep, not at
 the moment of publication. A version that is published and superseded <em>within a single sweep
 interval</em> may therefore carry no anchor of its own. Every version that is in force across a
@@ -332,6 +340,11 @@ machine-readable pointers did not yet list <code>/ns/tdm</code>. No term in
 <a href="#reservation">&sect;1</a>, <a href="#grant">&sect;2</a> or <a href="#unconditional">&sect;3</a>
 differed. Recorded here because an absent anchor should be explained by the document rather than
 discovered by a reader who goes looking for one.</p>
+
+<p><strong>Version 1.3.</strong> Adds one paragraph to <a href="#version">&sect;6</a> stating that
+monthly read records are anchored beside the policy versions. No term in
+<a href="#reservation">&sect;1</a>, <a href="#grant">&sect;2</a> or <a href="#unconditional">&sect;3</a>
+differed from 1.2.</p>
 
 <p><strong>Why a reservation and a grant in the same stack.</strong> Reading
 <a href="${LICENSE_URL}">/license.xml</a> in isolation, a parser sees <code>ai-train</code>
