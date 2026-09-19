@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.26.0 - 2026-09-19
+
+### Added
+- **TDM policy 1.3: reads are timestamped too.** One paragraph in section 6, after "Supersession is timestamped": from September 2026 a record is anchored in the same ledger for each calendar month and each crawler family that read the site (which policy and reservation versions were in force, how many times the family fetched them and on which days, how much it crawled with the training share; counts and paths, never a browser string or an address; evidence of what was published and read, not a finding of acceptance or breach). The records are the plugin's (17.0.0) and the provenance worker's (1.21.0), filed under `rights-evidence/`. An appendix note records 1.3 the way the 1.0 note does: no term in sections 1 to 3 differed from 1.2. `POLICY_VERSION` 1.3, `POLICY_DATE` 2026-09-19; the header, the footer, the ODRL `uid` and the `TDM-Licence-Version` handshake header follow the constant, and the ledger's hourly sweep anchors the new version.
+
 ## 1.25.4 - 2026-09-17
 
 ### Security

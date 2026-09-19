@@ -20,8 +20,8 @@ export const RIGHTSHOLDER = "Juan Lentino";
 // "draft" the page renders its review banner; flipping it to "final" is the one
 // edit that promotes the document, and the check script asserts the page and
 // this constant agree.
-export const POLICY_VERSION = "1.2";
-export const POLICY_DATE = "2026-08-09";
+export const POLICY_VERSION = "1.3";
+export const POLICY_DATE = "2026-09-19";
 export const POLICY_STATUS = "published";
 
 // SUPERSESSION IS THE REASON THIS IS 1.1 AND NOT AN EDIT TO 1.0.
