@@ -54,6 +54,13 @@ function clip(value, cap) {
  */
 export function observeRightsSurfaceDetail(request, env, pathname, surface, family, vp) {
   if (!DETAIL_SURFACES.includes(surface)) return false;
+  // 1.26.1: self-traffic is not readership, the rule the headline totals
+  // already apply. The provenance worker's hourly capture of the rights files
+  // was 468 of the last 500 rows of this stream on 2026-09-19 and pushed its
+  // 500-row read window back to eight days; the monthly rights-evidence
+  // records read this stream. A first-party read still lands in the aggregate
+  // (with its flag); it does not spend the stream's cap.
+  if (vp?.first_party === true) return false;
   const ds = env && env.SN_MR_RIGHTS;
   if (!ds || typeof ds.writeDataPoint !== "function") return false;
 
