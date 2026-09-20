@@ -309,6 +309,31 @@ describe("machineReadersResponse — token-auth read path", () => {
 
 import { SIG_VALID } from "../src/web-bot-auth.mjs";
 
+describe("rights-detail stream: first-party reads never spend its cap (1.26.1)", () => {
+  const envWith = (agg, detail) => ({
+    SN_MR: { writeDataPoint: (dp) => agg.push(dp) },
+    SN_MR_RIGHTS: { writeDataPoint: (dp) => detail.push(dp) },
+  });
+  const read = (ua, agg, detail) => observeMachineReader(new Request("https://juanlentino.com/license.xml", { headers: { "user-agent": ua } }), envWith(agg, detail), "/license.xml");
+
+  it("the provenance worker's capture lands in the aggregate as first-party and NOT in the detail stream", () => {
+    const agg = [], detail = [];
+    read("sn-provenance-worker (rights-signal capture; +https://juanlentino.com/provenance/)", agg, detail);
+    expect(agg).toHaveLength(1);
+    expect(agg[0].blobs[6]).toBe("1"); // blob7 first_party
+    expect(detail).toHaveLength(0);
+  });
+
+  it("a stranger's read of the same file still lands in both", () => {
+    const agg = [], detail = [];
+    read("Mozilla/5.0 (compatible; GPTBot/1.0)", agg, detail);
+    expect(agg).toHaveLength(1);
+    expect(agg[0].blobs[6]).toBe("0");
+    expect(detail).toHaveLength(1);
+    expect(detail[0].blobs[1]).toBe("openai");
+  });
+});
+
 describe("blob11 — signature state", () => {
   const envWith = (sink) => ({
     SN_MR: { writeDataPoint: (dp) => sink.push(dp) },
