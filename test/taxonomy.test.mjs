@@ -302,3 +302,17 @@ describe("provenance of every call is recorded", () => {
     }
   });
 });
+
+describe("first-party: the provenance worker's rights-signal capture (1.26.1)", () => {
+  it("files sn-provenance-worker as first-party ops, never as a reader", () => {
+    const vp = classifyVendorPurpose("sn-provenance-worker (rights-signal capture; +https://juanlentino.com/provenance/)");
+    expect(vp).toMatchObject({ id: "self-provenance-ledger", vendor: "signal-and-noise", purpose: "ops", first_party: true, training_corpus_source: false });
+  });
+  it("keeps the plugin's integrity checker on its own entry", () => {
+    expect(classifyVendorPurpose("SN-Provenance-Integrity/17.0.0").id).toBe("self-provenance");
+  });
+  it("taxonomy 1.3.1 carries the entry", () => {
+    expect(TAXONOMY_VERSION).toBe("1.3.1");
+    expect(TAXONOMY.entries.filter((e) => e.first_party).map((e) => e.id)).toContain("self-provenance-ledger");
+  });
+});

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.26.1 - 2026-09-19
+
+### Fixed
+- **The provenance worker's hourly capture is first-party.** Taxonomy 1.3.1 adds `self-provenance-ledger` (`sn-provenance-worker`, first-party, ops) beside `self-provenance` and `self-ledger`. sn-provenance 1.21.1 names its capture with that string; before that it sent no User-Agent and every capture of the three rights files filed as `unclassified-machine`, 468 of the last 500 rows of the rights stream on 2026-09-19, which drowned the stream the monthly rights-evidence records read. Headline totals already exclude first-party reads, so the machine-readers counts move by the captures' share from the next read on.
+
 ## 1.26.0 - 2026-09-19
 
 ### Added
