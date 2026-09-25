@@ -40,6 +40,18 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # A committed symlink (mode 120000) usually points at a path on one
+      # machine, e.g. a node_modules link to the owner's Mac, and breaks every
+      # other checkout. Runs before npm ci so the tree is exactly what was
+      # committed. A step, not a job: per-job billing rounds up.
+      - name: No committed symlinks
+        run: |
+          links=$(git ls-files -s | awk '$1 == "120000" { print $4 }')
+          if [ -n "$links" ]; then
+            echo "::error::Committed symlinks found (git rm --cached them):"
+            echo "$links"
+            exit 1
+          fi
       - run: npm ci
       # R6c dependency-provenance gate. A STEP, not a job: Actions bills per job
       # rounded up to the whole minute, so a separate job for a ~3s check would
