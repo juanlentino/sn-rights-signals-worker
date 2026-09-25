@@ -19,6 +19,37 @@ WordPress surfaces (`/wp-admin`, `/wp-login.php`, `/xmlrpc.php`,
 `src/admin-bypass.mjs` — so a regression in this Worker's own logic can
 never be the thing that breaks login or the admin dashboard.
 
+**Three routes carry no Worker at all** (dashboard: juanlentino.com → Workers
+Routes, Worker "None"; added 2026-09-25). They live only in Cloudflare, not in
+`wrangler.jsonc`: wrangler cannot declare a route without a script, and
+`wrangler deploy` manages only this script's own routes, so a deploy neither
+creates nor removes them.
+
+| Route | Worker |
+|---|---|
+| `juanlentino.com/wp-content/plugins/*` | None |
+| `juanlentino.com/wp-content/themes/*` | None |
+| `juanlentino.com/wp-includes/*` | None |
+
+Why: OpenStation prefetches every app's JS and CSS on each admin load, and
+Cloudflare's **Speed Brain** answers any `Sec-Purpose: prefetch` request
+itself. It refuses a URL a Worker route covers (`503`, `Cf-Speculation-Refused:
+prefetch refused: disabled for worker requests`), and it never lets a prefetch
+reach the origin, so anything not already in cache is a `503` too (every asset
+after a plugin update bumps its `?ver=`). These routes removed the first cause.
+**Speed Brain was switched off** (Speed → Settings → Content Optimization,
+2026-09-25) for the second, and that is what cleared the ~43 red
+`net::ERR_ABORTED 503` lines per load. Speed Brain was never doing anything here
+anyway: it skips pages that run a Worker, and this Worker runs on every page.
+Turning it back on brings the red lines back. The routes stay because nothing
+this Worker does applies to those paths (non-HTML passes through unmodified), so
+they only cost Worker invocations.
+`/wp-content/uploads/*` stays on the Worker on purpose:
+media is content, and its reads stay in the machine-readership counts. The
+cost: crawler reads of plugin, theme and core assets no longer reach the
+`asset` surface class of that sensor. Do not delete these routes to "tidy
+up" without reading this paragraph.
+
 | Path | Behavior |
 |---|---|
 | `GET /robots.txt` | **Full ownership** — generates the entire content-signals block itself (`Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference`, the Article 4 preamble, the named-crawler `Disallow` list), appends whatever WordPress's own origin file contributes, then a `License:` directive. See "robots.txt ownership" below for why this took two tries. |
