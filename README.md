@@ -19,6 +19,30 @@ WordPress surfaces (`/wp-admin`, `/wp-login.php`, `/xmlrpc.php`,
 `src/admin-bypass.mjs` — so a regression in this Worker's own logic can
 never be the thing that breaks login or the admin dashboard.
 
+**Three routes carry no Worker at all** (dashboard: juanlentino.com → Workers
+Routes, Worker "None"; added 2026-09-25). They live only in Cloudflare, not in
+`wrangler.jsonc`: wrangler cannot declare a route without a script, and
+`wrangler deploy` manages only this script's own routes, so a deploy neither
+creates nor removes them.
+
+| Route | Worker |
+|---|---|
+| `juanlentino.com/wp-content/plugins/*` | None |
+| `juanlentino.com/wp-content/themes/*` | None |
+| `juanlentino.com/wp-includes/*` | None |
+
+Why: Cloudflare refuses every browser prefetch for a URL a Worker route
+covers, answering `503` with `Cf-Speculation-Refused: prefetch refused:
+disabled for worker requests`. Under the bare wildcard, OpenStation's
+prefetch of every app's JS and CSS failed on every admin load (about 43 red
+`net::ERR_ABORTED 503` lines per load, and no head start on any app's first
+open). Nothing this Worker does applies to those paths: non-HTML passes
+through unmodified. `/wp-content/uploads/*` stays on the Worker on purpose:
+media is content, and its reads stay in the machine-readership counts. The
+cost: crawler reads of plugin, theme and core assets no longer reach the
+`asset` surface class of that sensor. Do not delete these routes to "tidy
+up" without reading this paragraph.
+
 | Path | Behavior |
 |---|---|
 | `GET /robots.txt` | **Full ownership** — generates the entire content-signals block itself (`Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference`, the Article 4 preamble, the named-crawler `Disallow` list), appends whatever WordPress's own origin file contributes, then a `License:` directive. See "robots.txt ownership" below for why this took two tries. |
