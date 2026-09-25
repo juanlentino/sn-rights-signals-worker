@@ -37,9 +37,10 @@
   // 2026-09-25: three dashboard-only routes with NO Worker carve static
   // assets out of this wildcard: juanlentino.com/wp-content/plugins/*,
   // /wp-content/themes/* and /wp-includes/*. Cloudflare refuses every browser
-  // prefetch on a Worker-covered URL (503, Cf-Speculation-Refused), which
-  // broke OpenStation's app prefetch. Wrangler cannot declare a script-less
-  // route and a deploy never touches them; see README "Routes".
+  // prefetch on a Worker-covered URL (503, Cf-Speculation-Refused), one of the
+  // two causes of OpenStation's failed app prefetch (Speed Brain off was the
+  // other). Wrangler cannot declare a script-less route and a deploy never
+  // touches them; see README "Routes".
   // v1.4.0: machine-readership aggregates (family + surface class + day only —
   // no IPs, no raw UAs; see src/machine-readers.mjs for the privacy contract).
   // v1.11.0: SN_MR_RIGHTS is the RULE 3 full-fidelity stream — complete UA,

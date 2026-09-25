@@ -31,13 +31,20 @@ creates nor removes them.
 | `juanlentino.com/wp-content/themes/*` | None |
 | `juanlentino.com/wp-includes/*` | None |
 
-Why: Cloudflare refuses every browser prefetch for a URL a Worker route
-covers, answering `503` with `Cf-Speculation-Refused: prefetch refused:
-disabled for worker requests`. Under the bare wildcard, OpenStation's
-prefetch of every app's JS and CSS failed on every admin load (about 43 red
-`net::ERR_ABORTED 503` lines per load, and no head start on any app's first
-open). Nothing this Worker does applies to those paths: non-HTML passes
-through unmodified. `/wp-content/uploads/*` stays on the Worker on purpose:
+Why: OpenStation prefetches every app's JS and CSS on each admin load, and
+Cloudflare's **Speed Brain** answers any `Sec-Purpose: prefetch` request
+itself. It refuses a URL a Worker route covers (`503`, `Cf-Speculation-Refused:
+prefetch refused: disabled for worker requests`), and it never lets a prefetch
+reach the origin, so anything not already in cache is a `503` too (every asset
+after a plugin update bumps its `?ver=`). These routes removed the first cause.
+**Speed Brain was switched off** (Speed → Settings → Content Optimization,
+2026-09-25) for the second, and that is what cleared the ~43 red
+`net::ERR_ABORTED 503` lines per load. Speed Brain was never doing anything here
+anyway: it skips pages that run a Worker, and this Worker runs on every page.
+Turning it back on brings the red lines back. The routes stay because nothing
+this Worker does applies to those paths (non-HTML passes through unmodified), so
+they only cost Worker invocations.
+`/wp-content/uploads/*` stays on the Worker on purpose:
 media is content, and its reads stay in the machine-readership counts. The
 cost: crawler reads of plugin, theme and core assets no longer reach the
 `asset` surface class of that sensor. Do not delete these routes to "tidy
