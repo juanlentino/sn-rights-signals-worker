@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.27.0 - 2026-09-27
+
+### Added
+- **Verified-bot category on every machine-read row (`blob12`, read back as `verified_bot`).** Crawler counts so far trusted the User-Agent alone, so anyone could claim to be GPTBot and inflate a published number. A Cloudflare Transform Rule now sets `x-sn-verified-bot` to `cf.verified_bot_category` on every request, overwriting whatever the client sent, and the sensor records it trimmed and clamped to 64 characters. A client Cloudflare did not verify records an empty string.
+- **The aggregate read query selects and groups it.** `/machine-readers` rows gain a `verified_bot` column. Additive only: no existing column is renamed and blobs 1 to 11 keep their positions, pinned by tests that go red with the change reverted.
+
+### Notes
+- Counts are only spoof-resistant for rows written after this deploys. Older rows carry an empty `verified_bot`, which means not measured, not unverified.
+- Plugin side: an older plugin ignores the extra column; reading it needs an additive normaliser change there.
+
 ## 1.26.3 - 2026-09-27
 
 ### Security

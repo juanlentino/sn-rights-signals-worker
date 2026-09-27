@@ -273,6 +273,12 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
         // as NOT MEASURED, which is a different fact from "unsigned", itself a
         // measurement that the agent did not sign.
         signatureState,
+        // v1.27.0: blob12, Cloudflare's verified-bot category. A zone Transform
+        // Rule SETS x-sn-verified-bot to cf.verified_bot_category on every
+        // request, overwriting any client-sent value, so unlike the UA this
+        // cannot be spoofed. Empty for a client Cloudflare did not verify.
+        // APPENDED like blob11; old rows carry "" and read as not verified.
+        (request.headers.get("x-sn-verified-bot") ?? "").trim().slice(0, 64),
       ],
       doubles: [1],
       // Still exactly one index: Analytics Engine permits one per data point,
@@ -395,12 +401,12 @@ export function buildQuery(view, days) {
   return (
     "SELECT blob1 AS family, blob2 AS surface, blob3 AS vendor, blob4 AS purpose, " +
     "blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, " +
-    "blob9 AS agent, blob10 AS markdown_requested, blob11 AS signed_agent, " +
+    "blob9 AS agent, blob10 AS markdown_requested, blob11 AS signed_agent, blob12 AS verified_bot, " +
     "toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
     "FROM sn_machine_readers " +
     since +
     "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, " +
-    `first_party, agent, markdown_requested, signed_agent, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
+    `first_party, agent, markdown_requested, signed_agent, verified_bot, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
   );
 }
 
