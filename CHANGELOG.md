@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.26.2 - 2026-09-27
+
+### Fixed
+- **A throw in this Worker falls through to the origin instead of taking the site down.** It fronts every page (`juanlentino.com/*`); the sensor and the markdown path already fail open, but an uncaught throw elsewhere (header rebuild, TDM meta injection, robots) returned a 1101 on the whole site. `fetch()` now arms `ctx.passThroughOnException()` first, so such a request reaches the origin and only loses its reservation headers for that one response. A test asserts it is armed on a page and on a bypass path; removing it goes red. Found in the 2026-09-27 worker research.
+
 ### CI
 - Semgrep scan (p/javascript + p/security-audit, pinned image) as a step in the test job, like the sibling workers; this was the only one without it. 2026-09-27 security audit.
 

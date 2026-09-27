@@ -8,6 +8,16 @@ function stubOrigin(body, headers = {}) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("dispatcher", () => {
+  // v1.26.2: a throw in this Worker must fall through to the origin, not 1101
+  // the whole site. passThroughOnException is armed before any other work.
+  it("arms passThroughOnException before anything else, on every request", async () => {
+    stubOrigin("<html><head></head><body>x</body></html>", { "content-type": "text/html" });
+    const ctx = { passThroughOnException: vi.fn(), waitUntil: vi.fn() };
+    await worker.fetch(new Request("https://juanlentino.com/notes/a/"), {}, ctx);
+    await worker.fetch(new Request("https://juanlentino.com/wp-admin/"), {}, ctx);
+    expect(ctx.passThroughOnException).toHaveBeenCalledTimes(2);
+  });
+
   it("bypasses wp-admin before touching anything else", async () => {
     stubOrigin("admin page", { "content-type": "text/html" });
     const res = await worker.fetch(new Request("https://juanlentino.com/wp-admin/edit.php"), {});

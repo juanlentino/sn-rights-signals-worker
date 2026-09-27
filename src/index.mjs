@@ -64,6 +64,13 @@ export default {
   // unmatched path fall through the content-type check below untouched: one
   // extra edge-local Worker hop, zero bytes changed.
   async fetch(request, env, ctx) {
+    // v1.26.2: this Worker fronts EVERY page (juanlentino.com/*). Its sub-steps
+    // already fail open, but an uncaught throw anywhere else here (header
+    // rebuild, TDM meta injection, robots) was a 1101 on the whole site. With
+    // this, Cloudflare sends such a request straight to the origin instead:
+    // the page loses its reservation headers for that one response, and stays
+    // up. First line, so it covers everything below it.
+    ctx?.passThroughOnException?.();
     const { pathname } = new URL(request.url);
     // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
     if (bypassesRightsSignals(pathname)) return fetch(request);
