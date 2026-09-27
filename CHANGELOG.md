@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### CI
+- Semgrep scan (p/javascript + p/security-audit, pinned image) as a step in the test job, like the sibling workers; this was the only one without it. 2026-09-27 security audit.
+
 ## 1.26.1 - 2026-09-19
 
 ### Fixed
