@@ -88,6 +88,45 @@ describe("fetchDirectoryKeys", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(huge));
     await expect(fetchDirectoryKeys("https://agent-huge.test")).resolves.toEqual([]);
   });
+
+  it("does not follow a redirect from the directory: a 302 is a failed key fetch", async () => {
+    // The mock behaves like a real fetch: it follows unless told "manual".
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) =>
+      init?.redirect === "manual"
+        ? new Response(null, { status: 302, headers: { location: "https://elsewhere.test/keys" } })
+        : new Response(JSON.stringify(DIRECTORY))
+    );
+    await expect(fetchDirectoryKeys("https://agent-302.test")).resolves.toEqual([]);
+  });
+
+  function countingStream(chunkBytes, chunkCount) {
+    const state = { pulled: 0 };
+    const chunk = new Uint8Array(chunkBytes).fill(0x20);
+    const stream = new ReadableStream({
+      pull(c) {
+        if (state.pulled >= chunkCount) return c.close();
+        state.pulled++;
+        c.enqueue(chunk);
+      },
+    });
+    return { stream, state };
+  }
+
+  it("refuses a declared content-length over the cap without reading the body", async () => {
+    const { stream, state } = countingStream(16 * 1024, 640); // 10 MB
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(stream, { headers: { "content-length": String(10 * 1024 * 1024) } })
+    );
+    await expect(fetchDirectoryKeys("https://agent-cl.test")).resolves.toEqual([]);
+    expect(state.pulled).toBeLessThanOrEqual(1);
+  });
+
+  it("stops reading an undeclared-length body once it passes the cap", async () => {
+    const { stream, state } = countingStream(16 * 1024, 640); // 10 MB, no content-length
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(stream));
+    await expect(fetchDirectoryKeys("https://agent-stream.test")).resolves.toEqual([]);
+    expect(state.pulled).toBeLessThan(10);
+  });
 });
 
 import { signWithFixture } from "./helpers/sign-fixture.mjs";

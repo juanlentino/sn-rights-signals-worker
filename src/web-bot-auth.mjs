@@ -101,8 +101,11 @@ export async function fetchDirectoryKeys(origin) {
 
   let res;
   try {
-    // redirect-ok: public HTTP-message-signatures key directory, no credential.
+    // manual, not follow: the requester names this URL in its Signature-Agent
+    // header, so a redirect would let it point our fetch at any host. Keys must
+    // come from the host that was named; any 3xx is a failed key fetch below.
     res = await fetch(url, {
+      redirect: "manual",
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: { accept: "application/http-message-signatures-directory+json, application/json" },
     });
@@ -116,8 +119,8 @@ export async function fetchDirectoryKeys(origin) {
     return [];
   }
 
-  const text = await res.text();
-  if (text.length > MAX_DIRECTORY_BYTES) {
+  const text = await readCapped(res, MAX_DIRECTORY_BYTES);
+  if (text === null) {
     await cache.put(cacheKey, emptyDirectory(DIRECTORY_FAIL_TTL_S));
     return [];
   }
@@ -141,6 +144,41 @@ export async function fetchDirectoryKeys(origin) {
     })
   );
   return keys;
+}
+
+/**
+ * The body as text, or null when it exceeds `cap` bytes. A declared
+ * content-length over the cap is refused unread; otherwise the stream is read
+ * chunk by chunk and cancelled the moment it passes the cap, so a hostile
+ * directory never gets buffered whole.
+ */
+async function readCapped(res, cap) {
+  if (Number(res.headers.get("content-length")) > cap) {
+    res.body?.cancel().catch(() => {});
+    return null;
+  }
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > cap) {
+        reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return null;
+  }
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { buf.set(c, off); off += c.byteLength; }
+  return new TextDecoder().decode(buf);
 }
 
 function emptyDirectory(ttl) {
