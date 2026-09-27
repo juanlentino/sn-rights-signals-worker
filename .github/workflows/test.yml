@@ -83,3 +83,12 @@ jobs:
       - name: Live rights-signal check (deployed site)
         if: github.event_name == 'workflow_dispatch' && inputs.live
         run: npm run check:live
+
+      # ── Semgrep: a STEP, like the four sibling workers (2026-09-27 audit) ──
+      # This repo was the only worker without it. Pinned image, same rulesets.
+      - name: Semgrep scan (JS + security-audit rulesets)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src \
+            semgrep/semgrep:1.172.0 \
+            semgrep scan --config p/javascript --config p/security-audit \
+              --metrics=off --error
