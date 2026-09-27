@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.26.3 - 2026-09-27
+
+### Security
+- **The Web Bot Auth key fetch no longer follows redirects.** The key-directory URL comes from the requester's own `Signature-Agent` header, so following a redirect let a requester point this Worker's fetch at any host. The fetch now uses `redirect: "manual"` and any 3xx counts as a failed key fetch, which resolves to unsigned exactly like an unverifiable signature.
+- **An oversized key directory is refused without buffering it.** A declared `content-length` over the 64 KB cap is refused unread; otherwise the body is read as a stream and cancelled the moment it passes the cap. Before, the whole body was read into memory and only then measured. Three new tests cover the redirect, the declared length and the streamed length; each goes red with its fix removed.
+
 ## 1.26.2 - 2026-09-27
 
 ### Fixed
