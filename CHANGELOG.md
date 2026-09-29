@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 1.28.0 - 2026-09-29
+
+### Added
+- **The network behind every machine-read row (`blob13`, read back as `network`).** A User-Agent claims an agent and many claimed AI crawlers carry no Cloudflare verified category, so a claim alone could not be told from an impostor. The sensor now records `cf.asOrganization` (the network owner name), trimmed and clamped to 128 characters, or an empty string when Cloudflare supplies none. The numeric ASN is not stored: blobs are strings and the organisation name is what a reader acts on.
+- **The aggregate read query selects and groups it.** `/machine-readers` rows gain a `network` column. Additive only: blobs 1 to 12 keep their positions, pinned by tests that go red with the change reverted.
+
+### Notes
+- Network is only recorded for rows written after this deploys. Older rows carry an empty `network`, which means not measured.
+- No personal data: the network name is the same field the analytics worker already stores for visits, and no IP address is recorded.
+- Row budget: the 30-day aggregate is 3,288 grouped rows today against the 10,000 row limit, from 61,927 raw points. Grouping by network multiplies rows by the networks seen per agent and day; if the read starts reporting `truncated`, the fix is a separate per-agent network view rather than a higher limit.
+
 ## 1.27.0 - 2026-09-27
 
 ### Added
