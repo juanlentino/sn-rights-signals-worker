@@ -279,6 +279,13 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
         // cannot be spoofed. Empty for a client Cloudflare did not verify.
         // APPENDED like blob11; old rows carry "" and read as not verified.
         (request.headers.get("x-sn-verified-bot") ?? "").trim().slice(0, 64),
+        // v1.28.0: blob13, the network (cf.asOrganization) the request came
+        // from. A UA claims an agent; the network says whose machines sent it,
+        // so "ClaudeBot from a residential ISP" reads as an impostor even when
+        // Cloudflare published no verified category. Org name only: blobs are
+        // strings and the ASN number adds nothing a reader can act on here.
+        // APPENDED like blob11/blob12; old rows carry "" and read as NOT MEASURED.
+        String(request.cf?.asOrganization ?? "").trim().slice(0, 128),
       ],
       doubles: [1],
       // Still exactly one index: Analytics Engine permits one per data point,
@@ -402,11 +409,12 @@ export function buildQuery(view, days) {
     "SELECT blob1 AS family, blob2 AS surface, blob3 AS vendor, blob4 AS purpose, " +
     "blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, " +
     "blob9 AS agent, blob10 AS markdown_requested, blob11 AS signed_agent, blob12 AS verified_bot, " +
+    "blob13 AS network, " +
     "toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
     "FROM sn_machine_readers " +
     since +
     "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, " +
-    `first_party, agent, markdown_requested, signed_agent, verified_bot, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
+    `first_party, agent, markdown_requested, signed_agent, verified_bot, network, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
   );
 }
 

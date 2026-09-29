@@ -75,7 +75,7 @@ describe("markdown adoption signal (v1.18.0)", () => {
 
   it("is ADDITIVE — the first ten blobs keep their meaning and position", () => {
     const d = writeFor("text/markdown");
-    expect(d.blobs).toHaveLength(12);
+    expect(d.blobs).toHaveLength(13);
     expect(d.blobs[1]).toBe("html");        // surface unchanged: NOT drained into a new class
     expect(d.doubles).toEqual([1]);
     expect(d.indexes).toEqual([d.blobs[0]]); // still exactly one index, still family
@@ -170,7 +170,7 @@ describe("observeMachineReader — aggregate-only AE writes", () => {
       // v1.18.0 appends blob10 (markdown_requested). APPENDED, never inserted:
       // blob order IS the read query's contract, so a new axis may only ever go
       // on the end — inserting one would silently relabel every column after it.
-      blobs: ["openai", "llms", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot", "0", "unsigned", ""],
+      blobs: ["openai", "llms", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot", "0", "unsigned", "", ""],
       doubles: [1],
       indexes: ["openai"],
     });
@@ -348,7 +348,7 @@ describe("blob11 — signature state", () => {
 
     observeMachineReader(request, envWith(written), "/notes/x", SIG_VALID);
 
-    expect(written[0].blobs).toHaveLength(12);
+    expect(written[0].blobs).toHaveLength(13);
     expect(written[0].blobs[0]).toBe("openai");
     expect(written[0].blobs[9]).toBe("0");
     expect(written[0].blobs[10]).toBe("valid");
@@ -499,7 +499,7 @@ describe("verified-bot category (v1.27.0)", () => {
 
   it("appends: existing blob positions keep their meaning", () => {
     const d = writeFor("Search Engine Crawler");
-    expect(d.blobs).toHaveLength(12);
+    expect(d.blobs).toHaveLength(13);
     expect(d.blobs.slice(0, 11)).toEqual(
       ["openai", "html", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot", "0", "unsigned"],
     );
@@ -509,5 +509,42 @@ describe("verified-bot category (v1.27.0)", () => {
     const q = buildQuery("aggregate", 30);
     expect(q).toContain("blob12 AS verified_bot");
     expect(q).toMatch(/GROUP BY[^F]*verified_bot/);
+  });
+});
+
+describe("network (v1.28.0)", () => {
+  function writeFor(cf, vbot = "AI Crawler") {
+    const written = [];
+    const env = { SN_MR: { writeDataPoint: (d) => written.push(d) } };
+    const req = new Request("https://juanlentino.com/notes/x/", {
+      headers: { "user-agent": "Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)", "x-sn-verified-bot": vbot },
+    });
+    if (cf !== null) Object.defineProperty(req, "cf", { value: cf });
+    observeMachineReader(req, env, "/notes/x/");
+    return written[0];
+  }
+
+  it("records cf.asOrganization in blob13 (index 12), trimmed", () => {
+    expect(writeFor({ asOrganization: "  Microsoft Corporation ", asn: 8075 }).blobs[12]).toBe("Microsoft Corporation");
+  });
+
+  it("records '' when cf or asOrganization is absent, and clamps to 128 chars", () => {
+    expect(writeFor(null).blobs[12]).toBe("");
+    expect(writeFor({ asn: 1 }).blobs[12]).toBe("");
+    expect(writeFor({ asOrganization: "x".repeat(300) }).blobs[12]).toHaveLength(128);
+  });
+
+  it("appends: blobs 1 to 12 keep their positions", () => {
+    const d = writeFor({ asOrganization: "OpenAI" });
+    expect(d.blobs).toHaveLength(13);
+    expect(d.blobs.slice(0, 12)).toEqual(
+      ["openai", "html", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot", "0", "unsigned", "AI Crawler"],
+    );
+  });
+
+  it("the aggregate query selects and groups blob13 as network", () => {
+    const q = buildQuery("aggregate", 30);
+    expect(q).toContain("blob13 AS network");
+    expect(q).toMatch(/GROUP BY[^F]*network, day/);
   });
 });
