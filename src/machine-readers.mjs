@@ -24,6 +24,7 @@ import { readSqlJson } from "./sql-response.mjs";
 
 import {
   classifyVendorPurpose,
+  PURPOSES,
   sanitizeUnknownUa,
   TAXONOMY_VERSION,
   TAXONOMY_EFFECTIVE_DATE,
@@ -352,11 +353,66 @@ const RIGHTS_LIMIT = 500;
 // is for.
 const AGGREGATE_LIMIT = 10000;
 
+// 1.29.0: optional filters on the rights view, and ONLY the rights view. Our
+// own traffic filled its 500-row cap: in September 2026, 1,042 rows were the
+// first-party ops probes (family unclassified-machine, purpose ops) and 165 an
+// external RSL client in development (purpose dev), so a 30-day read began on
+// 09-16 and the plugin's monthly rights-evidence record came out incomplete.
+// The filter goes in the WHERE clause, before GROUP BY and LIMIT, so the cap
+// counts only the rows that survive it.
+//
+// Both allowlists are the values the WRITER can put in the column, not a
+// hand-kept list. blob2 (family) is written by observeRightsSurfaceDetail()
+// from the frozen MACHINE_FAMILIES names or the additive UNCLASSIFIED_MACHINE;
+// the taxonomy JSON has no family list, so it cannot be the source. blob4
+// (purpose) is one of the taxonomy's purpose_vocabulary keys, "unknown"
+// included, which is the writer's fallback.
+const RIGHTS_FAMILIES = new Set([...MACHINE_FAMILIES.map(([name]) => name), UNCLASSIFIED_MACHINE]);
+const RIGHTS_PURPOSES = new Set(PURPOSES);
+const FAMILY_SHAPE = /^[a-z0-9-]{1,40}$/;
+const FILTER_PARAMS = Object.freeze(["family", "exclude_purpose"]);
+
 /**
- * @param {"aggregate"|"unknown"|"rights"} view
- * @param {number} days Already clamped to an integer in [1, 90].
+ * Parse the rights filter from the query string. Refuses rather than ignores:
+ * a filter that silently did nothing would return the unfiltered, truncated
+ * stream looking like a filtered one, which is the failure this exists to fix.
+ *
+ * @returns {{filter: {family: string|null, exclude_purpose: string[]}}|{error: object}}
  */
-export function buildQuery(view, days) {
+export function parseRightsFilter(searchParams, view) {
+  const present = FILTER_PARAMS.filter((p) => searchParams.has(p));
+  if (present.length && view !== "rights") {
+    return { error: { error: "bad_filter", field: present[0], reason: "filters apply to view=rights only" } };
+  }
+  let family = null;
+  if (searchParams.has("family")) {
+    const raw = searchParams.get("family");
+    if (!FAMILY_SHAPE.test(raw) || !RIGHTS_FAMILIES.has(raw)) {
+      return { error: { error: "bad_filter", field: "family", reason: "not a known family" } };
+    }
+    family = raw;
+  }
+  const exclude_purpose = [];
+  if (searchParams.has("exclude_purpose")) {
+    for (const item of searchParams.get("exclude_purpose").split(",")) {
+      if (!RIGHTS_PURPOSES.has(item)) {
+        return { error: { error: "bad_filter", field: "exclude_purpose", reason: "not a known purpose" } };
+      }
+      if (!exclude_purpose.includes(item)) exclude_purpose.push(item);
+    }
+  }
+  return { filter: { family, exclude_purpose } };
+}
+
+/**
+ * @param {"aggregate"|"unknown"|"rights"|"totals"} view
+ * @param {number} days Already clamped to an integer in [1, 90].
+ * @param {{family?: string|null, exclude_purpose?: string[]}} [filter] Rights
+ *   view only, already validated by parseRightsFilter(). Checked against the
+ *   allowlists again here, at the point of interpolation, so a caller that
+ *   skipped the parser throws instead of reaching the SQL.
+ */
+export function buildQuery(view, days, filter = {}) {
   const since = `WHERE timestamp > NOW() - INTERVAL '${days}' DAY `;
 
   // RULE 2: the top unclassified UAs by volume, so other-bot can be reviewed
@@ -374,11 +430,19 @@ export function buildQuery(view, days) {
   // RULE 3: the full-fidelity rights-surface stream. Separate dataset; never
   // summed with the aggregate.
   if (view === "rights") {
+    const family = filter.family ?? null;
+    const excluded = filter.exclude_purpose ?? [];
+    if (family !== null && !RIGHTS_FAMILIES.has(family)) throw new Error("buildQuery: unvalidated family");
+    if (excluded.some((p) => !RIGHTS_PURPOSES.has(p))) throw new Error("buildQuery: unvalidated purpose");
+    const familyClause = family === null ? "" : `AND blob2 = '${family}' `;
+    const purposeClause = excluded.length ? `AND blob4 NOT IN (${excluded.map((p) => `'${p}'`).join(",")}) ` : "";
     return (
       "SELECT blob1 AS surface, blob2 AS family, blob3 AS vendor, blob4 AS purpose, " +
       "blob5 AS path, blob6 AS user_agent, blob7 AS accept, blob8 AS observed_at, " +
       "sum(_sample_interval) AS hits FROM sn_machine_readers_rights " +
       since +
+      familyClause +
+      purposeClause +
       "GROUP BY surface, family, vendor, purpose, path, user_agent, accept, observed_at " +
       `ORDER BY observed_at DESC LIMIT ${RIGHTS_LIMIT} FORMAT JSON`
     );
@@ -469,7 +533,11 @@ export async function machineReadersResponse(request, env) {
   // view is matched against a fixed allowlist and never interpolated; days is
   // clamped to a small integer above. Nothing user-supplied reaches the SQL.
   const view = VIEWS.has(url.searchParams.get("view") || "") ? url.searchParams.get("view") : "aggregate";
-  const query = buildQuery(view, days);
+  // The rights filter is matched against allowlists of what the writer stores;
+  // anything else is a 400 before the SQL API is called.
+  const parsed = parseRightsFilter(url.searchParams, view);
+  if (parsed.error) return json(400, parsed.error);
+  const query = buildQuery(view, days, parsed.filter);
 
   try {
     const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/analytics_engine/sql`, {
@@ -510,6 +578,10 @@ export async function machineReadersResponse(request, env) {
       // merely unnoticed. A consumer can now refuse to derive a total from a
       // read that says it is truncated.
       rows: Number.isFinite(data.rows) ? data.rows : (data.data || []).length,
+      // The rights view echoes the filter it applied, so a read of the
+      // filtered stream cannot be mistaken for the whole stream, and
+      // `truncated` is read against the filtered rows it describes.
+      ...(view === "rights" ? { filter: parsed.filter } : {}),
       truncated: ((data.data || []).length >= (view === "unknown" ? UNKNOWN_LIMIT : view === "rights" ? RIGHTS_LIMIT : view === "totals" ? DAYS_MAX : AGGREGATE_LIMIT)),
       data: data.data || [],
     });

@@ -61,7 +61,7 @@ up" without reading this paragraph.
 | Everything else | Proxies to origin. If `content-type` is `text/html`, adds the same two headers and injects `<meta name="tdm-reservation">` / `<meta name="tdm-policy">` into `<head>` via `HTMLRewriter`. Non-HTML (images, CSS, JS) passes through unmodified. |
 | `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path). |
 | `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below). Isolate-memory, best-effort — resets on redeploy/eviction. |
-| `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`). `?days=N` clamped to 1–90, default 30. Queries the Analytics Engine SQL API; 503 when the read secrets aren't configured. |
+| `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`). `?days=N` clamped to 1–90, default 30. `?view=rights` also takes `family=<one family>` and `exclude_purpose=<comma list of purposes>`, both allowlisted (400 otherwise, and 400 on any other view); the response echoes them as `filter`. Queries the Analytics Engine SQL API; 503 when the read secrets aren't configured. |
 
 ## Native WebMCP — the fifth rights surface
 
