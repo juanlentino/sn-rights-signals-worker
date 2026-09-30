@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 1.29.0 - 2026-09-30
+
+### Added
+- **The rights view takes two optional filters: `family` and `exclude_purpose`.** `?view=rights&family=openai` keeps one crawler family; `?view=rights&exclude_purpose=ops,dev` drops purposes. Our own traffic filled the stream's 500-row cap: in September, 1,042 rows were first-party ops probes (`unclassified-machine`, purpose `ops`) and 165 an external RSL client in development (purpose `dev`), so a 30-day read began on 09-16 and the plugin's monthly rights-evidence record came out incomplete. The filter is emitted as literal SQL (`AND blob2 = '...'`, `AND blob4 NOT IN (...)`) in the WHERE clause, before GROUP BY and LIMIT, so the cap counts only the rows that survive it.
+- **The rights response echoes the filter it applied** as `filter: {family, exclude_purpose}` beside `limit` and `truncated`, with `family: null` and an empty list when none was asked for.
+
+### Security
+- Both values are matched against allowlists of what the writer can store, never interpolated from the request: `family` must match `^[a-z0-9-]{1,40}$` and be a frozen `MACHINE_FAMILIES` name or `unclassified-machine` (the taxonomy file lists purposes, not families); every `exclude_purpose` item must be a key of the taxonomy's `purpose_vocabulary`. Anything else, including an empty value or an empty list item, is a 400 `bad_filter` before the SQL API is called. `buildQuery` checks the allowlists again at the point of interpolation and throws on a value that skipped the parser.
+- Either parameter on any view other than `rights` is a 400, not ignored: a filter that silently did nothing would return the unfiltered, truncated stream looking like a filtered one.
+
+### Notes
+- Backward compatible: without the parameters the rights query is byte-identical to 1.28.0, pinned as a literal in `test/rights-filter.test.mjs`. The plugin's `?view=rights&days=N` call is unchanged.
+
 ## 1.28.0 - 2026-09-29
 
 ### Added
