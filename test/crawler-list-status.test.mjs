@@ -181,7 +181,9 @@ describe("failure verdicts are classified, never reflected", () => {
     const raw = await (await crawlerListStatusResponse()).text();
     expect(JSON.parse(raw).last_check).toMatchObject({ ok: false, error: "docs_unavailable" });
     // The upstream status code is an upstream detail; the class is the signal.
-    expect(raw).not.toContain("503");
+    // Timestamps are removed first: an ISO time whose milliseconds read .503
+    // matched this check about once in eleven runs without any status leaking.
+    expect(raw.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "")).not.toContain("503");
   });
 
   it("an implausibly small parse classifies as docs_shape_changed", async () => {

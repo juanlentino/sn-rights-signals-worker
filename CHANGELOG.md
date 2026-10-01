@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Test: the crawler-list-status leak pin strips ISO timestamps before checking for `503`, so a time whose milliseconds read .503 no longer fails it (about one run in eleven). A real leaked status code still fails it.
+
 ## 1.29.0 - 2026-09-30
 
 ### Added
