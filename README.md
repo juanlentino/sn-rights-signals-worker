@@ -85,8 +85,12 @@ who is asking, and this Worker's whole posture is to measure rather than guess.
 
 The tag is `<script type="module" src="https://juanlentino.com/webmcp/bridge.js"
 integrity="sha384-..." data-mcp-url="none">`, injected into the `<head>` of every
-HTML response next to the TDM meta tags. The SRI is computed from the exact
-served source, so the tag and the asset cannot disagree.
+proxied origin HTML response next to the TDM meta tags. The Worker's own
+`/ns/tdm` and `/tdm-policy/` pages carry the tag in their markup instead, without
+the injected TDM meta tags. The SRI is computed from the exact served source, so
+a page and a bridge served by the same Worker version agree. A cached page can
+outlive a bridge change: `/ns/tdm` is cached for 3600 s and the bridge for 300 s,
+so after a deploy a cached `/ns/tdm` can name the previous bridge's hash.
 `scripts/webmcp-bridge-bundle-gate.mjs` runs before the test suite (`pretest`),
 and `wrangler.jsonc` sets `keep_names: false` so the bundler does not inject a
 helper the browser does not have.
@@ -97,7 +101,9 @@ calls no authenticated door. After a call the bridge posts a beacon to
 `/_sn/rights-signals/webmcp-call`, which writes one row to `sn_machine_readers`
 with family `webmcp`, the tool as the surface and the outcome (`ok`, `absent`,
 `error`) in the purpose slot: no IP, no User-Agent, no page URL. The route
-writes only for a POST under 256 bytes with the site's `Origin`,
+writes only for a POST whose body is at most 256 characters (a declared
+`Content-Length` over 256 is refused first; otherwise the whole body is read and
+its string length checked, so this is not an encoded-byte or streaming cap) with the site's `Origin`,
 `Sec-Fetch-Site: same-origin`, a known tool and outcome, and `ms` between 0 and
 60000, and only under the per-IP `WEBMCP_LIMITER` binding (10 per 10 seconds,
 v1.25.1). It answers `204` in every case except one: if the `SN_MR` write itself
@@ -292,7 +298,7 @@ matches and the frozen enum does not is stored under the family
 | 1 | family | the enum above, `unclassified-machine`, or `webmcp` for a bridge beacon row |
 | 2 | surface | `robots`, `rights`, `llms`, `agents-manifest`, `agent-discovery`, `well-known`, `feed`, `wp-json`, `sitemap`, `asset`, `html`; on a `webmcp` beacon row, the tool name: `verify-page`, `get-rights-terms`, `related-notes`, `get-site-map`, `get-citation` |
 | 3 | vendor | from the taxonomy; empty when it did not match |
-| 4 | purpose | from the taxonomy's `purpose_vocabulary`; `unknown` when it did not match |
+| 4 | purpose | from the taxonomy's `purpose_vocabulary`; `unknown` when it did not match; on a `webmcp` beacon row, the call outcome: `ok`, `absent`, `error` |
 | 5 | taxonomy version | |
 | 6 | training corpus source | `1` or `0` |
 | 7 | first party | `1` or `0` |
