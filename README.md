@@ -4,20 +4,24 @@ Cloudflare Worker that expresses one machine-readable rights position across
 every relevant surface of juanlentino.com: search indexing permitted, AI
 retrieval/grounding permitted and invited, AI training reserved under
 Article 4 of EU Directive 2019/790 with a conditional attribution licence
-offered on top of that reservation. Policy signals only — no theme or plugin
-logic. See the project's `machine-readable-rights-signals` session notes for
-the full brief and rationale.
+offered on top of that reservation. No theme or plugin logic. Beside the
+policy signals it carries the machine-readership sensor, Markdown content
+negotiation, Web Bot Auth signature verification and the WebMCP bridge, each
+described below. See the project's `machine-readable-rights-signals` session
+notes for the full brief and rationale.
 
 ## Routes
 
 Bound to a single wildcard route (`juanlentino.com/*`) and does its own
-pathname dispatch — see `src/index.mjs`. More-specific Cloudflare routes on
-the sibling workers (sn-analytics, sn-login-guard, sn-provenance) take
-precedence over this wildcard, so it never shadows them. Auth-critical
+pathname dispatch (see `src/index.mjs`). More-specific Cloudflare routes on
+the sibling workers (sn-analytics, sn-login-guard, sn-provenance,
+sn-remote-mcp) take precedence over this wildcard, so it never shadows them. Auth-critical
 WordPress surfaces (`/wp-admin`, `/wp-login.php`, `/xmlrpc.php`,
 `/wp-cron.php`) bypass every other check immediately — see
-`src/admin-bypass.mjs` — so a regression in this Worker's own logic can
-never be the thing that breaks login or the admin dashboard.
+`src/admin-bypass.mjs`, so a regression in this Worker's own logic can
+never be the thing that breaks login or the admin dashboard. Since v1.26.2 the
+handler also calls `passThroughOnException()`: an uncaught throw anywhere else
+falls through to the origin instead of answering a 1101 page.
 
 **Three routes carry no Worker at all** (dashboard: juanlentino.com → Workers
 Routes, Worker "None"; added 2026-09-25). They live only in Cloudflare, not in
@@ -41,27 +45,30 @@ after a plugin update bumps its `?ver=`). These routes removed the first cause.
 2026-09-25) for the second, and that is what cleared the ~43 red
 `net::ERR_ABORTED 503` lines per load. Speed Brain was never doing anything here
 anyway: it skips pages that run a Worker, and this Worker runs on every page.
-Turning it back on brings the red lines back. The routes stay because nothing
-this Worker does applies to those paths (non-HTML passes through unmodified), so
-they only cost Worker invocations.
+Turning it back on brings the red lines back. The routes stay because this
+Worker does not transform those responses: on a non-HTML response it only adds
+the reservation headers and counts the read.
 `/wp-content/uploads/*` stays on the Worker on purpose:
 media is content, and its reads stay in the machine-readership counts. The
 cost: crawler reads of plugin, theme and core assets no longer reach the
-`asset` surface class of that sensor. Do not delete these routes to "tidy
-up" without reading this paragraph.
+`asset` surface class of that sensor, and those responses do not carry the
+`TDM-Reservation`, `TDM-Policy`, `Content-Signal` and `Link` headers. Do not
+delete these routes to "tidy up" without reading this paragraph.
 
 | Path | Behavior |
 |---|---|
-| `GET /robots.txt` | **Full ownership** — generates the entire content-signals block itself (`Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference`, the Article 4 preamble, the named-crawler `Disallow` list), appends whatever WordPress's own origin file contributes, then a `License:` directive. See "robots.txt ownership" below for why this took two tries. |
+| `GET /robots.txt` | **Full ownership**: generates the entire content-signals block itself (`Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference`, the Article 4 preamble, the named-crawler `Disallow` list for the nine `NAMED_CRAWLERS`), appends whatever WordPress's own origin file contributes, then a `License:` directive. Bare origin rules that precede the origin's first `User-agent` line are hoisted into the owned `User-agent: *` group (v1.15.0), and a `Sitemap:` pointer is appended unless the composed file already contains the text `Sitemap:` (a case-sensitive substring test, so a commented-out `# Sitemap:` line suppresses it and a lowercase `sitemap:` directive does not). An origin 4xx still answers `200` with the owned block; an origin 5xx or 429 passes through untouched (v1.4.4, RFC 9309). See "robots.txt ownership" below for why this took two tries. |
 | `GET /.well-known/tdmrep.json` | Worker-owned TDMRep well-known expression. |
 | `GET /license.xml` | Worker-owned RSL 1.0 licence document. |
 | `GET /ns/tdm(/)` | The `sn:` vocabulary the ODRL policy declares — ten terms, each with a definition, a resolving fragment anchor, and a normative/non-normative marker. Same negotiation as `/tdm-policy/`. The term list is audited against the *emitted* ODRL document, because three terms are generated by interpolation and a source grep misses them. |
-| `GET /tdm-policy(/)` | Worker-rendered policy document, **content-negotiated**: `text/html` by default, an ODRL policy in the W3C TDMRep profile (`application/ld+json`) when a client explicitly asks. `Vary: Accept` on both — the operative terms every other layer points at. Terms in `src/tdm-policy-terms.mjs`, shell in `src/tdm-policy-page.mjs`. Currently `POLICY_STATUS = "draft"` (see below). |
-| `GET /wp-json` and `/wp-json/*` | Proxies to origin, adds `TDM-Reservation` / `TDM-Policy` headers. |
-| Everything else | Proxies to origin. If `content-type` is `text/html`, adds the same two headers and injects `<meta name="tdm-reservation">` / `<meta name="tdm-policy">` into `<head>` via `HTMLRewriter`. Non-HTML (images, CSS, JS) passes through unmodified. |
-| `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path). |
-| `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below). Isolate-memory, best-effort — resets on redeploy/eviction. |
-| `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`). `?days=N` clamped to 1–90, default 30. `?view=rights` also takes `family=<one family>` and `exclude_purpose=<comma list of purposes>`, both allowlisted (400 otherwise, and 400 on any other view); the response echoes them as `filter`. Queries the Analytics Engine SQL API; 503 when the read secrets aren't configured. |
+| `GET /tdm-policy(/)` | Worker-rendered policy document, **content-negotiated**: `text/html` by default, an ODRL policy in the W3C TDMRep profile (`application/ld+json`) when a client explicitly asks, and Markdown when a client prefers `text/markdown`. `Vary: Accept` on the representations. These are the operative terms every other layer points at. Terms in `src/tdm-policy-terms.mjs`, shell in `src/tdm-policy-page.mjs`. Currently `POLICY_STATUS = "published"`, `POLICY_VERSION = "1.3"` (see below). |
+| `GET /webmcp/bridge.js` | The WebMCP bridge script (v1.22.0), composed from `src/webmcp-bridge-client.mjs`. `text/javascript`, `max-age=300`, `nosniff`. See "Native WebMCP" below. |
+| `POST /_sn/rights-signals/webmcp-call` | The bridge's beacon (v1.25.0): one sensor row per tool call. Always answers `204`. See "Native WebMCP" below. |
+| Everything else | Proxies to origin. Every proxied response, `/wp-json` and non-HTML included, gets `TDM-Reservation: 1`, `TDM-Policy`, `Content-Signal` and `Link: <https://juanlentino.com/license.xml>; rel="license"` (v1.5.0). If `content-type` is `text/html`, it also injects `<meta name="tdm-reservation">` / `<meta name="tdm-policy">` and the WebMCP script tag into `<head>` via `HTMLRewriter`, drops `Content-Length`, re-keys the `ETag` with the bridge's SRI, and appends `Vary: Accept`. A request that prefers `text/markdown` gets the page as Markdown instead (see "Markdown for agents" below). Non-HTML bodies (images, CSS, JS, JSON) pass through unmodified. |
+| `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path): `{ worker, version, source_commit, cf_version_id, cf_version_tag, deployed_at, sensor{ ae_bound, last_write_ok, last_write_at, detail_last_write_ok } }`. `no-store`. |
+| `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below), as `{ worker, last_check }`. The verdict is kept in isolate memory and in the colo's Cache API (v1.4.3), so it survives isolate eviction. When it is missing, failed or older than 8 days, the request starts one background re-check (v1.4.1), at most once every 10 minutes per isolate: the last-attempt time lives in isolate memory, so a fresh or concurrent isolate can start its own. A failed check publishes a classified code only; the raw reason stays in the logs. |
+| `GET /_sn/rights-signals/taxonomy` | Public, cacheable (`max-age=3600`) copy of `src/machine-reader-taxonomy.json`, the published vendor and purpose definitions the sensor classifies with. `X-SN-Taxonomy-Version` names the version. |
+| `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`, compared in constant time). `?days=N` clamped to 1–90, default 30. `?view=` is `aggregate` (the default, and the fallback for an unknown value; up to 10,000 grouped rows), `unknown` (the top 50 unmatched User-Agent samples), `rights` (up to 500 rows of the rights-detail stream) or `totals` (hits per day, WebMCP beacon rows excluded). `?view=rights` also takes `family=<one family>` and `exclude_purpose=<comma list of purposes>`, both allowlisted (400 otherwise, and 400 on any other view); the response echoes them as `filter`. The response is `{ worker, days, view, taxonomy_version, taxonomy_effective_date, limit, rows, truncated, data }`. Queries the Analytics Engine SQL API (redirects refused, 10 s timeout, 10 MiB response cap); `401` on a bad token, `503` when `SN_MR_READ_TOKEN`, `CF_ACCOUNT_ID` or `SN_MR_SQL_TOKEN` is not configured, `502` on an upstream failure. |
 
 ## Native WebMCP — the fifth rights surface
 
@@ -73,14 +80,90 @@ must stay off**. Two injectors on one surface is the failure mode: the anchored
 bridge is the one that is versioned, SRI-pinned and deployed with the rest of this
 code, and the vendor toggle would put a second, unversioned one beside it.
 
-Gating is **behavioural, not user-agent string** — a UA allowlist is a guess about
+Gating is **behavioral, not user-agent string**: a UA allowlist is a guess about
 who is asking, and this Worker's whole posture is to measure rather than guess.
+
+The tag is `<script type="module" src="https://juanlentino.com/webmcp/bridge.js"
+integrity="sha384-..." data-mcp-url="none">`, injected into the `<head>` of every
+proxied origin HTML response next to the TDM meta tags. The Worker's own
+`/ns/tdm` and `/tdm-policy/` pages carry the tag in their markup instead, without
+the injected TDM meta tags. The SRI is computed from the exact served source, so
+a page and a bridge served by the same Worker version agree. A cached page can
+outlive a bridge change: `/ns/tdm` is cached for 3600 s and the bridge for 300 s,
+so after a deploy a cached `/ns/tdm` can name the previous bridge's hash.
+`scripts/webmcp-bridge-bundle-gate.mjs` runs before the test suite (`pretest`),
+and `wrangler.jsonc` sets `keep_names: false` so the bundler does not inject a
+helper the browser does not have.
+
+The bridge registers five tools: `verify-page` and `get-rights-terms`
+(v1.22.0), and `related-notes`, `get-site-map` and `get-citation` (v1.25.0). Each reads public bytes and
+calls no authenticated door. After a call the bridge posts a beacon to
+`/_sn/rights-signals/webmcp-call`, which writes one row to `sn_machine_readers`
+with family `webmcp`, the tool as the surface and the outcome (`ok`, `absent`,
+`error`) in the purpose slot: no IP, no User-Agent, no page URL. The route
+writes only for a POST whose body is at most 256 characters (a declared
+`Content-Length` over 256 is refused first; otherwise the whole body is read and
+its string length checked, so this is not an encoded-byte or streaming cap) with the site's `Origin`,
+`Sec-Fetch-Site: same-origin`, a known tool and outcome, and `ms` between 0 and
+60000, and only under the per-IP `WEBMCP_LIMITER` binding (10 per 10 seconds,
+v1.25.1). It answers `204` in every case except one: if the `SN_MR` write itself
+throws, the Worker's `passThroughOnException()` hands the POST to the origin,
+whose answer need not be `204`. An unbound or failing limiter means no write.
 
 Adoption is measured for the same reason: the sensor counts `markdown_requested`, so
 the markdown-for-agents negotiation is judged by what clients actually request. And
 agent-discovery documents carry their **own surface class** rather than being counted
 as ordinary page reads, because conflating "an agent fetched the manifest that
 describes our terms" with "an agent read an article" makes both numbers useless.
+
+## Markdown for agents
+
+Since v1.16.0 a request that explicitly prefers Markdown gets Markdown. The
+predicate (`src/accept-markdown.mjs`) follows Cloudflare's Markdown for Agents:
+`text/markdown` or `text/*` must be named and must not be outranked by an
+explicit `text/html`; `*/*` alone keeps HTML, so a browser never receives
+Markdown. Only a `200` `text/html` response converts
+(`src/html-to-markdown.mjs`, an `HTMLRewriter` state machine with no
+dependency). The Markdown response is `text/markdown; charset=utf-8` with
+`Vary: Accept`, keeps the origin's `Cache-Control`, `X-Robots-Tag` and
+`Content-Language` (`public, max-age=300` when the origin sent no
+`Cache-Control`), and carries the same reservation headers. A conversion
+failure is logged and falls back to the HTML (v1.24.3). It applies to proxied
+pages, `/tdm-policy/` and `/ns/tdm`. On those two routes JSON is decided first,
+against HTML only: any acceptable `application/ld+json` or `application/json`
+that HTML does not outrank wins, even over a higher-ranked `text/markdown`.
+
+## Web Bot Auth and the license offer
+
+Since v1.19.0 the Worker verifies Web Bot Auth (RFC 9421 HTTP Message
+Signatures) itself, as a sensor and never a gate. A request with no
+`Signature-Input` and `Signature` headers costs two header reads and no fetch.
+A signed request has the agent's key directory fetched from
+`<Signature-Agent origin>/.well-known/http-message-signatures-directory`
+(redirects refused, 2 s timeout, 64 KB cap, cached 6 hours, failures cached 15
+minutes) and resolves to one of `unsigned`, `valid`, `invalid` or
+`unknown-key`, recorded in blob 11 of the sensor row. Ed25519 keys only. An
+empty or unreachable directory reads as `unsigned`; `unknown-key` means the
+directory published keys and this one was not among them; `invalid` means the
+key was found and the signature did not hold.
+
+Since v1.24.0 a `valid` signature is answered with the license offer
+(`src/licence-handshake.mjs`): `TDM-Licence-Offer: conditional` (never
+"granted"), `TDM-Licence-Policy` (the policy URL), `TDM-Licence-Version` (the
+policy version), `TDM-Licence-Conditions: C1 C2 C3 C4 C5`, and
+`TDM-Licence-Agent` (the verified `Signature-Agent` origin), with
+`Vary: Signature-Agent`. The offer rides only the responses wrapped by
+`withTdmHeaders()`: `/tdm-policy/`, `/ns/tdm`, `/webmcp/bridge.js` and responses
+proxied from the origin. `/robots.txt`, `/.well-known/tdmrep.json`,
+`/license.xml`, the `/_sn/` routes and the admin bypass paths never carry it.
+Every other signature state receives the same response as before. There is no
+price, payment or blocking branch.
+
+The cache separation is partial. `Vary: Signature-Agent` is added only to a
+response that carries the offer, and it keys on the claimed origin, not on
+whether the signature verified. A shared cache can therefore replay a cached
+offer to an `invalid` request naming the same `Signature-Agent`, and can serve a
+cached offer-less response to a later `valid` request.
 
 ## The policy document, and its draft state
 
@@ -90,8 +173,8 @@ all resolve here. It is Worker-synthesized rather than a WordPress page on
 purpose — if WordPress is down or the page gets unpublished, the URL every
 signal names must still answer with terms.
 
-Three constants in `src/constants.mjs` govern it: `POLICY_VERSION`,
-`POLICY_DATE`, `POLICY_STATUS`.
+Three constants in `src/constants.mjs` govern it: `POLICY_VERSION` (`"1.3"`),
+`POLICY_DATE` (`"2026-09-19"`), `POLICY_STATUS` (`"published"`).
 
 **Two representations, one URL.** TDMRep treats a policy as machine-readable only
 when served as `application/(ld+)json`, so `src/tdm-policy-odrl.mjs` serves an
@@ -132,11 +215,14 @@ are at the top of `src/tdm-policy-terms.mjs`; read them first.
 
 ## Rights-signal check
 
-`scripts/rights-assertions.mjs` holds 31 invariants across all four layers —
+`scripts/rights-assertions.mjs` runs the invariants (the checks live in
+`scripts/rights-checks-transport.mjs` and `scripts/rights-checks-documents.mjs`)
+across every layer:
 headers on HTML *and* `/wp-json`, the robots.txt `Content-Signal`, `tdmrep.json`
 parsing and matching the header, `license.xml` parsing and licensing what it
-should, `/llms.txt` not stating the training exception as the rule, the policy page's sections and draft state, and the meta tags on a real
-note. Two ways to run it:
+should, `/llms.txt` not stating the training exception as the rule, the policy page's sections and draft state,
+the ODRL representation and the `/ns/tdm` vocabulary agreeing with it, the meta tags on a real
+note, and the WebMCP tag, its five tools and its SRI parity with the served bridge. Two ways to run it:
 
 ```bash
 npm test          # STATIC: included in the suite; drives the real Worker
@@ -158,7 +244,7 @@ Two flags matter, and both exist because v1.9.0's deploy produced a 9-of-36
   or `check:live` would refuse to run whenever main is ahead of production.
 - **A deploy run retries; a plain run never does.** When `--await-version` is
   passed, the whole collect-and-check repeats up to 3 times 8s apart before a
-  failure is believed — propagation is per-colo and the ten fetches go out in
+  failure is believed: propagation is per-colo and the fetches go out in
   parallel, so a matched version at one endpoint says nothing about the colo
   serving the next request. A genuine defect fails every attempt and is still
   reported, labelled "this is drift, not propagation". Plain `check:live` gets
@@ -186,30 +272,74 @@ The note URL is **discovered** from `/wp-sitemap.xml` at run time, not pinned �
 a hardcoded slug rots the day a note is renamed, and a rotted fixture reads as
 rights drift. `--note <url>` and `--origin <url>` override for staging.
 
+In CI the static check runs with `npm test` on every push to `main` and every
+pull request. The live check is a manual `workflow_dispatch` step only: it reads
+the deployed site, so it means nothing on a pull request.
+
 ## Machine-readership sensor
 
 `src/machine-readers.mjs` observes every non-`/_sn/` request on the way
-through: when the User-Agent classifies into the fixed crawler-family enum
-(OpenAI, Anthropic, Perplexity, search, feed, …), it writes one aggregate
-datapoint to the Analytics Engine dataset **`sn_machine_readers`** — blobs
-`[family, surface]`, one count, nothing else. Humans (browser UAs) and
-internal `/_sn/` paths are never recorded; the raw User-Agent never leaves
-the module. Observation is fail-open by contract — a sensor failure can
-never affect a response — but not silent: failures and a missing `SN_MR`
+through, except the admin bypass paths (`/wp-admin`, `/wp-login.php`,
+`/xmlrpc.php`, `/wp-cron.php`), which go to the origin before the observer
+runs. Two independent passes read the User-Agent: the frozen family enum
+(18 values such as `openai`, `anthropic`, `perplexity`, `search`,
+`feed`, ending in the generic `other-bot`) and the taxonomy in
+`src/machine-reader-taxonomy.json` (vendor, purpose, agent id). When either
+matches, it writes one datapoint to the Analytics Engine dataset
+**`sn_machine_readers`**. A request neither pass recognizes (a browser) is
+never recorded, and the observer skips internal `/_sn/` paths. The one
+`/_sn/` route that writes is the WebMCP beacon, which records its own `webmcp`
+row (see above). A row the taxonomy
+matches and the frozen enum does not is stored under the family
+`unclassified-machine` (v1.11.0).
+
+| Blob | Field | Values |
+|---|---|---|
+| 1 | family | the enum above, `unclassified-machine`, or `webmcp` for a bridge beacon row |
+| 2 | surface | `robots`, `rights`, `llms`, `agents-manifest`, `agent-discovery`, `well-known`, `feed`, `wp-json`, `sitemap`, `asset`, `html`; on a `webmcp` beacon row, the tool name: `verify-page`, `get-rights-terms`, `related-notes`, `get-site-map`, `get-citation` |
+| 3 | vendor | from the taxonomy; empty when it did not match |
+| 4 | purpose | from the taxonomy's `purpose_vocabulary`; `unknown` when it did not match; on a `webmcp` beacon row, the call outcome: `ok`, `absent`, `error` |
+| 5 | taxonomy version | |
+| 6 | training corpus source | `1` or `0` |
+| 7 | first party | `1` or `0` |
+| 8 | User-Agent sample | only when the taxonomy did not match: allowlisted characters, 96 at most (v1.11.0) |
+| 9 | agent (v1.12.0) | the taxonomy entry id |
+| 10 | markdown requested (v1.18.0) | `1` or `0` |
+| 11 | signed agent (v1.19.0) | `unsigned`, `valid`, `invalid`, `unknown-key` |
+| 12 | verified bot (v1.27.0) | Cloudflare's verified-bot category, read from the `x-sn-verified-bot` header that a zone Transform Rule sets on every request; empty when Cloudflare did not verify the client |
+| 13 | network (v1.28.0) | `cf.asOrganization`, 128 characters at most; empty when Cloudflare supplies none |
+
+Double 1 is the count (always 1) and index 1 is the family. The layout is
+append-only: blob order is the read query's contract, and a row written before
+a blob existed reads as an empty string, which means not measured.
+
+For a recognized agent nothing but the fields above is stored: enum values plus blob 13, a free-form network name truncated to 128 characters. Rights-surface
+reads (`/.well-known/tdmrep.json`, `/license.xml`, `/tdm-policy/`) are also
+written in full to a second dataset, **`sn_machine_readers_rights`** (binding
+`SN_MR_RIGHTS`, v1.11.0): surface, family, vendor, purpose, path, the full
+User-Agent (512 characters at most), the `Accept` header and a timestamp. A
+first-party read (the provenance worker's hourly capture, for example) is not
+written there (v1.26.1), so it does not spend the stream's 500-row read cap.
+The two datasets are never summed.
+
+Observation is fail-open by contract (a sensor failure can
+never affect a response) but not silent: failures and a missing `SN_MR`
 binding are `console.error`'d, and `GET /_sn/rights-signals/version` carries
-a `sensor` block (`ae_bound`, `last_write_ok`, `last_write_at`; isolate-
-memory, error text log-only) so a dead sensor is distinguishable from "no
-crawlers came".
+a `sensor` block (`ae_bound`, `last_write_ok`, `last_write_at`,
+`detail_last_write_ok`; isolate-memory, error text log-only) so a dead sensor
+is distinguishable from "no crawlers came". A rights-detail write failure is
+booked under `detail_last_write_ok` and not against the aggregate (v1.24.1).
 
 ## What this Worker serves gets anchored
 
 The sibling `sn-provenance` Worker's hourly cron (`src/rights-signals.mjs`)
-independently fetches the four published surfaces this Worker owns —
-`/robots.txt`, `/.well-known/tdmrep.json`, `/license.xml`, `/tdm-policy/` —
+independently fetches the five published surfaces this Worker owns
+(`/robots.txt`, `/.well-known/tdmrep.json`, `/license.xml`, `/tdm-policy/`,
+`/webmcp/bridge.js`)
 and, when a file's content hash has changed since the last anchored
 version, signs and OTS-stamps it into the provenance ledger under
 `rights-signals/<slug>/v<n>`. Unchanged files are skipped. Practical
-consequence for anyone editing this repo: changing any of those four
+consequence for anyone editing this repo: changing any of those five
 outputs mints a new signed, dated ledger record within the hour, so "what
 reservation was in force on date X" is answerable after the fact.
 
@@ -252,16 +382,33 @@ an auto-updating feed.
 crawler list against ours, logging loudly on drift (`GET
 /_sn/rights-signals/crawler-list-status` for the last result). Still
 manual to *fix* (this only detects drift, it doesn't rewrite
-`robots-block.mjs`), but no longer manual to *notice*. First real run
-(2026-07-23, ad hoc, not yet the scheduled cron) already flagged that
-`CloudflareBrowserRenderingCrawler` — present in our list — isn't in
-Cloudflare's current docs example; left as-is pending review, since the
-docs example may be illustrative rather than exhaustive.
+`robots-block.mjs`), but no longer manual to *notice*. The first runs flagged
+that `CloudflareBrowserRenderingCrawler`, present in our list, is no longer on
+Cloudflare's docs page. That was reviewed in v1.4.2: the block stays, because
+removing it would relax a public rights signal. The verdict is `REVIEWED_EXTRAS`
+in `src/crawler-list-sync.mjs`: a reviewed delta is reported as `reviewed_extra`
+and excluded from `drift`, while any unreviewed delta still warns.
 
 ## Development
 
 ```bash
 npm install
-npm test        # real workerd runtime via @cloudflare/vitest-pool-workers
-npm run deploy   # wrangler deploy --var SN_VERSION:$npm_package_version
+npm test        # real workerd runtime via @cloudflare/vitest-pool-workers;
+                # pretest runs scripts/webmcp-bridge-bundle-gate.mjs first
+npm run deploy   # wrangler deploy --var SN_VERSION:$npm_package_version,
+                 # then the live check (postdeploy)
 ```
+
+`npm run deploy` does not set `SN_COMMIT`; `npm run deploy:ci` sets both
+`SN_VERSION` and `SN_COMMIT`, and is the command for a Workers Builds deploy.
+`/_sn/rights-signals/version` reports `null` for whichever was not passed.
+
+Bindings in `wrangler.jsonc`: the `SN_MR` and `SN_MR_RIGHTS` Analytics Engine
+datasets, the `WEBMCP_LIMITER` rate limit, `CF_VERSION_METADATA`, the weekly
+cron (`23 7 * * 1`) and the `juanlentino.com/*` route. The read path needs
+`SN_MR_READ_TOKEN`, `SN_MR_SQL_TOKEN` and `CF_ACCOUNT_ID`, which are not in
+`wrangler.jsonc`.
+
+CI (`.github/workflows/test.yml`) runs, as steps of one job, the
+dependency-provenance gate, the dependency cooldown gate, the outbound redirect
+gate, `npm test` and a Semgrep scan.
