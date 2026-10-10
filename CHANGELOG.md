@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.29.1 - 2026-10-10
 
 - Fixed: the totals view no longer drops today on a 90-day read. A rolling window of N days touches N+1 UTC dates, so `?view=totals&days=90` can hold 91 day-rows, and `LIMIT 90` (ordered oldest first) cut the newest one while the plugin summed the rest as the exact total. The limit is now `DAYS_MAX + 2` (one spare row), so a full window is never reported `truncated` and a real overflow still is.
 - Test: the crawler-list-status leak pin strips ISO timestamps before checking for `503`, so a time whose milliseconds read .503 no longer fails it (about one run in eleven). A real leaked status code still fails it.
