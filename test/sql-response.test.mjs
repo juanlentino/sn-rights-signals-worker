@@ -12,3 +12,9 @@ it('caps a declared oversized response before reading',async()=>{const cancel=vi
 it('caps streamed bytes when Content-Length is missing or false',async()=>{for(const headers of [{},{'content-length':'1'}]){const cancel=vi.fn();const response=new Response(new ReadableStream({start(c){c.enqueue(new Uint8Array(10*1024*1024+1));},cancel}),{headers});await expect(readSqlJson(response)).rejects.toThrow('too large');expect(cancel).toHaveBeenCalled();}});
 it('decodes UTF-8 split between chunks',async()=>{const bytes=new TextEncoder().encode('{"data":["é"]}');const response=new Response(new ReadableStream({start(c){for(const byte of bytes)c.enqueue(new Uint8Array([byte]));c.close();}}));expect(await readSqlJson(response)).toEqual({data:['é']});});
 it('reports a timed out upstream as 502',async()=>{vi.spyOn(globalThis,'fetch').mockRejectedValue(new DOMException('timeout','TimeoutError'));expect((await machineReadersResponse(request(),env)).status).toBe(502);});
+it('a full 90-day totals read (91 UTC dates) is not truncated',async()=>{
+ const rows=Array.from({length:91},(_,i)=>({day:`d${i}`,hits:1}));
+ vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({data:rows,rows:91}),{status:200}));
+ const body=await (await machineReadersResponse(new Request('https://example.test/?view=totals&days=90',{headers:{authorization:'Bearer reader'}}),env)).json();
+ expect(body.data).toHaveLength(91);expect(body.truncated).toBe(false);
+});

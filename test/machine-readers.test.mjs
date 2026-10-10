@@ -422,7 +422,8 @@ describe("aggregate truncation (v1.23.0)", () => {
   });
 
   it("totals is bounded by the DAY RANGE, so the bound can never bite", () => {
-    expect(buildQuery("totals", 90)).toMatch(/LIMIT 90 FORMAT JSON$/);
+    // A 90-day rolling window touches 91 UTC dates; LIMIT 90 dropped today.
+    expect(buildQuery("totals", 90)).toMatch(/LIMIT 92 FORMAT JSON$/);
   });
 
   it("a wider window changes the interval, never the shape", () => {
