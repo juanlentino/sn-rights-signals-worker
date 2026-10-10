@@ -328,6 +328,10 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
 
 const DAYS_MIN = 1;
 const DAYS_MAX = 90;
+// A rolling window of N days (NOW() minus N) touches N+1 UTC dates, so the
+// day-only totals view can return DAYS_MAX + 1 rows. One spare row beyond
+// that, so a full window never reads as truncated and a real overflow still does.
+const TOTALS_LIMIT = DAYS_MAX + 2;
 const DAYS_DEFAULT = 30;
 
 /** Fixed view allowlist — nothing from the query string is ever interpolated. */
@@ -463,7 +467,7 @@ export function buildQuery(view, days, filter = {}) {
       "FROM sn_machine_readers " +
       since +
       "AND blob1 != 'webmcp' " +
-      `GROUP BY day ORDER BY day ASC LIMIT ${DAYS_MAX} FORMAT JSON`
+      `GROUP BY day ORDER BY day ASC LIMIT ${TOTALS_LIMIT} FORMAT JSON`
     );
   }
 
@@ -571,7 +575,7 @@ export async function machineReadersResponse(request, env) {
           : view === "rights"
             ? RIGHTS_LIMIT
             : view === "totals"
-              ? DAYS_MAX
+              ? TOTALS_LIMIT
               : AGGREGATE_LIMIT,
       // The upstream row count was already in the response and was being
       // discarded, which is why truncation has been unobservable rather than
@@ -582,7 +586,7 @@ export async function machineReadersResponse(request, env) {
       // filtered stream cannot be mistaken for the whole stream, and
       // `truncated` is read against the filtered rows it describes.
       ...(view === "rights" ? { filter: parsed.filter } : {}),
-      truncated: ((data.data || []).length >= (view === "unknown" ? UNKNOWN_LIMIT : view === "rights" ? RIGHTS_LIMIT : view === "totals" ? DAYS_MAX : AGGREGATE_LIMIT)),
+      truncated: ((data.data || []).length >= (view === "unknown" ? UNKNOWN_LIMIT : view === "rights" ? RIGHTS_LIMIT : view === "totals" ? TOTALS_LIMIT : AGGREGATE_LIMIT)),
       data: data.data || [],
     });
   } catch {
