@@ -68,7 +68,7 @@ delete these routes to "tidy up" without reading this paragraph.
 | `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path): `{ worker, version, source_commit, cf_version_id, cf_version_tag, deployed_at, sensor{ ae_bound, last_write_ok, last_write_at, detail_last_write_ok } }`. `no-store`. |
 | `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below), as `{ worker, last_check }`. The verdict is kept in isolate memory and in the colo's Cache API (v1.4.3), so it survives isolate eviction. When it is missing, failed or older than 8 days, the request starts one background re-check (v1.4.1), at most once every 10 minutes per isolate: the last-attempt time lives in isolate memory, so a fresh or concurrent isolate can start its own. A failed check publishes a classified code only; the raw reason stays in the logs. |
 | `GET /_sn/rights-signals/taxonomy` | Public, cacheable (`max-age=3600`) copy of `src/machine-reader-taxonomy.json`, the published vendor and purpose definitions the sensor classifies with. `X-SN-Taxonomy-Version` names the version. |
-| `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`, compared in constant time). `?days=N` clamped to 1–90, default 30. `?view=` is `aggregate` (the default, and the fallback for an unknown value; up to 10,000 grouped rows), `unknown` (unmatched User-Agent samples, hits descending, up to 10,000 rows; each row is one sample with one `verified_bot` category and one `network`, so a sample spans several rows and a reader sums them by `user_agent`, 1.30.0), `rights` (up to 500 rows of the rights-detail stream) or `totals` (hits per day, WebMCP beacon rows excluded). `?view=rights` also takes `family=<one family>` and `exclude_purpose=<comma list of purposes>`, both allowlisted (400 otherwise, and 400 on any other view); the response echoes them as `filter`. The response is `{ worker, days, view, taxonomy_version, taxonomy_effective_date, limit, rows, truncated, data }`. Queries the Analytics Engine SQL API (redirects refused, 10 s timeout, 10 MiB response cap); `401` on a bad token, `503` when `SN_MR_READ_TOKEN`, `CF_ACCOUNT_ID` or `SN_MR_SQL_TOKEN` is not configured, `502` on an upstream failure. |
+| `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`, compared in constant time). `?days=N` clamped to 1–90, default 30. `?view=` is `aggregate` (the default, and the fallback for an unknown value; up to 10,000 grouped rows), `unknown` (unmatched User-Agent samples, hits descending, top 50 as `user_agent` and `hits`; with `&detail=network`, up to 10,000 rows where each row is one sample with one `verified_bot` category and one `network`, so a sample spans several rows and a reader sums them by `user_agent`, 1.30.0), `rights` (up to 500 rows of the rights-detail stream) or `totals` (hits per day, WebMCP beacon rows excluded). `?view=rights` also takes `family=<one family>` and `exclude_purpose=<comma list of purposes>`, both allowlisted (400 otherwise, and 400 on any other view); the response echoes them as `filter`. The response is `{ worker, days, view, detail, taxonomy_version, taxonomy_effective_date, limit, rows, truncated, data }`. Queries the Analytics Engine SQL API (redirects refused, 10 s timeout, 10 MiB response cap); `401` on a bad token, `503` when `SN_MR_READ_TOKEN`, `CF_ACCOUNT_ID` or `SN_MR_SQL_TOKEN` is not configured, `502` on an upstream failure. |
 
 ## Native WebMCP — the fifth rights surface
 
@@ -348,14 +348,28 @@ rights file stays out of `sn_machine_readers_rights`, like the taxonomy's
 first-party agents.
 
 Setting the secret is an owner step, AFTER this version is merged and
-deployed. A secret edit deploys the latest uploaded version, so check that
-`/_sn/rights-signals/version` reports 1.30.0 or later first, then:
+deployed:
+
+1. Confirm what is deployed: `/_sn/rights-signals/version` reports 1.30.0 or
+   later, and `wrangler deployments list` names the same version as the newest
+   entry of `wrangler versions list`. A secret edit deploys the latest UPLOADED
+   version, and a PR's preview build is an upload: if a newer version than the
+   deployed one exists, use `wrangler versions secret put` on the deployed
+   version id instead, and never accept "deploy latest" while a PR is open.
+2. Check that Workers Logs does not keep the header: send one request with a
+   dummy value (`curl -H "x-sn-first-party: canary-not-the-secret" ...`) and
+   search the Worker's logs for `canary-not-the-secret`. Observability is on in
+   `wrangler.jsonc`; Cloudflare redacts authorization and cookie headers, but a
+   custom header may be captured. If it is, the secret would sit in seven days of
+   owner-only logs: note that before choosing the real value.
+3. Use an ASCII value (the runtime warns on non-ASCII header values):
 
 ```bash
 wrangler secret put SN_FIRST_PARTY_TOKEN
 ```
 
-A tool then sends it like this:
+A tool then sends it like this. Do not add `-L`: curl forwards custom headers
+to every host a redirect leads to.
 
 ```bash
 curl -H "x-sn-first-party: $SN_FIRST_PARTY_TOKEN" https://juanlentino.com/llms.txt
