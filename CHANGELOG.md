@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Security
+- Test tooling only, nothing the worker serves: sharp 0.35.4 → 0.35.5 with its libvips builds (high, CVE-2026-96889, reached through miniflare) and source-map-js 1.2.1 → 1.2.2 (high, through vite). Supersedes Dependabot #84, whose security run could not update sharp.
+
 ## 1.30.0 - 2026-10-11
 
 ### Added
