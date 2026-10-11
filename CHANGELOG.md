@@ -16,6 +16,7 @@
 - Owner action after merge and deploy, never before: `wrangler secret put SN_FIRST_PARTY_TOKEN`. A secret edit deploys the latest uploaded version, so confirm `/_sn/rights-signals/version` reports 1.30.0 first. Until then the feature is off and nothing changes.
 - The plugin's unknown-agents list renders one row per worker row, so until its fold PR lands a sample can appear once per network on the Machine Readers page. Nothing breaks; the list gets longer.
 - A request whose user agent neither pass recognizes (a browser) is still not recorded, header or not: the header flips blob7 on rows that would have been written anyway.
+- The strip covers what this Worker forwards. A path a sibling Worker owns through a more specific route never reaches it, and an uncaught throw hands the original request to the origin through `passThroughOnException`; tools should send the header only to paths this Worker fronts.
 
 ## 1.29.1 - 2026-10-10
 

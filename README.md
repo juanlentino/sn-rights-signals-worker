@@ -338,8 +338,11 @@ request carrying `x-sn-first-party` whose value equals the secret
 its user agent; blob 9 stays the taxonomy's agent id, so a curl probe is still
 `dev-curl`, now marked first-party. The compare is constant-time, the value is
 never logged or echoed, and the feature is off while the secret is unset or
-empty. The header is removed before anything is forwarded to the origin, on
-every path and whatever its value. It only flags rows the sensor would record
+empty. The header is removed, whatever its value, before this Worker forwards
+a request to the origin. Two cases it cannot reach: a path a sibling Worker
+owns through a more specific route (`/_sn/px*`, `/sn-login*`) never reaches this
+Worker, and an uncaught throw hands the ORIGINAL request to the origin through
+`passThroughOnException`. Send the header only to paths this Worker fronts. It only flags rows the sensor would record
 anyway: a browser user agent is still not recorded. A first-party read of a
 rights file stays out of `sn_machine_readers_rights`, like the taxonomy's
 first-party agents.
