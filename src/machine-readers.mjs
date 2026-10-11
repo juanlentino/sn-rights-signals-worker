@@ -189,9 +189,12 @@ export function _resetSensorStateForTests() {
  * blocks or alters the response path. Failures stay fail-open (return null)
  * but are no longer silent: they update sensorState and console.error.
  *
+ * @param {boolean} [firstPartyHeader] 1.30.0: the request proved it is ours
+ *   with the x-sn-first-party secret (see firstPartyByHeader). Resolved by the
+ *   caller, because the compare is async and this function is not.
  * @returns {{family:string, surface:string}|null} What was recorded, or null.
  */
-export function observeMachineReader(request, env, pathname, signatureState = SIG_UNSIGNED) {
+export function observeMachineReader(request, env, pathname, signatureState = SIG_UNSIGNED, firstPartyHeader = false) {
   try {
     const bound = !!(env && env.SN_MR && typeof env.SN_MR.writeDataPoint === "function");
     sensorState.ae_bound = bound;
@@ -258,7 +261,10 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
         vp?.purpose ?? "unknown",
         TAXONOMY_VERSION,
         vp?.training_corpus_source ? "1" : "0",
-        vp?.first_party ? "1" : "0",
+        // 1.30.0: first-party from the taxonomy OR from the signed header. The
+        // header changes this flag only; the agent id (blob9) stays the
+        // taxonomy's, so dev-curl stays dev-curl and is now marked ours.
+        vp?.first_party || firstPartyHeader === true ? "1" : "0",
         uaSample,
         // v1.12.0: the taxonomy entry id, so the surface can name the EXACT
         // agent rather than leaving it to be inferred from vendor+purpose.
@@ -306,7 +312,10 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     sensorState.last_error = null;
 
     try {
-      if (observeRightsSurfaceDetail(request, env, pathname, surface, family, vp)) {
+      // 1.30.0: a header-proved first-party read keeps out of the detail
+      // stream too, the 1.26.1 rule the taxonomy's first-party agents follow
+      // inside observeRightsSurfaceDetail.
+      if (firstPartyHeader !== true && observeRightsSurfaceDetail(request, env, pathname, surface, family, vp)) {
         sensorState.detail_last_write_ok = true;
       }
     } catch (err) {
@@ -337,10 +346,22 @@ const DAYS_DEFAULT = 30;
 /** Fixed view allowlist — nothing from the query string is ever interpolated. */
 const VIEWS = new Set(["aggregate", "unknown", "rights", "totals"]);
 
-// How many unclassified user-agent strings the review view returns. Capped, and
+// How many unclassified user-agent rows the review view returns. Capped, and
 // the cap is REPORTED in the response, because a silently truncated leaderboard
 // reads as "that is all of them" when it is not.
+//
+// 1.30.0: the plain view keeps its 50, byte for byte what deployed plugins
+// read. Asked with detail=network, rows split one sample by verified-bot
+// category and network, so ORDER BY hits ranks fragments, not samples: a sample
+// with 2,500 hits over twenty networks can sort below one with 600 from a
+// single network. No cap that bites can protect the plugin's top 20, so the
+// detailed cap is set where it should not bite and `truncated` says when it
+// did. The split adds the user-agent sample dimension the aggregate lacks, so
+// its row count is bounded by the number of distinct unknown samples times
+// their networks (hundreds to low thousands at 2026-10 volumes), not by the
+// aggregate's; it is an estimate, not a live count of this view.
 const UNKNOWN_LIMIT = 50;
+const UNKNOWN_DETAIL_LIMIT = 10000;
 const RIGHTS_LIMIT = 500;
 
 // The aggregate had NO declared limit and therefore inherited the SQL API's own
@@ -421,13 +442,28 @@ export function buildQuery(view, days, filter = {}) {
 
   // RULE 2: the top unclassified UAs by volume, so other-bot can be reviewed
   // and the taxonomy extended from evidence instead of from guesswork.
-  if (view === "unknown") {
+  // 1.30.0: asked with detail=network, each sample also carries the verified-bot
+  // category and the network, under the aggregate's column names, so a reader
+  // can say how much of a sample Cloudflare verified and which networks sent
+  // it. One sample then spans several rows; its rows sum to the sample's total.
+  // Without detail the view is unchanged, because a reader that does not fold
+  // split rows would list one sample once per network.
+  if (view === "unknown" && filter.detail !== "network") {
     return (
       "SELECT blob8 AS user_agent, sum(_sample_interval) AS hits " +
       "FROM sn_machine_readers " +
       since +
       "AND blob4 = 'unknown' AND blob8 != '' " +
       `GROUP BY user_agent ORDER BY hits DESC LIMIT ${UNKNOWN_LIMIT} FORMAT JSON`
+    );
+  }
+  if (view === "unknown") {
+    return (
+      "SELECT blob8 AS user_agent, blob12 AS verified_bot, blob13 AS network, sum(_sample_interval) AS hits " +
+      "FROM sn_machine_readers " +
+      since +
+      "AND blob4 = 'unknown' AND blob8 != '' " +
+      `GROUP BY user_agent, verified_bot, network ORDER BY hits DESC LIMIT ${UNKNOWN_DETAIL_LIMIT} FORMAT JSON`
     );
   }
 
@@ -516,6 +552,25 @@ async function safeEqual(a, b) {
   return diff === 0;
 }
 
+/**
+ * 1.30.0: first-party by signed header. Our own tools send
+ * `x-sn-first-party: <SN_FIRST_PARTY_TOKEN>` and are recorded first-party
+ * whatever their user agent. The value is compared in constant time and never
+ * logged or echoed. The caller strips the header before anything reaches the
+ * origin (src/index.mjs).
+ */
+export const FIRST_PARTY_HEADER = "x-sn-first-party";
+
+/** @returns {Promise<boolean>} true only when the secret is set and the header equals it. */
+export async function firstPartyByHeader(request, env) {
+  const secret = env && env.SN_FIRST_PARTY_TOKEN;
+  // Unset or empty turns the feature off. Checked BEFORE the compare, because
+  // safeEqual("", "") is true and an empty header must not match an empty secret.
+  if (typeof secret !== "string" || secret === "") return false;
+  const sent = request.headers.get(FIRST_PARTY_HEADER);
+  return sent !== null && (await safeEqual(sent, secret));
+}
+
 export async function machineReadersResponse(request, env) {
   const json = (status, body) =>
     new Response(JSON.stringify(body), {
@@ -541,7 +596,21 @@ export async function machineReadersResponse(request, env) {
   // anything else is a 400 before the SQL API is called.
   const parsed = parseRightsFilter(url.searchParams, view);
   if (parsed.error) return json(400, parsed.error);
-  const query = buildQuery(view, days, parsed.filter);
+  // detail=network is the only detail, unknown is the only view that takes it,
+  // and the value is matched, never interpolated.
+  const detail = view === "unknown" && url.searchParams.get("detail") === "network" ? "network" : null;
+  const query = buildQuery(view, days, detail ? { ...(parsed.filter || {}), detail } : parsed.filter);
+  // One cap per read, used for both the reported limit and the truncation flag.
+  const limit =
+    view === "unknown"
+      ? detail
+        ? UNKNOWN_DETAIL_LIMIT
+        : UNKNOWN_LIMIT
+      : view === "rights"
+        ? RIGHTS_LIMIT
+        : view === "totals"
+          ? TOTALS_LIMIT
+          : AGGREGATE_LIMIT;
 
   try {
     const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/analytics_engine/sql`, {
@@ -564,19 +633,13 @@ export async function machineReadersResponse(request, env) {
       worker: "sn-rights-signals",
       days,
       view,
+      detail,
       taxonomy_version: TAXONOMY_VERSION,
       taxonomy_effective_date: TAXONOMY_EFFECTIVE_DATE,
       // Reported, never silent: a truncated leaderboard that does not say it is
       // truncated reads as complete coverage. The aggregate reported `null`
       // here — "no cap" — while silently inheriting the SQL API's own.
-      limit:
-        view === "unknown"
-          ? UNKNOWN_LIMIT
-          : view === "rights"
-            ? RIGHTS_LIMIT
-            : view === "totals"
-              ? TOTALS_LIMIT
-              : AGGREGATE_LIMIT,
+      limit,
       // The upstream row count was already in the response and was being
       // discarded, which is why truncation has been unobservable rather than
       // merely unnoticed. A consumer can now refuse to derive a total from a
@@ -586,7 +649,7 @@ export async function machineReadersResponse(request, env) {
       // filtered stream cannot be mistaken for the whole stream, and
       // `truncated` is read against the filtered rows it describes.
       ...(view === "rights" ? { filter: parsed.filter } : {}),
-      truncated: ((data.data || []).length >= (view === "unknown" ? UNKNOWN_LIMIT : view === "rights" ? RIGHTS_LIMIT : view === "totals" ? TOTALS_LIMIT : AGGREGATE_LIMIT)),
+      truncated: (data.data || []).length >= limit,
       data: data.data || [],
     });
   } catch {

@@ -68,7 +68,7 @@ delete these routes to "tidy up" without reading this paragraph.
 | `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path): `{ worker, version, source_commit, cf_version_id, cf_version_tag, deployed_at, sensor{ ae_bound, last_write_ok, last_write_at, detail_last_write_ok } }`. `no-store`. |
 | `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below), as `{ worker, last_check }`. The verdict is kept in isolate memory and in the colo's Cache API (v1.4.3), so it survives isolate eviction. When it is missing, failed or older than 8 days, the request starts one background re-check (v1.4.1), at most once every 10 minutes per isolate: the last-attempt time lives in isolate memory, so a fresh or concurrent isolate can start its own. A failed check publishes a classified code only; the raw reason stays in the logs. |
 | `GET /_sn/rights-signals/taxonomy` | Public, cacheable (`max-age=3600`) copy of `src/machine-reader-taxonomy.json`, the published vendor and purpose definitions the sensor classifies with. `X-SN-Taxonomy-Version` names the version. |
-| `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`, compared in constant time). `?days=N` clamped to 1–90, default 30. `?view=` is `aggregate` (the default, and the fallback for an unknown value; up to 10,000 grouped rows), `unknown` (the top 50 unmatched User-Agent samples), `rights` (up to 500 rows of the rights-detail stream) or `totals` (hits per day, WebMCP beacon rows excluded). `?view=rights` also takes `family=<one family>` and `exclude_purpose=<comma list of purposes>`, both allowlisted (400 otherwise, and 400 on any other view); the response echoes them as `filter`. The response is `{ worker, days, view, taxonomy_version, taxonomy_effective_date, limit, rows, truncated, data }`. Queries the Analytics Engine SQL API (redirects refused, 10 s timeout, 10 MiB response cap); `401` on a bad token, `503` when `SN_MR_READ_TOKEN`, `CF_ACCOUNT_ID` or `SN_MR_SQL_TOKEN` is not configured, `502` on an upstream failure. |
+| `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`, compared in constant time). `?days=N` clamped to 1–90, default 30. `?view=` is `aggregate` (the default, and the fallback for an unknown value; up to 10,000 grouped rows), `unknown` (unmatched User-Agent samples, hits descending, top 50 as `user_agent` and `hits`; with `&detail=network`, up to 10,000 rows where each row is one sample with one `verified_bot` category and one `network`, so a sample spans several rows and a reader sums them by `user_agent`, 1.30.0), `rights` (up to 500 rows of the rights-detail stream) or `totals` (hits per day, WebMCP beacon rows excluded). `?view=rights` also takes `family=<one family>` and `exclude_purpose=<comma list of purposes>`, both allowlisted (400 otherwise, and 400 on any other view); the response echoes them as `filter`. The response is `{ worker, days, view, detail, taxonomy_version, taxonomy_effective_date, limit, rows, truncated, data }`. Queries the Analytics Engine SQL API (redirects refused, 10 s timeout, 10 MiB response cap); `401` on a bad token, `503` when `SN_MR_READ_TOKEN`, `CF_ACCOUNT_ID` or `SN_MR_SQL_TOKEN` is not configured, `502` on an upstream failure. |
 
 ## Native WebMCP — the fifth rights surface
 
@@ -301,9 +301,9 @@ matches and the frozen enum does not is stored under the family
 | 4 | purpose | from the taxonomy's `purpose_vocabulary`; `unknown` when it did not match; on a `webmcp` beacon row, the call outcome: `ok`, `absent`, `error` |
 | 5 | taxonomy version | |
 | 6 | training corpus source | `1` or `0` |
-| 7 | first party | `1` or `0` |
+| 7 | first party | `1` or `0`; `1` from the taxonomy's `first_party`, or from the signed `x-sn-first-party` header (1.30.0, see below) |
 | 8 | User-Agent sample | only when the taxonomy did not match: allowlisted characters, 96 at most (v1.11.0) |
-| 9 | agent (v1.12.0) | the taxonomy entry id |
+| 9 | agent (v1.12.0) | the taxonomy entry id; an id whose entry carries `no_user_agent: true` (`google-extended`, `apple-bot-extended`, taxonomy 1.4.0) is a robots.txt control token the vendor never sends, so that hit is impersonation |
 | 10 | markdown requested (v1.18.0) | `1` or `0` |
 | 11 | signed agent (v1.19.0) | `unsigned`, `valid`, `invalid`, `unknown-key` |
 | 12 | verified bot (v1.27.0) | Cloudflare's verified-bot category, read from the `x-sn-verified-bot` header that a zone Transform Rule sets on every request; empty when Cloudflare did not verify the client |
@@ -329,6 +329,51 @@ a `sensor` block (`ae_bound`, `last_write_ok`, `last_write_at`,
 `detail_last_write_ok`; isolate-memory, error text log-only) so a dead sensor
 is distinguishable from "no crawlers came". A rights-detail write failure is
 booked under `detail_last_write_ok` and not against the aggregate (v1.24.1).
+
+### First-party by signed header (1.30.0)
+
+The site's own tools can say they are ours without a special user agent. A
+request carrying `x-sn-first-party` whose value equals the secret
+`SN_FIRST_PARTY_TOKEN` is recorded with blob 7 `first_party` = `1`, whatever
+its user agent; blob 9 stays the taxonomy's agent id, so a curl probe is still
+`dev-curl`, now marked first-party. The compare is constant-time, the value is
+never logged or echoed, and the feature is off while the secret is unset or
+empty. The header is removed, whatever its value, before this Worker forwards
+a request to the origin. Two cases it cannot reach: a path a sibling Worker
+owns through a more specific route (`/_sn/px*`, `/sn-login*`) never reaches this
+Worker, and an uncaught throw hands the ORIGINAL request to the origin through
+`passThroughOnException`. Send the header only to paths this Worker fronts. It only flags rows the sensor would record
+anyway: a browser user agent is still not recorded. A first-party read of a
+rights file stays out of `sn_machine_readers_rights`, like the taxonomy's
+first-party agents.
+
+Setting the secret is an owner step, AFTER this version is merged and
+deployed:
+
+1. Confirm what is deployed: `/_sn/rights-signals/version` reports 1.30.0 or
+   later, and `wrangler deployments list` names the same version as the newest
+   entry of `wrangler versions list`. A secret edit deploys the latest UPLOADED
+   version, and a PR's preview build is an upload: if a newer version than the
+   deployed one exists, use `wrangler versions secret put` on the deployed
+   version id instead, and never accept "deploy latest" while a PR is open.
+2. Check that Workers Logs does not keep the header: send one request with a
+   dummy value (`curl -H "x-sn-first-party: canary-not-the-secret" ...`) and
+   search the Worker's logs for `canary-not-the-secret`. Observability is on in
+   `wrangler.jsonc`; Cloudflare redacts authorization and cookie headers, but a
+   custom header may be captured. If it is, the secret would sit in seven days of
+   owner-only logs: note that before choosing the real value.
+3. Use an ASCII value (the runtime warns on non-ASCII header values):
+
+```bash
+wrangler secret put SN_FIRST_PARTY_TOKEN
+```
+
+A tool then sends it like this. Do not add `-L`: curl forwards custom headers
+to every host a redirect leads to.
+
+```bash
+curl -H "x-sn-first-party: $SN_FIRST_PARTY_TOKEN" https://juanlentino.com/llms.txt
+```
 
 ## What this Worker serves gets anchored
 
@@ -407,7 +452,8 @@ Bindings in `wrangler.jsonc`: the `SN_MR` and `SN_MR_RIGHTS` Analytics Engine
 datasets, the `WEBMCP_LIMITER` rate limit, `CF_VERSION_METADATA`, the weekly
 cron (`23 7 * * 1`) and the `juanlentino.com/*` route. The read path needs
 `SN_MR_READ_TOKEN`, `SN_MR_SQL_TOKEN` and `CF_ACCOUNT_ID`, which are not in
-`wrangler.jsonc`.
+`wrangler.jsonc`. The optional secret `SN_FIRST_PARTY_TOKEN` turns on the
+first-party header (1.30.0); unset, the header is ignored and still stripped.
 
 CI (`.github/workflows/test.yml`) runs, as steps of one job, the
 dependency-provenance gate, the dependency cooldown gate, the outbound redirect

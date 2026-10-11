@@ -3,12 +3,13 @@ import TAXONOMY from "../src/machine-reader-taxonomy.json";
 import {
   classifyVendorPurpose,
   sanitizeUnknownUa,
+  validateEntries,
   taxonomyResponse,
   PURPOSES,
   TAXONOMY_VERSION,
   TAXONOMY_EFFECTIVE_DATE,
 } from "../src/taxonomy.mjs";
-import { classifyMachineReader } from "../src/machine-readers.mjs";
+import { classifyMachineReader, observeMachineReader } from "../src/machine-readers.mjs";
 
 // Realistic UAs, not bare tokens. A taxonomy tested only against its own match
 // strings proves nothing: it would pass even if every entry matched the wrong
@@ -311,8 +312,78 @@ describe("first-party: the provenance worker's rights-signal capture (1.26.1)", 
   it("keeps the plugin's integrity checker on its own entry", () => {
     expect(classifyVendorPurpose("SN-Provenance-Integrity/17.0.0").id).toBe("self-provenance");
   });
-  it("taxonomy 1.3.1 carries the entry", () => {
-    expect(TAXONOMY_VERSION).toBe("1.3.1");
+  it("the taxonomy carries the entry", () => {
     expect(TAXONOMY.entries.filter((e) => e.first_party).map((e) => e.id)).toContain("self-provenance-ledger");
+  });
+});
+
+// Taxonomy 1.4.0 (worker 1.30.0). Google-Extended and Applebot-Extended are
+// robots.txt control tokens with no user agent of their own: Google says
+// "Google-Extended doesn't have a separate HTTP request user agent string"
+// (https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers)
+// and Apple says "Applebot-Extended does not crawl webpages"
+// (https://support.apple.com/en-us/119829). A request presenting either token
+// is therefore never the vendor. The sensor already writes the agent id
+// (blob9); the flag lets a reader join that id to "this is impersonation".
+describe("control tokens carry no_user_agent (taxonomy 1.4.0)", () => {
+  const CONTROL_TOKENS = ["google-extended", "apple-bot-extended"];
+
+  it("flags exactly the two control tokens", () => {
+    expect(TAXONOMY.entries.filter((e) => e.no_user_agent === true).map((e) => e.id).sort()).toEqual([...CONTROL_TOKENS].sort());
+  });
+
+  it("documents the field in the published contract", () => {
+    expect(TAXONOMY.field_contract.no_user_agent).toMatch(/impersonat/i);
+  });
+
+  it("agrees with observable: a token with no user agent is never observable", () => {
+    for (const id of CONTROL_TOKENS) expect(TAXONOMY.entries.find((e) => e.id === id).observable).toBe(false);
+  });
+
+  it("a hit presenting the token records the flagged agent id, so a reader can call it impersonation", () => {
+    const written = [];
+    const env = { SN_MR: { writeDataPoint: (d) => written.push(d) } };
+    observeMachineReader(new Request("https://juanlentino.com/notes/x/", { headers: { "user-agent": "Mozilla/5.0 (compatible; Google-Extended)" } }), env, "/notes/x/");
+    const agent = written[0].blobs[8];
+    expect(agent).toBe("google-extended");
+    expect(TAXONOMY.entries.find((e) => e.id === agent).no_user_agent).toBe(true);
+  });
+
+  it("the validator refuses a non-boolean flag", () => {
+    const e = { id: "x", match: "x-token", purpose: "train", observable: false, no_user_agent: "yes" };
+    expect(() => validateEntries([e])).toThrow(/no_user_agent/);
+  });
+
+  it("the validator refuses no_user_agent on an entry not marked unobservable", () => {
+    const e = { id: "x", match: "x-token", purpose: "train", no_user_agent: true };
+    expect(() => validateEntries([e])).toThrow(/observable/);
+  });
+
+  it("the validator accepts the flag where it belongs, and its absence", () => {
+    expect(() => validateEntries([{ id: "x", match: "x-token", purpose: "train", observable: false, no_user_agent: true }])).not.toThrow();
+    expect(() => validateEntries([{ id: "y", match: "y-token", purpose: "train" }])).not.toThrow();
+  });
+
+  it("is taxonomy 1.4.0", () => {
+    expect(TAXONOMY_VERSION).toBe("1.4.0");
+  });
+});
+
+describe("cohere-ai and google-other keep purpose unknown (taxonomy 1.4.0)", () => {
+  // Re-checked against the vendors' current docs on 2026-10-11. Neither has an
+  // honest home in the purpose vocabulary, so neither moves; the unknown value
+  // is defined to cover "a documented agent whose declared purpose has no home".
+  it("cohere-ai cites Cohere's own crawler page, which does not name the token", () => {
+    const e = TAXONOMY.entries.find((x) => x.id === "cohere-ai");
+    expect(e.purpose).toBe("unknown");
+    expect(e.declared).toBe(false);
+    expect(e.source).toBe("https://docs.cohere.com/docs/cohere-web-crawlers");
+    expect(e.note).toMatch(/does not name/i);
+  });
+
+  it("google-other stays unknown: generic product-team fetching has no purpose of its own here", () => {
+    const e = TAXONOMY.entries.find((x) => x.id === "google-other");
+    expect(e.purpose).toBe("unknown");
+    expect(e.note).toMatch(/research and development/i);
   });
 });

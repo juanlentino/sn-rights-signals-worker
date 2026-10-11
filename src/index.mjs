@@ -9,7 +9,7 @@ import { TDM_RESERVATION_HEADERS, LICENSE_LINK_HEADER } from "./constants.mjs";
 import { versionResponse } from "./version.mjs";
 import { bypassesRightsSignals } from "./admin-bypass.mjs";
 import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawler-list-status.mjs";
-import { machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
+import { FIRST_PARTY_HEADER, firstPartyByHeader, machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
 import { taxonomyResponse } from "./taxonomy.mjs";
 import { best, parseAccept, prefersMarkdown } from "./accept-markdown.mjs";
 import { hasWebBotAuthHeaders, resolveSignatureState, signatureAgentOrigin } from "./web-bot-auth.mjs";
@@ -72,8 +72,20 @@ export default {
     // up. First line, so it covers everything below it.
     ctx?.passThroughOnException?.();
     const { pathname } = new URL(request.url);
+    // 1.30.0: the first-party secret never reaches the origin, whatever its
+    // value and whether or not the feature is configured. The copy is built
+    // only when the header came in, and only at a forwarding site, so a request
+    // without it is forwarded as the same object it always was and a request
+    // this Worker answers itself keeps its body. Observation reads the request
+    // as it arrived, so blob13 keeps the network from `cf`.
+    const forwardable = () => {
+      if (!request.headers.has(FIRST_PARTY_HEADER)) return request;
+      const headers = new Headers(request.headers);
+      headers.delete(FIRST_PARTY_HEADER);
+      return new Request(request, { headers });
+    };
     // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
-    if (bypassesRightsSignals(pathname)) return fetch(request);
+    if (bypassesRightsSignals(pathname)) return fetch(forwardable());
 
     // v1.24.0 (survey A2). Null until a signed request resolves it; the offer
     // stays {} for everything else, which is the fail-open path — an agent that
@@ -85,6 +97,9 @@ export default {
     // classifies into the fixed crawler-family enum; humans and internal /_sn/
     // paths are never recorded, and observation can never affect the response.
     if (!pathname.startsWith("/_sn/")) {
+      // 1.30.0: only a request that carries the header pays the async compare;
+      // every other request observes synchronously, exactly as before.
+      const firstParty = request.headers.has(FIRST_PARTY_HEADER) && (await firstPartyByHeader(request, env));
       // TWO PATHS ON PURPOSE (v1.19.0). An unsigned request observes exactly as
       // it did before this feature existed: synchronous, no await, nothing
       // scheduled. A signed one defers the WHOLE observation, because
@@ -106,9 +121,9 @@ export default {
         // Resolved ONCE and reused. Calling resolveSignatureState again for the
         // headers would double every verification, and could report a different
         // state from the one recorded if a directory rotated between the two.
-        observeMachineReader(request, env, pathname, signatureState);
+        observeMachineReader(request, env, pathname, signatureState, firstParty);
       } else {
-        observeMachineReader(request, env, pathname);
+        observeMachineReader(request, env, pathname, undefined, firstParty);
       }
     }
 
@@ -131,7 +146,7 @@ export default {
     // PUBLIC and unauthenticated on purpose: a definition behind a token cannot
     // be cited by a note that asks the reader to go and check it.
     if (pathname === "/_sn/rights-signals/taxonomy") return taxonomyResponse(request);
-    if (pathname === "/robots.txt") return robotsResponse(request);
+    if (pathname === "/robots.txt") return robotsResponse(forwardable());
     if (pathname === "/.well-known/tdmrep.json") return tdmrepResponse();
     if (pathname === "/license.xml") return rslResponse();
     // v1.8.0: ONE URL, two representations. TDMRep treats a policy as
@@ -174,7 +189,7 @@ export default {
     }
 
     // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
-    const origin = await fetch(request);
+    const origin = await fetch(forwardable());
 
     // v1.5.0: the reservation rides EVERY response, not just HTML and REST.
     //
