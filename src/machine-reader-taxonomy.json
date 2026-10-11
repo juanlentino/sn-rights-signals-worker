@@ -1,7 +1,7 @@
 {
   "$comment": "The published cohort definition for the Machine Readers surface. DATA, not code — no switch statements anywhere. Served verbatim at https://juanlentino.com/_sn/rights-signals/taxonomy so any number derived from it can be checked against it. See docs/MACHINE-READERS.md in signal-and-noise-tools for the full contract.",
-  "taxonomy_version": "1.3.1",
-  "effective_date": "2026-08-11",
+  "taxonomy_version": "1.4.0",
+  "effective_date": "2026-10-11",
   "matching": {
     "algorithm": "ordered-substring-case-insensitive",
     "note": "Entries are tested in array order and the FIRST match wins, so specific tokens must precede the generic ones they contain (applebot-extended before applebot; googlebot-image before googlebot). Plain substring rather than regex on purpose: no escaping subtleties, no catastrophic backtracking on a hostile UA, and a reviewer can verify a match by eye. Tokens that risk matching inside an unrelated word carry their punctuation (curl/, axios/, java/)."
@@ -29,6 +29,7 @@
     "declared": "true when purpose comes from the vendor's own published page; false when it rests on third-party reporting. A surface whose claim is 'observed vs declared' must not blur the two.",
     "training_corpus_source": "true when content collected by this agent is known to feed AI training corpora, REGARDLESS of purpose. Keeps the dual role queryable without overloading purpose.",
     "observable": "false for tokens that never appear in a request (robots.txt control tokens). Any observed hit on these is spoofed or synthetic.",
+    "no_user_agent": "true when the vendor documents the token as a robots.txt control token with no HTTP user agent of its own (taxonomy 1.4.0). The vendor never sends it, so a request presenting it is impersonation, and a reader should count the hit under this entry's id as never the vendor. Present only with observable false; the sensor records the entry id as agent.",
     "note": "Present only where the call is contested or the vendor's declaration is internally mixed.",
     "first_party": "true when the request comes from this site's own tooling. Self-traffic is not readership and headline totals exclude it. Identified from Workers Logs, not guessed."
   },
@@ -186,7 +187,8 @@
       "declared": true,
       "training_corpus_source": true,
       "observable": false,
-      "note": "Control token, like Applebot-Extended: Google documents it as the way to 'manage whether content may be used for training future generations of Gemini models', not as a fetching agent. Expect ~0 observed hits."
+      "no_user_agent": true,
+      "note": "Control token, like Applebot-Extended: Google documents it as the way to 'manage whether content may be used for training future generations of Gemini models', not as a fetching agent. Expect ~0 observed hits. Taxonomy 1.4.0: Google states 'Google-Extended doesn't have a separate HTTP request user agent string' (https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers), so a request presenting it is never Google."
     },
     {
       "id": "google-cloudvertexbot",
@@ -243,7 +245,7 @@
       "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
       "declared": true,
       "training_corpus_source": false,
-      "note": "CORRECTS A LIVE OVER-COUNT. Google documents GoogleOther as a 'generic crawler that may be used by various product teams for fetching publicly accessible content' — it is not AI-specific. The frozen family regex files it as google-ai, which sits inside the published AI-training set, so generic Google fetches are currently reported as AI-training reads. family is frozen and stays wrong; purpose is what should be read."
+      "note": "CORRECTS A LIVE OVER-COUNT. Google documents GoogleOther as a 'generic crawler that may be used by various product teams for fetching publicly accessible content' — it is not AI-specific. The frozen family regex files it as google-ai, which sits inside the published AI-training set, so generic Google fetches are currently reported as AI-training reads. family is frozen and stays wrong; purpose is what should be read. Re-checked for taxonomy 1.4.0 (2026-10-11, https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers): Google adds that it may be used for one-off crawls for internal research and development, and that its robots.txt rules affect no specific product. No value in purpose_vocabulary names generic product-team or research fetching, and unknown is defined to cover a documented agent whose declared purpose has no home here, so purpose stays unknown."
     },
     {
       "id": "google-bot-image",
@@ -310,6 +312,7 @@
       "declared": true,
       "training_corpus_source": true,
       "observable": false,
+      "no_user_agent": true,
       "note": "NOT AN OBSERVABLE AGENT. Apple: 'Applebot-Extended does not crawl webpages' — it is a robots.txt control token used only to decide how data already collected by Applebot may be used. The requested Apple train/search split cannot be measured from request logs. The frozen family apple-ai therefore reports a phantom: any non-zero count is spoofed or synthetic."
     },
     {
@@ -456,10 +459,10 @@
       "match": "cohere-ai",
       "vendor": "cohere",
       "purpose": "unknown",
-      "source": null,
+      "source": "https://docs.cohere.com/docs/cohere-web-crawlers",
       "declared": false,
       "training_corpus_source": false,
-      "note": "CORRECTED in taxonomy 1.1.0. Cohere publishes no first-party crawler page, and the best available third-party record states the purpose is UNCONFIRMED, listing training collection, index building and an unannounced experiment as equally live possibilities. Filing it 'train' asserted one of three, which is precisely what the 'declared' field exists to prevent. training_corpus_source is false because it is unknown, not because it is ruled out."
+      "note": "CORRECTED in taxonomy 1.1.0, re-checked for 1.4.0 (2026-10-11). Cohere now publishes a crawler page, but it does not name the cohere-ai token: it says Cohere does not use bots or user agents to crawl web content for training generative AI models 'at this time', and its table of bots is empty. The best available third-party record (Known Agents, formerly Dark Visitors) still calls cohere-ai an unconfirmed, undocumented agent, 'possibly' dispatched by Cohere's chat products in response to user prompts. One directory's 'possibly' is not a declaration, so purpose stays unknown and declared stays false. training_corpus_source is false: Cohere's page rules out training crawling by any bot it runs today, though it does not say this token is one of them."
     },
     {
       "id": "allenai-ai2bot",

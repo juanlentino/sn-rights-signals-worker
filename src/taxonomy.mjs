@@ -23,8 +23,9 @@ export const PURPOSES = Object.freeze(Object.keys(TAXONOMY.purpose_vocabulary));
  * generic token shadows a specific one that appears later (e.g. "applebot"
  * placed before "applebot-extended" would silently make the Apple split
  * unreachable). Throwing here surfaces at deploy, not in a published number.
+ * Exported so a test can feed it a bad entry; the module runs it on load.
  */
-function validate(entries) {
+export function validateEntries(entries) {
   const seen = new Set();
   entries.forEach((e, i) => {
     if (!e.id || seen.has(e.id)) throw new Error(`taxonomy: missing or duplicate id at index ${i}: ${e.id}`);
@@ -33,6 +34,15 @@ function validate(entries) {
       throw new Error(`taxonomy: match must be a lowercase non-empty string (${e.id})`);
     }
     if (!PURPOSES.includes(e.purpose)) throw new Error(`taxonomy: unknown purpose "${e.purpose}" (${e.id})`);
+    // 1.4.0: a control token with no user agent of its own. A boolean when
+    // present, and only on an entry already marked unobservable, so the two
+    // statements of the same fact cannot drift apart.
+    if (e.no_user_agent !== undefined) {
+      if (typeof e.no_user_agent !== "boolean") throw new Error(`taxonomy: no_user_agent must be a boolean (${e.id})`);
+      if (e.no_user_agent && e.observable !== false) {
+        throw new Error(`taxonomy: no_user_agent requires observable: false (${e.id})`);
+      }
+    }
     for (let j = i + 1; j < entries.length; j++) {
       if (entries[j].match.includes(e.match)) {
         throw new Error(`taxonomy: "${e.id}" (${e.match}) shadows later "${entries[j].id}" (${entries[j].match}) — reorder`);
@@ -42,7 +52,7 @@ function validate(entries) {
   return entries;
 }
 
-const ENTRIES = Object.freeze(validate(TAXONOMY.entries));
+const ENTRIES = Object.freeze(validateEntries(TAXONOMY.entries));
 
 export const TAXONOMY_VERSION = TAXONOMY.taxonomy_version;
 export const TAXONOMY_EFFECTIVE_DATE = TAXONOMY.effective_date;
