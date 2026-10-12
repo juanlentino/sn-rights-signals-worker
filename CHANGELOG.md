@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+- **A note's Markdown at its own URL: `/notes/<slug>.md`.** Same converter and same bytes as `Accept: text/markdown` on `/notes/<slug>/`, for readers that cannot send that header (the audit counted 8,377 AI-training reads of note HTML in 30 days; a note is about 158 KB as HTML and 5.7 KB as Markdown). `text/markdown; charset=utf-8`, the origin's cache and robots directives, the reservation headers, and `Link: <.../notes/<slug>/>; rel="canonical"`. The HTML is read anonymously (no cookie, no `Authorization`, no redirect followed) and converted only when its `<head>` advertises that exact URL as a `text/markdown` alternate, which the theme does on a published, unprotected note only; every other case is a `404` (an origin `5xx` or `429` keeps its status, a conversion failure is a `500`, never HTML). Until the theme ships its link, every `.md` URL stays a `404`.
+
+### Notes
+- Caching: the route reads `/notes/<slug>/`, so the edge serves and stores the same HTML object a browser gets, and the plugin's existing per-post purge of that URL refreshes the Markdown with it. The Worker keeps no `.md` object, so there is nothing new to purge.
+- Measurement: a `.md` read records surface `html` with `markdown_requested` = `0`, because blob10 is read from `Accept`. Counting the suffix as a markdown request is a one-line change in `machine-readers.mjs` and is left to the owner.
+
 ### Security
 - Test tooling only, nothing the worker serves: sharp 0.35.4 → 0.35.5 with its libvips builds (high, CVE-2026-96889, reached through miniflare) and source-map-js 1.2.1 → 1.2.2 (high, through vite). Supersedes Dependabot #84, whose security run could not update sharp.
 
