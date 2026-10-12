@@ -64,6 +64,7 @@ delete these routes to "tidy up" without reading this paragraph.
 | `GET /tdm-policy(/)` | Worker-rendered policy document, **content-negotiated**: `text/html` by default, an ODRL policy in the W3C TDMRep profile (`application/ld+json`) when a client explicitly asks, and Markdown when a client prefers `text/markdown`. `Vary: Accept` on the representations. These are the operative terms every other layer points at. Terms in `src/tdm-policy-terms.mjs`, shell in `src/tdm-policy-page.mjs`. Currently `POLICY_STATUS = "published"`, `POLICY_VERSION = "1.3"` (see below). |
 | `GET /webmcp/bridge.js` | The WebMCP bridge script (v1.22.0), composed from `src/webmcp-bridge-client.mjs`. `text/javascript`, `max-age=300`, `nosniff`. See "Native WebMCP" below. |
 | `POST /_sn/rights-signals/webmcp-call` | The bridge's beacon (v1.25.0): one sensor row per tool call. Always answers `204`. See "Native WebMCP" below. |
+| `GET /notes/<slug>.md` | The note's Markdown at its own URL, the same bytes the Accept negotiation produces for `/notes/<slug>/`, gated on the theme's `<head>` advertisement; `404` otherwise. See "Markdown for agents". |
 | Everything else | Proxies to origin. Every proxied response, `/wp-json` and non-HTML included, gets `TDM-Reservation: 1`, `TDM-Policy`, `Content-Signal` and `Link: <https://juanlentino.com/license.xml>; rel="license"` (v1.5.0). If `content-type` is `text/html`, it also injects `<meta name="tdm-reservation">` / `<meta name="tdm-policy">` and the WebMCP script tag into `<head>` via `HTMLRewriter`, drops `Content-Length`, re-keys the `ETag` with the bridge's SRI, and appends `Vary: Accept`. A request that prefers `text/markdown` gets the page as Markdown instead (see "Markdown for agents" below). Non-HTML bodies (images, CSS, JS, JSON) pass through unmodified. |
 | `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path): `{ worker, version, source_commit, cf_version_id, cf_version_tag, deployed_at, sensor{ ae_bound, last_write_ok, last_write_at, detail_last_write_ok } }`. `no-store`. |
 | `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below), as `{ worker, last_check }`. The verdict is kept in isolate memory and in the colo's Cache API (v1.4.3), so it survives isolate eviction. When it is missing, failed or older than 8 days, the request starts one background re-check (v1.4.1), at most once every 10 minutes per isolate: the last-attempt time lives in isolate memory, so a fresh or concurrent isolate can start its own. A failed check publishes a classified code only; the raw reason stays in the logs. |
@@ -132,6 +133,24 @@ failure is logged and falls back to the HTML (v1.24.3). It applies to proxied
 pages, `/tdm-policy/` and `/ns/tdm`. On those two routes JSON is decided first,
 against HTML only: any acceptable `application/ld+json` or `application/json`
 that HTML does not outrank wins, even over a higher-ranked `text/markdown`.
+
+**A note's Markdown at its own URL** (`src/note-markdown-url.mjs`). `GET` or
+`HEAD /notes/<slug>.md` reads `/notes/<slug>/` from the origin anonymously
+(fresh headers: no cookie, `Authorization` or conditional header is forwarded, and redirects are not followed) and answers the
+same bytes the negotiation produces for that page, whatever `Accept` says, with
+`Link: </notes/<slug>/>; rel="canonical"` beside the licence link. It converts
+only when the page's `<head>` advertises that exact URL as
+`<link rel="alternate" type="text/markdown">`, which the theme emits on a
+published, unprotected note only; anything else (a draft, a redirect, `/notes/tags.md`,
+a page from before the theme's link shipped) is a plain-text `404`, an origin
+`5xx` or `429` passes through as that status, and a conversion failure is a
+`500`, never HTML. Caching rides the HTML: the edge stores only the
+`/notes/<slug>/` object this route reads, the plugin's per-post purge of that
+URL refreshes both, and the Worker stores no `.md` object of its own. This
+route is not part of the deletable negotiation unit: Cloudflare's own Markdown
+for Agents has no suffix URL.
+A `.md` read is recorded with `markdown_requested` = `1` (blob 10), surface
+`html`, so the sensor counts both doors to the same Markdown.
 
 ## Web Bot Auth and the license offer
 
@@ -304,7 +323,7 @@ matches and the frozen enum does not is stored under the family
 | 7 | first party | `1` or `0`; `1` from the taxonomy's `first_party`, or from the signed `x-sn-first-party` header (1.30.0, see below) |
 | 8 | User-Agent sample | only when the taxonomy did not match: allowlisted characters, 96 at most (v1.11.0) |
 | 9 | agent (v1.12.0) | the taxonomy entry id; an id whose entry carries `no_user_agent: true` (`google-extended`, `apple-bot-extended`, taxonomy 1.4.0) is a robots.txt control token the vendor never sends, so that hit is impersonation |
-| 10 | markdown requested (v1.18.0) | `1` or `0` |
+| 10 | markdown requested (v1.18.0; a `/notes/<slug>.md` read counts too) | `1` or `0` |
 | 11 | signed agent (v1.19.0) | `unsigned`, `valid`, `invalid`, `unknown-key` |
 | 12 | verified bot (v1.27.0) | Cloudflare's verified-bot category, read from the `x-sn-verified-bot` header that a zone Transform Rule sets on every request; empty when Cloudflare did not verify the client |
 | 13 | network (v1.28.0) | `cf.asOrganization`, 128 characters at most; empty when Cloudflare supplies none |

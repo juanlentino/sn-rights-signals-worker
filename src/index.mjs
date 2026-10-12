@@ -15,6 +15,7 @@ import { best, parseAccept, prefersMarkdown } from "./accept-markdown.mjs";
 import { hasWebBotAuthHeaders, resolveSignatureState, signatureAgentOrigin } from "./web-bot-auth.mjs";
 import { licenceOfferHeaders } from "./licence-handshake.mjs";
 import { maybeMarkdown, withVaryAccept } from "./markdown-negotiation.mjs";
+import { noteMarkdownResponse, noteMarkdownSlug } from "./note-markdown-url.mjs";
 import { webmcpBridgeResponse } from "./webmcp-bridge.mjs";
 import { webmcpCallResponse, WEBMCP_CALL_PATH } from "./webmcp-call.mjs";
 
@@ -187,6 +188,11 @@ export default {
       const md = await maybeMarkdown(page, wantsMarkdown);
       return withTdmHeaders(md || page, licenceOffer);
     }
+
+    // A note's Markdown at its own URL (see note-markdown-url.mjs). Same
+    // converter, same reservation headers as every other representation.
+    const noteSlug = request.method === "GET" || request.method === "HEAD" ? noteMarkdownSlug(pathname) : null;
+    if (noteSlug) return withTdmHeaders(await noteMarkdownResponse(forwardable(), noteSlug), licenceOffer);
 
     // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
     const origin = await fetch(forwardable());
