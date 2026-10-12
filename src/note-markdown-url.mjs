@@ -46,12 +46,10 @@ const plain = (status, text) =>
 export async function noteMarkdownResponse(request, slug) {
   const url = new URL(request.url);
   const canonical = `${url.origin}/notes/${slug}/`;
-  // Anonymous on purpose: a forwarded session cookie would let the origin answer
-  // with a draft or a private note.
-  const headers = new Headers(request.headers);
-  headers.delete("cookie");
-  headers.delete("authorization");
-  headers.set("accept", "text/html");
+  // Fresh headers on purpose: a forwarded session cookie would let the origin
+  // answer with a draft or a private note, and a forwarded If-None-Match or
+  // If-Modified-Since would draw a 304 for the HTML, which is not this body.
+  const headers = new Headers({ accept: "text/html", "user-agent": request.headers.get("user-agent") || "" });
   // redirect-ok: a redirected note (old slug) is not this URL's note; 404 below.
   const origin = await fetch(new Request(canonical, { method: "GET", headers, redirect: "manual" }));
   if (origin.status !== 200) {

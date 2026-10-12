@@ -43,14 +43,22 @@ describe("/notes/<slug>.md, the note's Markdown at its own URL", () => {
     expect(res.headers.get("tdm-reservation")).toBe("1");
   });
 
-  it("reads the note's HTML URL anonymously, so a session can never reach a draft", async () => {
+  it("reads the note's HTML URL anonymously and unconditionally, so a session never reaches a draft", async () => {
     const fn = stubOrigin(page());
-    await get("/notes/a-note.md", { cookie: "wordpress_logged_in_x=1", authorization: "Basic eA==" });
+    await get("/notes/a-note.md", {
+      cookie: "wordpress_logged_in_x=1",
+      authorization: "Basic eA==",
+      "if-none-match": '"abc"',
+      "if-modified-since": "Mon, 12 Oct 2026 00:00:00 GMT",
+    });
     const sent = fn.mock.calls[0][0];
     expect(sent.url).toBe("https://juanlentino.com/notes/a-note/");
     expect(sent.method).toBe("GET");
     expect(sent.headers.get("cookie")).toBeNull();
     expect(sent.headers.get("authorization")).toBeNull();
+    // A conditional header would draw a 304 for the HTML, which is not this body.
+    expect(sent.headers.get("if-none-match")).toBeNull();
+    expect(sent.headers.get("if-modified-since")).toBeNull();
   });
 
   it("gives a browser the Markdown too: the URL is the representation", async () => {

@@ -136,7 +136,7 @@ that HTML does not outrank wins, even over a higher-ranked `text/markdown`.
 
 **A note's Markdown at its own URL** (`src/note-markdown-url.mjs`). `GET` or
 `HEAD /notes/<slug>.md` reads `/notes/<slug>/` from the origin anonymously
-(cookies and `Authorization` dropped, redirects not followed) and answers the
+(fresh headers: no cookie, `Authorization` or conditional header is forwarded, and redirects are not followed) and answers the
 same bytes the negotiation produces for that page, whatever `Accept` says, with
 `Link: </notes/<slug>/>; rel="canonical"` beside the licence link. It converts
 only when the page's `<head>` advertises that exact URL as
