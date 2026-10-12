@@ -149,6 +149,8 @@ a page from before the theme's link shipped) is a plain-text `404`, an origin
 URL refreshes both, and the Worker stores no `.md` object of its own. This
 route is not part of the deletable negotiation unit: Cloudflare's own Markdown
 for Agents has no suffix URL.
+A `.md` read is recorded with `markdown_requested` = `1` (blob 10), surface
+`html`, so the sensor counts both doors to the same Markdown.
 
 ## Web Bot Auth and the license offer
 
@@ -321,7 +323,7 @@ matches and the frozen enum does not is stored under the family
 | 7 | first party | `1` or `0`; `1` from the taxonomy's `first_party`, or from the signed `x-sn-first-party` header (1.30.0, see below) |
 | 8 | User-Agent sample | only when the taxonomy did not match: allowlisted characters, 96 at most (v1.11.0) |
 | 9 | agent (v1.12.0) | the taxonomy entry id; an id whose entry carries `no_user_agent: true` (`google-extended`, `apple-bot-extended`, taxonomy 1.4.0) is a robots.txt control token the vendor never sends, so that hit is impersonation |
-| 10 | markdown requested (v1.18.0) | `1` or `0` |
+| 10 | markdown requested (v1.18.0; a `/notes/<slug>.md` read counts too) | `1` or `0` |
 | 11 | signed agent (v1.19.0) | `unsigned`, `valid`, `invalid`, `unknown-key` |
 | 12 | verified bot (v1.27.0) | Cloudflare's verified-bot category, read from the `x-sn-verified-bot` header that a zone Transform Rule sets on every request; empty when Cloudflare did not verify the client |
 | 13 | network (v1.28.0) | `cf.asOrganization`, 128 characters at most; empty when Cloudflare supplies none |

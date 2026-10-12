@@ -66,6 +66,19 @@ describe("markdown adoption signal (v1.18.0)", () => {
     expect(writeFor(null).blobs[9]).toBe("0");
   });
 
+  // The .md suffix route is a request for markdown too: without this the
+  // audit's 30-day check of the new door reads zero whatever happens.
+  it("records markdown_requested=1 for a /notes/<slug>.md read, whatever Accept says", () => {
+    const written = [];
+    const env = { SN_MR: { writeDataPoint: (d) => written.push(d) } };
+    const headers = { "user-agent": "Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)", accept: "*/*" };
+    observeMachineReader(new Request("https://juanlentino.com/notes/x.md", { headers }), env, "/notes/x.md");
+    observeMachineReader(new Request("https://juanlentino.com/notes/a/b.md", { headers }), env, "/notes/a/b.md");
+    expect(written[0].blobs[9]).toBe("1");
+    expect(written[0].blobs[1]).toBe("html"); // no new surface class
+    expect(written[1].blobs[9]).toBe("0"); // only the route's own shape counts
+  });
+
   it("uses the SAME predicate the Worker serves markdown with", () => {
     // Not a reimplementation: if these two ever diverge, the metric would
     // report adoption of a door that was not actually opened for that request.

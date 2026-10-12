@@ -31,6 +31,7 @@ import {
 } from "./taxonomy.mjs";
 import { observeRightsSurfaceDetail } from "./machine-readers-rights-detail.mjs";
 import { prefersMarkdown } from "./accept-markdown.mjs";
+import { noteMarkdownSlug } from "./note-markdown-url.mjs";
 import { SIG_UNSIGNED } from "./web-bot-auth.mjs";
 
 /**
@@ -251,7 +252,11 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     // whether conversion succeeded is not yet known — but that is OUR
     // reliability, answerable from logs. Adoption is a fact about the AGENT, and
     // the request alone states it.
-    const markdownRequested = prefersMarkdown(request.headers.get("accept")) ? "1" : "0";
+    //
+    // A /notes/<slug>.md read asks for markdown by URL rather than by header,
+    // and counts the same way (same matcher as the route, so the two agree).
+    const markdownRequested =
+      prefersMarkdown(request.headers.get("accept")) || noteMarkdownSlug(pathname) ? "1" : "0";
 
     env.SN_MR.writeDataPoint({
       blobs: [
