@@ -18,6 +18,7 @@ import { maybeMarkdown, withVaryAccept } from "./markdown-negotiation.mjs";
 import { noteMarkdownResponse, noteMarkdownSlug } from "./note-markdown-url.mjs";
 import { webmcpBridgeResponse } from "./webmcp-bridge.mjs";
 import { webmcpCallResponse, WEBMCP_CALL_PATH } from "./webmcp-call.mjs";
+import { strippedForwardUrl } from "./marketing-params.mjs";
 
 // Content negotiation for /tdm-policy/, deliberately conservative: HTML is the
 // default and only an explicit JSON preference switches representation.
@@ -79,11 +80,19 @@ export default {
     // without it is forwarded as the same object it always was and a request
     // this Worker answers itself keeps its body. Observation reads the request
     // as it arrived, so blob13 keeps the network from `cf`.
-    const forwardable = () => {
-      if (!request.headers.has(FIRST_PARTY_HEADER)) return request;
-      const headers = new Headers(request.headers);
+    //
+    // 1.31.0: `url` (only the page passthrough passes one) is the same request
+    // at a URL without marketing params (marketing-params.mjs). new Request(url,
+    // request) keeps method, headers and cf; redirect is pinned to "manual", the
+    // incoming request's own mode, so a copy never starts following redirects.
+    const forwardable = (url = null) => {
+      const hasHeader = request.headers.has(FIRST_PARTY_HEADER);
+      if (!hasHeader && !url) return request;
+      const copy = url ? new Request(new Request(url, request), { redirect: "manual" }) : request;
+      if (!hasHeader) return copy;
+      const headers = new Headers(copy.headers);
       headers.delete(FIRST_PARTY_HEADER);
-      return new Request(request, { headers });
+      return new Request(copy, { headers });
     };
     // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
     if (bypassesRightsSignals(pathname)) return fetch(forwardable());
@@ -194,8 +203,11 @@ export default {
     const noteSlug = request.method === "GET" || request.method === "HEAD" ? noteMarkdownSlug(pathname) : null;
     if (noteSlug) return withTdmHeaders(await noteMarkdownResponse(forwardable(), noteSlug), licenceOffer);
 
-    // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
-    const origin = await fetch(forwardable());
+    // 1.31.0: tracked copies (utm_*, click ids, ref) share the one cached page.
+    // Observation above already read the request as it arrived (it records the
+    // path, never the query), so machine-readers counting does not change.
+    // redirect-ok: origin passthrough of the INCOMING request (redirect:"manual"), copied to a stripped URL; a test pins it.
+    const origin = await fetch(forwardable(strippedForwardUrl(request)));
 
     // v1.5.0: the reservation rides EVERY response, not just HTML and REST.
     //
