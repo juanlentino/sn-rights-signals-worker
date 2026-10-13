@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index.mjs";
-import { strippedForwardUrl } from "../src/marketing-params.mjs";
+import { strippedForwardUrl, withRestoredParams } from "../src/marketing-params.mjs";
 
 // 1.31.0: marketing params are removed from the URL the page passthrough
 // fetches, so a tracked copy (?utm_source=rss, a share link, an ad click) reads
@@ -35,9 +35,50 @@ describe("strippedForwardUrl: what is removed", () => {
     expect(strip("/?UTM_SOURCE=x")).toBe(null);
   });
 
-  it("keeps the fragment-free path and returns null when nothing changes", () => {
+  it("returns null when there is nothing to strip", () => {
     expect(strip("/notes/x/")).toBe(null);
     expect(strip("/notes/x/?page=2")).toBe(null);
+    expect(strip("/notes/x/?a=1&&b=2")).toBe(null);
+  });
+
+  it("drops empty pairs once something was stripped", () => {
+    expect(strip("/?&utm_source=x")).toBe(`${BASE}/`);
+    expect(strip("/?utm_source=x&")).toBe(`${BASE}/`);
+    expect(strip("/?a=1&&utm_source=x")).toBe(`${BASE}/?a=1`);
+  });
+});
+
+describe("withRestoredParams: an origin redirect keeps the tags", () => {
+  const redirect = (location, status = 301) => new Response(null, { status, headers: { location, "x-keep": "1" } });
+  const from = `${BASE}/notes/x?utm_source=rss&utm_medium=feed`;
+  const removed = "utm_source=rss&utm_medium=feed";
+
+  it("re-appends the stripped params, in order, to a same-origin Location", () => {
+    const res = withRestoredParams(redirect(`${BASE}/notes/x/`), from, removed);
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe(`${BASE}/notes/x/?utm_source=rss&utm_medium=feed`);
+    expect(res.headers.get("x-keep")).toBe("1");
+  });
+
+  it("after any query the Location kept, and with a relative Location", () => {
+    expect(withRestoredParams(redirect(`${BASE}/notes/y/?page=2`, 302), from, removed).headers.get("location"))
+      .toBe(`${BASE}/notes/y/?page=2&utm_source=rss&utm_medium=feed`);
+    expect(withRestoredParams(redirect("/notes/y/"), from, removed).headers.get("location"))
+      .toBe(`${BASE}/notes/y/?utm_source=rss&utm_medium=feed`);
+  });
+
+  it("keeps the stripped bytes", () => {
+    expect(withRestoredParams(redirect(`${BASE}/a/`), from, "utm_campaign=a%20b").headers.get("location"))
+      .toBe(`${BASE}/a/?utm_campaign=a%20b`);
+  });
+
+  it("leaves a cross-origin Location, a non-redirect and an unstripped request alone", () => {
+    const off = redirect("https://example.com/x/");
+    expect(withRestoredParams(off, from, removed)).toBe(off);
+    const ok = new Response("hi");
+    expect(withRestoredParams(ok, from, removed)).toBe(ok);
+    const same = redirect(`${BASE}/notes/x/`);
+    expect(withRestoredParams(same, from, null)).toBe(same);
   });
 });
 
@@ -103,6 +144,13 @@ describe("the page passthrough forwards the stripped URL", () => {
     const sent = origin.mock.calls[0][0];
     expect(sent.url).toBe(`${BASE}/`);
     expect(sent.headers.has("x-sn-first-party")).toBe(false);
+  });
+
+  it("an origin redirect of a stripped request lands with its tags", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 301, headers: { location: `${BASE}/notes/x/` } })));
+    const res = await worker.fetch(req("/notes/x?utm_source=rss&ref=t"), {}, {});
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe(`${BASE}/notes/x/?utm_source=rss&ref=t`);
   });
 
   it("the admin bypass is untouched", async () => {

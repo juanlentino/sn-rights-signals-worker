@@ -18,7 +18,7 @@ import { maybeMarkdown, withVaryAccept } from "./markdown-negotiation.mjs";
 import { noteMarkdownResponse, noteMarkdownSlug } from "./note-markdown-url.mjs";
 import { webmcpBridgeResponse } from "./webmcp-bridge.mjs";
 import { webmcpCallResponse, WEBMCP_CALL_PATH } from "./webmcp-call.mjs";
-import { strippedForwardUrl } from "./marketing-params.mjs";
+import { stripMarketing, withRestoredParams } from "./marketing-params.mjs";
 
 // Content negotiation for /tdm-policy/, deliberately conservative: HTML is the
 // default and only an explicit JSON preference switches representation.
@@ -206,8 +206,12 @@ export default {
     // 1.31.0: tracked copies (utm_*, click ids, ref) share the one cached page.
     // Observation above already read the request as it arrived (it records the
     // path, never the query), so machine-readers counting does not change.
+    // An origin redirect of a stripped request gets its params back on a
+    // same-origin Location, so the browser still lands tagged.
+    const stripped = stripMarketing(request);
     // redirect-ok: origin passthrough of the INCOMING request (redirect:"manual"), copied to a stripped URL; a test pins it.
-    const origin = await fetch(forwardable(strippedForwardUrl(request)));
+    const forwarded = await fetch(forwardable(stripped?.url ?? null));
+    const origin = withRestoredParams(forwarded, request.url, stripped?.removed);
 
     // v1.5.0: the reservation rides EVERY response, not just HTML and REST.
     //
