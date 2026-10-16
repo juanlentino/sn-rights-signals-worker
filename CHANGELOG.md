@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.32.0 - 2026-10-16
+
 ### Added
 - **Owner agent token (Traffic Lanes Phase 1).** A request carrying `SN-Owner-Agent: v1.<agent>.<exp>.<sig>` is verified at the edge: HMAC-SHA256 over `v1|agent|<agent>|<exp>` with the 32-byte key hex-decoded from the secret `SN_OWNER_KEY`, then `SN_OWNER_KEY_PREVIOUS` (the one owner key, shared with the analytics Worker, which checks the `v1|dev|...` device marker with it; the domain-separated messages keep a marker from passing as a token), compared in constant time (`crypto.subtle.verify`). Valid iff the signature matches, `now < exp`, and `exp - now <= 43500`; the agent must be on the contract's allowlist and the signature in its canonical 43-character spelling. The contract's test vector is pinned byte for byte, with tampered, expired, too-far-future and previous-key cases. Only a request carrying the header pays the verify.
 - **`sn_machine_readers` blob14 (identity) and blob15 (agent), appended.** blob14 is `2` (valid token), `3` (invalid or expired) or `0` (anything else, including no key configured); blob15 is the token's agent code (`1` browser to `7` other) when blob14 is `2`, else `0`. Decimal strings. Blobs 1 to 13 are untouched; rows from before this release read `""`, not measured.
