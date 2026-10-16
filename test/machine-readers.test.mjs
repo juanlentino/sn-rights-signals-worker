@@ -559,6 +559,6 @@ describe("network (v1.28.0)", () => {
   it("the aggregate query selects and groups blob13 as network", () => {
     const q = buildQuery("aggregate", 30);
     expect(q).toContain("blob13 AS network");
-    expect(q).toMatch(/GROUP BY[^F]*network, day/);
+    expect(q).toMatch(/GROUP BY[^F]*network, owner_identity, owner_agent, day/); // Traffic Lanes appended after network
   });
 });

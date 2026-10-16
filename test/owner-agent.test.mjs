@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index.mjs";
+import { buildQuery } from "../src/machine-readers.mjs";
 import { OWNER_AGENT_HEADER, _resetOwnerAgentForTests, getInvalidTokenCount, verifyOwnerAgent } from "../src/owner-agent.mjs";
 
 // Traffic Lanes Phase 1 (signal-and-noise-tools docs/plans/traffic-lanes-2026-10-15.md,
@@ -190,7 +191,7 @@ describe("sn_machine_readers: blob14 identity, blob15 agent (append only)", () =
   });
 });
 
-describe("force-record: a valid token only (review round 1)", () => {
+describe("no force-record (review round 2): a token never creates a row", () => {
   it("a junk header with an unclassified UA writes no row, on a page or an asset; the isolate counter counts it", async () => {
     const { agg, detail, env } = harness();
     await worker.fetch(req("/notes/x/", { "user-agent": BROWSER, [OWNER_AGENT_HEADER]: "forged" }), env, {});
@@ -209,13 +210,12 @@ describe("force-record: a valid token only (review round 1)", () => {
     expect(agg[0].blobs.slice(13)).toEqual(["3", "0"]);
   });
 
-  it("code 2 with a browser user agent is recorded on a page", async () => {
-    const { agg, env } = harness();
+  it("code 2 with a browser user agent writes no row on a page either", async () => {
+    const { agg, detail, env } = harness();
     await worker.fetch(req("/notes/x/", { "user-agent": BROWSER, [OWNER_AGENT_HEADER]: await sign("playwright", now() + 600) }), env, {});
-    expect(agg).toHaveLength(1);
-    expect(agg[0].blobs[0]).toBe("unclassified-machine");
-    expect(agg[0].blobs[6]).toBe("1");
-    expect(agg[0].blobs.slice(13)).toEqual(["2", "4"]);
+    await worker.fetch(req("/license.xml", { "user-agent": BROWSER, [OWNER_AGENT_HEADER]: await sign("playwright", now() + 600) }), env, {});
+    expect(agg).toHaveLength(0);
+    expect(detail).toHaveLength(0);
   });
 
   it("code 2 with a browser user agent is NOT force-recorded on an asset", async () => {
@@ -251,8 +251,8 @@ describe("force-record: a valid token only (review round 1)", () => {
   });
 });
 
-describe("rights detail stream: any token stays out (1.26.1 rule, review round 1)", () => {
-  it("code 2 and code 3 stay out of the detail stream; a headerless read goes in, as today", async () => {
+describe("rights detail stream: a valid token stays out, an invalid one stays in (review round 2)", () => {
+  it("code 2 stays out (self-traffic); code 3 and a headerless read go in, so a junk header cannot drop a crawler from the evidence", async () => {
     const { agg, detail, env } = harness();
     await worker.fetch(req("/license.xml", { "user-agent": CURL, [OWNER_AGENT_HEADER]: await sign("script", now() + 600) }), env, {});
     expect(agg).toHaveLength(1);
@@ -261,7 +261,7 @@ describe("rights detail stream: any token stays out (1.26.1 rule, review round 1
     await worker.fetch(req("/license.xml", { "user-agent": CURL }), env, {});
     expect(agg).toHaveLength(3);
     expect(agg[1].blobs.slice(13)).toEqual(["3", "0"]);
-    expect(detail).toHaveLength(1);
+    expect(detail).toHaveLength(2);
   });
 });
 
@@ -312,5 +312,32 @@ describe("the header value goes nowhere", () => {
       expect(haystack).not.toContain(t);
       expect(haystack).not.toContain(sigOf(t));
     }
+  });
+});
+
+describe("read endpoint: the aggregate view carries owner_identity and owner_agent (checkpoint 3)", () => {
+  // Pinned from origin/main 39d6ca7 before this change: every other view is byte-identical.
+  const SINCE = "WHERE timestamp > NOW() - INTERVAL '30' DAY ";
+  const PINNED = {
+    totals: "SELECT toDate(timestamp) AS day, sum(_sample_interval) AS hits FROM sn_machine_readers " + SINCE + "AND blob1 != 'webmcp' GROUP BY day ORDER BY day ASC LIMIT 92 FORMAT JSON",
+    unknown: "SELECT blob8 AS user_agent, sum(_sample_interval) AS hits FROM sn_machine_readers " + SINCE + "AND blob4 = 'unknown' AND blob8 != '' GROUP BY user_agent ORDER BY hits DESC LIMIT 50 FORMAT JSON",
+    unknownNetwork: "SELECT blob8 AS user_agent, blob12 AS verified_bot, blob13 AS network, sum(_sample_interval) AS hits FROM sn_machine_readers " + SINCE + "AND blob4 = 'unknown' AND blob8 != '' GROUP BY user_agent, verified_bot, network ORDER BY hits DESC LIMIT 10000 FORMAT JSON",
+    rights: "SELECT blob1 AS surface, blob2 AS family, blob3 AS vendor, blob4 AS purpose, blob5 AS path, blob6 AS user_agent, blob7 AS accept, blob8 AS observed_at, sum(_sample_interval) AS hits FROM sn_machine_readers_rights " + SINCE + "GROUP BY surface, family, vendor, purpose, path, user_agent, accept, observed_at ORDER BY observed_at DESC LIMIT 500 FORMAT JSON",
+  };
+
+  it("aggregate: blob14 AS owner_identity and blob15 AS owner_agent, selected and grouped, appended after network", () => {
+    expect(buildQuery("aggregate", 30)).toBe(
+      "SELECT blob1 AS family, blob2 AS surface, blob3 AS vendor, blob4 AS purpose, blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, blob9 AS agent, blob10 AS markdown_requested, blob11 AS signed_agent, blob12 AS verified_bot, blob13 AS network, blob14 AS owner_identity, blob15 AS owner_agent, toDate(timestamp) AS day, sum(_sample_interval) AS hits FROM sn_machine_readers " +
+        SINCE +
+        "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, first_party, agent, markdown_requested, signed_agent, verified_bot, network, owner_identity, owner_agent, day ORDER BY day ASC LIMIT 10000 FORMAT JSON",
+    );
+  });
+
+  it("totals, unknown (both shapes) and rights are byte-identical to before", () => {
+    expect(buildQuery("totals", 30)).toBe(PINNED.totals);
+    expect(buildQuery("unknown", 30)).toBe(PINNED.unknown);
+    expect(buildQuery("unknown", 30, { detail: "network" })).toBe(PINNED.unknownNetwork);
+    expect(buildQuery("rights", 30)).toBe(PINNED.rights);
+    for (const v of ["totals", "unknown", "rights"]) expect(buildQuery(v, 30)).not.toMatch(/blob1[45]|owner_/);
   });
 });

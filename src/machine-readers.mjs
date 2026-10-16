@@ -217,17 +217,7 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     // Neither pass recognised it: a browser, or a machine nobody has named yet
     // and whose UA carries no bot/crawler marker. Unchanged from v1.4.0 — we do
     // not start recording humans in order to widen a crawler taxonomy.
-    //
-    // Traffic Lanes force-record (review round 1): only a VALID token (code 2)
-    // is recorded when neither classifier matched, and only off `asset`, so an
-    // owner's browser session does not book every image it loads. An invalid
-    // token (code 3) forces nothing: a junk header must not buy a row, so it is
-    // recorded only where it would have been anyway (blob14 = 3), and counted
-    // in an isolate counter (owner-agent.mjs). Code 0 forces nothing either.
-    const surface = classifySurface(pathname);
-    const identity = owner?.identity ?? 0;
-    const forced = identity === 2 && surface !== "asset";
-    if (legacyFamily === null && vp === null && !forced) return null;
+    if (legacyFamily === null && vp === null) return null;
 
     // The additive family value (v1.11.0), used ONLY where the frozen
     // classifier would have dropped the row entirely — facebookexternalhit,
@@ -236,6 +226,12 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     // family value changes meaning or population, so any query filtering the
     // original 18 families returns bit-identical results across the cutover.
     const family = legacyFamily === null ? UNCLASSIFIED_MACHINE : legacyFamily;
+    const surface = classifySurface(pathname);
+    // Traffic Lanes (review round 2): SN-Owner-Agent never creates a row. A
+    // request is recorded exactly when it would be without the header, so every
+    // total is unchanged; the token only adds blob14/15 and, when valid, marks
+    // the row first-party (own infrastructure, like the site's other tools).
+    const identity = owner?.identity ?? 0;
 
     // RULE 2: the unknown bucket has to be reviewable or it is not a
     // measurement. Sample the UA ONLY when the taxonomy failed to match —
@@ -339,9 +335,11 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     try {
       // 1.30.0: a header-proved first-party read keeps out of the detail
       // stream too, the 1.26.1 rule the taxonomy's first-party agents follow
-      // inside observeRightsSurfaceDetail. Traffic Lanes: any token stays out,
-      // valid (self-traffic) or invalid (review round 1: no junk-header rows).
-      if (firstPartyHeader !== true && identity === 0 && observeRightsSurfaceDetail(request, env, pathname, surface, family, vp)) {
+      // inside observeRightsSurfaceDetail. Traffic Lanes: a valid owner token
+      // (code 2) is self-traffic and stays out too. An invalid one (code 3)
+      // stays IN: otherwise a junk header would let a crawler drop out of the
+      // signed evidence record (review round 2).
+      if (firstPartyHeader !== true && identity !== 2 && observeRightsSurfaceDetail(request, env, pathname, surface, family, vp)) {
         sensorState.detail_last_write_ok = true;
       }
     } catch (err) {
@@ -540,11 +538,15 @@ export function buildQuery(view, days, filter = {}) {
     "blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, " +
     "blob9 AS agent, blob10 AS markdown_requested, blob11 AS signed_agent, blob12 AS verified_bot, " +
     "blob13 AS network, " +
+    // Traffic Lanes (checkpoint 3): the owner identity and agent codes, so the
+    // plugin can derive machine-side lanes. Named owner_* because `agent` is
+    // already blob9. Additive: rows split further, their hits still sum the same.
+    "blob14 AS owner_identity, blob15 AS owner_agent, " +
     "toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
     "FROM sn_machine_readers " +
     since +
     "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, " +
-    `first_party, agent, markdown_requested, signed_agent, verified_bot, network, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
+    `first_party, agent, markdown_requested, signed_agent, verified_bot, network, owner_identity, owner_agent, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
   );
 }
 
