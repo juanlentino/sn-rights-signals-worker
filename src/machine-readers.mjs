@@ -336,8 +336,9 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     try {
       // 1.30.0: a header-proved first-party read keeps out of the detail
       // stream too, the 1.26.1 rule the taxonomy's first-party agents follow
-      // inside observeRightsSurfaceDetail.
-      if (firstPartyHeader !== true && observeRightsSurfaceDetail(request, env, pathname, surface, family, vp)) {
+      // inside observeRightsSurfaceDetail. Traffic Lanes: a valid owner token
+      // (code 2) is self-traffic by the same rule and stays out too.
+      if (firstPartyHeader !== true && identity !== 2 && observeRightsSurfaceDetail(request, env, pathname, surface, family, vp)) {
         sensorState.detail_last_write_ok = true;
       }
     } catch (err) {

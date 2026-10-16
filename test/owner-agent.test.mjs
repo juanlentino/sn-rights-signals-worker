@@ -236,6 +236,19 @@ describe("force-record: a token-bearing request never vanishes", () => {
   });
 });
 
+describe("rights detail stream: a valid owner token is self-traffic (the 1.26.1 rule)", () => {
+  it("code 2 stays out of the detail stream; code 3 and no header go in, as today", async () => {
+    const { agg, detail, env } = harness();
+    await worker.fetch(req("/license.xml", { "user-agent": CURL, [OWNER_AGENT_HEADER]: await sign("script", now() + 600) }), env, {});
+    expect(agg).toHaveLength(1);
+    expect(detail).toHaveLength(0);
+    await worker.fetch(req("/license.xml", { "user-agent": CURL, [OWNER_AGENT_HEADER]: "forged" }), env, {});
+    await worker.fetch(req("/license.xml", { "user-agent": CURL }), env, {});
+    expect(agg).toHaveLength(3);
+    expect(detail).toHaveLength(2);
+  });
+});
+
 describe("the header value goes nowhere", () => {
   const forwarded = (origin) => origin.mock.calls[0][0];
 

@@ -426,7 +426,12 @@ sig = base64url, no padding, of HMAC-SHA256(key, "v1|agent|<agent>|<exp>")
 - Recorded as blob 14 (identity) and blob 15 (agent). A request carrying the
   header is recorded even when its user agent classifies as nothing (family
   `unclassified-machine`): always for code 3, and for code 2 on every surface
-  except `asset`. Without the header, recording is exactly as before.
+  except `asset`. Without the header, recording is exactly as before. The
+  admin bypass and `/_sn/*` paths are never observed, header or not. A
+  forced row whose user agent the taxonomy did not match carries the usual
+  sanitized user-agent sample in blob 8. A valid token's read of a rights file
+  stays out of `sn_machine_readers_rights`, like a first-party read. `webmcp`
+  beacon rows are written elsewhere and do not carry blobs 14 and 15.
 - The header is removed before every origin fetch, with `x-sn-first-party`,
   whatever its value and whether or not a key is set. Its value is never
   stored, logged or echoed; only the two codes are written. The same two limits
