@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index.mjs";
-import { OWNER_AGENT_HEADER, _resetOwnerAgentForTests, verifyOwnerAgent } from "../src/owner-agent.mjs";
+import { OWNER_AGENT_HEADER, _resetOwnerAgentForTests, getInvalidTokenCount, verifyOwnerAgent } from "../src/owner-agent.mjs";
 
 // Traffic Lanes Phase 1 (signal-and-noise-tools docs/plans/traffic-lanes-2026-10-15.md,
 // "Phase 1 build contract" and "Advisor checkpoint 2"). The vectors below are
@@ -73,7 +73,7 @@ describe("SN-Owner-Agent verification: the contract's test vector", () => {
 
   it("malformed values are code 3", async () => {
     const env = { SN_OWNER_AGENT_KEY: KEY };
-    for (const bad of ["", "garbage", "v1.claude-code.1792140000", `${VECTOR}.extra`, "v1.claude-code.17921400x0.abc", "v1.claude-code.1792140000.!!!"]) {
+    for (const bad of ["garbage", "v1.claude-code.1792140000", `${VECTOR}.extra`, "v1.claude-code.17921400x0.abc", "v1.claude-code.1792140000.!!!"]) {
       expect((await verifyOwnerAgent(withToken(bad), env, VECTOR_EXP - 60)).identity).toBe(3);
     }
   });
@@ -100,6 +100,11 @@ describe("SN-Owner-Agent verification: the contract's test vector", () => {
   it("a correctly signed agent outside the allowlist is code 3", async () => {
     const env = { SN_OWNER_AGENT_KEY: KEY };
     expect((await verifyOwnerAgent(withToken(await sign("evil", now() + 3600)), env)).identity).toBe(3);
+  });
+
+  it("an empty value is the same as no header (review round 1)", async () => {
+    expect(await verifyOwnerAgent(withToken(""), { SN_OWNER_AGENT_KEY: KEY })).toBeNull();
+    expect(getInvalidTokenCount()).toBe(0);
   });
 
   it("no header: null, nothing to verify", async () => {
@@ -141,7 +146,7 @@ function harness(extraEnv = {}) {
 }
 
 describe("sn_machine_readers: blob14 identity, blob15 agent (append only)", () => {
-  it("row fixture: blobs 1-13 are exactly today's, blob14/15 are appended", async () => {
+  it("row fixture: a code-2 row is today's row with first_party=1, blob14/15 appended", async () => {
     const { agg, env } = harness();
     const token = await sign("claude-code", now() + 3600);
     const r = req("/llms.txt", { "user-agent": CURL, [OWNER_AGENT_HEADER]: token, "x-sn-verified-bot": "" });
@@ -150,25 +155,31 @@ describe("sn_machine_readers: blob14 identity, blob15 agent (append only)", () =
     expect(agg).toHaveLength(1);
     const blobs = agg[0].blobs;
     expect(blobs).toHaveLength(15);
-    expect(blobs.slice(0, 13)).toEqual(["other-bot", "llms", blobs[2], blobs[3], blobs[4], blobs[5], "0", "", "dev-curl", "0", "unsigned", "", "Charter Communications, Inc"]);
+    expect(blobs.slice(0, 13)).toEqual(["other-bot", "llms", blobs[2], blobs[3], blobs[4], blobs[5], "1", "", "dev-curl", "0", "unsigned", "", "Charter Communications, Inc"]);
     expect(blobs.slice(13)).toEqual(["2", "3"]);
     expect(agg[0].doubles).toEqual([1]);
     expect(agg[0].indexes).toEqual(["other-bot"]);
   });
 
-  it("a request without the header writes 0/0 and the same first thirteen blobs", async () => {
+  it("a code-2 row differs from the headerless row only in first_party and blob14/15", async () => {
     const { agg, env } = harness();
     await worker.fetch(req("/llms.txt", { "user-agent": CURL }), env, {});
     await worker.fetch(req("/llms.txt", { "user-agent": CURL, [OWNER_AGENT_HEADER]: await sign("script", now() + 60) }), env, {});
     expect(agg[0].blobs.slice(13)).toEqual(["0", "0"]);
-    expect(agg[1].blobs.slice(0, 13)).toEqual(agg[0].blobs.slice(0, 13));
+    expect(agg[0].blobs[6]).toBe("0");
+    expect(agg[1].blobs[6]).toBe("1");
+    expect([...agg[1].blobs.slice(0, 6), "0", ...agg[1].blobs.slice(7, 13)]).toEqual(agg[0].blobs.slice(0, 13));
     expect(agg[1].blobs.slice(13)).toEqual(["2", "5"]);
   });
 
-  it("an invalid token writes 3/0", async () => {
+  it("a junk header on a taxonomy-matched UA writes the normal row, blob14=3, nothing else changed", async () => {
     const { agg, env } = harness();
+    await worker.fetch(req("/llms.txt", { "user-agent": CURL }), env, {});
     await worker.fetch(req("/llms.txt", { "user-agent": CURL, [OWNER_AGENT_HEADER]: "v1.claude-code.1.AAAA" }), env, {});
-    expect(agg[0].blobs.slice(13)).toEqual(["3", "0"]);
+    expect(agg).toHaveLength(2);
+    expect(agg[1].blobs.slice(0, 13)).toEqual(agg[0].blobs.slice(0, 13));
+    expect(agg[1].blobs.slice(13)).toEqual(["3", "0"]);
+    expect(getInvalidTokenCount()).toBe(1);
   });
 
   it("key unset: 0/0, exactly as without the header", async () => {
@@ -179,20 +190,23 @@ describe("sn_machine_readers: blob14 identity, blob15 agent (append only)", () =
   });
 });
 
-describe("force-record: a token-bearing request never vanishes", () => {
-  it("code 3 with a browser user agent is recorded as unclassified-machine", async () => {
-    const { agg, env } = harness();
+describe("force-record: a valid token only (review round 1)", () => {
+  it("a junk header with an unclassified UA writes no row, on a page or an asset; the isolate counter counts it", async () => {
+    const { agg, detail, env } = harness();
     await worker.fetch(req("/notes/x/", { "user-agent": BROWSER, [OWNER_AGENT_HEADER]: "forged" }), env, {});
-    expect(agg).toHaveLength(1);
-    expect(agg[0].blobs[0]).toBe("unclassified-machine");
-    expect(agg[0].blobs.slice(13)).toEqual(["3", "0"]);
+    await worker.fetch(req("/wp-content/x.png", { "user-agent": BROWSER, [OWNER_AGENT_HEADER]: "forged" }), env, {});
+    await worker.fetch(req("/license.xml", { "user-agent": BROWSER, [OWNER_AGENT_HEADER]: "forged" }), env, {});
+    expect(agg).toHaveLength(0);
+    expect(detail).toHaveLength(0);
+    expect(getInvalidTokenCount()).toBe(3);
   });
 
-  it("code 3 is recorded on an asset too", async () => {
+  it("a junk header on an asset with a classified UA writes the normal row with blob14=3", async () => {
     const { agg, env } = harness();
-    await worker.fetch(req("/wp-content/x.png", { "user-agent": BROWSER, [OWNER_AGENT_HEADER]: "forged" }), env, {});
+    await worker.fetch(req("/wp-content/x.png", { "user-agent": CURL, [OWNER_AGENT_HEADER]: "forged" }), env, {});
     expect(agg).toHaveLength(1);
-    expect(agg[0].blobs[1]).toBe("asset");
+    expect(agg[0].blobs[6]).toBe("0");
+    expect(agg[0].blobs.slice(13)).toEqual(["3", "0"]);
   });
 
   it("code 2 with a browser user agent is recorded on a page", async () => {
@@ -200,6 +214,7 @@ describe("force-record: a token-bearing request never vanishes", () => {
     await worker.fetch(req("/notes/x/", { "user-agent": BROWSER, [OWNER_AGENT_HEADER]: await sign("playwright", now() + 600) }), env, {});
     expect(agg).toHaveLength(1);
     expect(agg[0].blobs[0]).toBe("unclassified-machine");
+    expect(agg[0].blobs[6]).toBe("1");
     expect(agg[0].blobs.slice(13)).toEqual(["2", "4"]);
   });
 
@@ -236,8 +251,8 @@ describe("force-record: a token-bearing request never vanishes", () => {
   });
 });
 
-describe("rights detail stream: a valid owner token is self-traffic (the 1.26.1 rule)", () => {
-  it("code 2 stays out of the detail stream; code 3 and no header go in, as today", async () => {
+describe("rights detail stream: any token stays out (1.26.1 rule, review round 1)", () => {
+  it("code 2 and code 3 stay out of the detail stream; a headerless read goes in, as today", async () => {
     const { agg, detail, env } = harness();
     await worker.fetch(req("/license.xml", { "user-agent": CURL, [OWNER_AGENT_HEADER]: await sign("script", now() + 600) }), env, {});
     expect(agg).toHaveLength(1);
@@ -245,7 +260,8 @@ describe("rights detail stream: a valid owner token is self-traffic (the 1.26.1 
     await worker.fetch(req("/license.xml", { "user-agent": CURL, [OWNER_AGENT_HEADER]: "forged" }), env, {});
     await worker.fetch(req("/license.xml", { "user-agent": CURL }), env, {});
     expect(agg).toHaveLength(3);
-    expect(detail).toHaveLength(2);
+    expect(agg[1].blobs.slice(13)).toEqual(["3", "0"]);
+    expect(detail).toHaveLength(1);
   });
 });
 
@@ -287,6 +303,7 @@ describe("the header value goes nowhere", () => {
       responses.push(await worker.fetch(req("/license.xml", { "user-agent": CURL, [OWNER_AGENT_HEADER]: t }), env, {}));
       responses.push(await worker.fetch(req("/notes/x/", { "user-agent": BROWSER, [OWNER_AGENT_HEADER]: t }), env, {}));
     }
+    responses.push(await worker.fetch(req("/license.xml", { "user-agent": CURL }), env, {}));
     expect(agg.length).toBeGreaterThan(0);
     expect(detail.length).toBeGreaterThan(0);
     const sigOf = (t) => t.split(".")[3];

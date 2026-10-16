@@ -40,10 +40,19 @@ const KEY_RE = /^[0-9a-fA-F]{64}$/;
 const encoder = new TextEncoder();
 const keyCache = new Map();
 let keyUnsetLogged = false;
+// Review round 1: invalid tokens are counted here, in isolate memory, and never
+// in Analytics Engine, so a junk header cannot buy a row. Resets on eviction.
+let invalidTokenCount = 0;
 
 /** Test seam: module state persists across cases within a pool isolate. */
+/** Code-3 requests seen by this isolate (best effort, resets on eviction). */
+export function getInvalidTokenCount() {
+  return invalidTokenCount;
+}
+
 export function _resetOwnerAgentForTests() {
   keyUnsetLogged = false;
+  invalidTokenCount = 0;
   keyCache.clear();
 }
 
@@ -62,12 +71,12 @@ function b64urlDecode(s) {
 
 /**
  * @returns {Promise<{identity:number, agent:number}|null>} null when the request
- *   carries no header; identity 0 when no key is configured (no verdict, so a
+ *   carries no header or an empty one (review round 1: empty = absent); identity 0 when no key is configured (no verdict, so a
  *   missing secret never makes the owner's tools look forged).
  */
 export async function verifyOwnerAgent(request, env, nowSeconds = Math.floor(Date.now() / 1000)) {
   const value = request.headers.get(OWNER_AGENT_HEADER);
-  if (value === null) return null;
+  if (value === null || value === "") return null;
 
   const keys = [env?.SN_OWNER_AGENT_KEY, env?.SN_OWNER_AGENT_KEY_PREVIOUS].filter((k) => typeof k === "string" && KEY_RE.test(k));
   if (keys.length === 0) {
@@ -78,6 +87,12 @@ export async function verifyOwnerAgent(request, env, nowSeconds = Math.floor(Dat
     return { identity: IDENTITY_NONE, agent: 0 };
   }
 
+  const result = await check(value, keys, nowSeconds);
+  if (result.identity === IDENTITY_OWNER_TOKEN_INVALID) invalidTokenCount += 1;
+  return result;
+}
+
+async function check(value, keys, nowSeconds) {
   const invalid = { identity: IDENTITY_OWNER_TOKEN_INVALID, agent: 0 };
   const m = TOKEN_RE.exec(value);
   if (!m) return invalid;

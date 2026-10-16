@@ -218,14 +218,15 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     // and whose UA carries no bot/crawler marker. Unchanged from v1.4.0 — we do
     // not start recording humans in order to widen a crawler taxonomy.
     //
-    // Traffic Lanes force-record: a request carrying SN-Owner-Agent must not
-    // vanish here, or a forged or expired token (code 3) would leave no trace.
-    // Code 3 is always recorded; a valid token (code 2) only off `asset`, so an
-    // owner's browser session does not book every image it loads. Code 0 (no
-    // key configured) forces nothing: unset key, nothing changes.
+    // Traffic Lanes force-record (review round 1): only a VALID token (code 2)
+    // is recorded when neither classifier matched, and only off `asset`, so an
+    // owner's browser session does not book every image it loads. An invalid
+    // token (code 3) forces nothing: a junk header must not buy a row, so it is
+    // recorded only where it would have been anyway (blob14 = 3), and counted
+    // in an isolate counter (owner-agent.mjs). Code 0 forces nothing either.
     const surface = classifySurface(pathname);
     const identity = owner?.identity ?? 0;
-    const forced = identity === 3 || (identity === 2 && surface !== "asset");
+    const forced = identity === 2 && surface !== "asset";
     if (legacyFamily === null && vp === null && !forced) return null;
 
     // The additive family value (v1.11.0), used ONLY where the frozen
@@ -279,7 +280,9 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
         // 1.30.0: first-party from the taxonomy OR from the signed header. The
         // header changes this flag only; the agent id (blob9) stays the
         // taxonomy's, so dev-curl stays dev-curl and is now marked ours.
-        vp?.first_party || firstPartyHeader === true ? "1" : "0",
+        // Review round 1: a valid owner token is own infrastructure too, so
+        // every existing reader figure excludes it like the site's other tools.
+        vp?.first_party || firstPartyHeader === true || identity === 2 ? "1" : "0",
         uaSample,
         // v1.12.0: the taxonomy entry id, so the surface can name the EXACT
         // agent rather than leaving it to be inferred from vendor+purpose.
@@ -336,9 +339,9 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     try {
       // 1.30.0: a header-proved first-party read keeps out of the detail
       // stream too, the 1.26.1 rule the taxonomy's first-party agents follow
-      // inside observeRightsSurfaceDetail. Traffic Lanes: a valid owner token
-      // (code 2) is self-traffic by the same rule and stays out too.
-      if (firstPartyHeader !== true && identity !== 2 && observeRightsSurfaceDetail(request, env, pathname, surface, family, vp)) {
+      // inside observeRightsSurfaceDetail. Traffic Lanes: any token stays out,
+      // valid (self-traffic) or invalid (review round 1: no junk-header rows).
+      if (firstPartyHeader !== true && identity === 0 && observeRightsSurfaceDetail(request, env, pathname, surface, family, vp)) {
         sensorState.detail_last_write_ok = true;
       }
     } catch (err) {

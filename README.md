@@ -307,8 +307,8 @@ runs. Two independent passes read the User-Agent: the frozen family enum
 `src/machine-reader-taxonomy.json` (vendor, purpose, agent id). When either
 matches, it writes one datapoint to the Analytics Engine dataset
 **`sn_machine_readers`**. A request neither pass recognizes (a browser) is
-not recorded, unless it carries an `SN-Owner-Agent` token (see "Owner agent
-token" below), and the observer skips internal `/_sn/` paths. The one
+not recorded, unless it carries a valid `SN-Owner-Agent` token (see "Owner
+agent token" below), and the observer skips internal `/_sn/` paths. The one
 `/_sn/` route that writes is the WebMCP beacon, which records its own `webmcp`
 row (see above). A row the taxonomy
 matches and the frozen enum does not is stored under the family
@@ -322,7 +322,7 @@ matches and the frozen enum does not is stored under the family
 | 4 | purpose | from the taxonomy's `purpose_vocabulary`; `unknown` when it did not match; on a `webmcp` beacon row, the call outcome: `ok`, `absent`, `error` |
 | 5 | taxonomy version | |
 | 6 | training corpus source | `1` or `0` |
-| 7 | first party | `1` or `0`; `1` from the taxonomy's `first_party`, or from the signed `x-sn-first-party` header (1.30.0, see below) |
+| 7 | first party | `1` or `0`; `1` from the taxonomy's `first_party`, from the signed `x-sn-first-party` header (1.30.0, see below), or from a valid `SN-Owner-Agent` token |
 | 8 | User-Agent sample | only when the taxonomy did not match: allowlisted characters, 96 at most (v1.11.0) |
 | 9 | agent (v1.12.0) | the taxonomy entry id; an id whose entry carries `no_user_agent: true` (`google-extended`, `apple-bot-extended`, taxonomy 1.4.0) is a robots.txt control token the vendor never sends, so that hit is impersonation |
 | 10 | markdown requested (v1.18.0; a `/notes/<slug>.md` read counts too) | `1` or `0` |
@@ -420,24 +420,45 @@ sig = base64url, no padding, of HMAC-SHA256(key, "v1|agent|<agent>|<exp>")
   `mcp-local`, `other`. The signature must be the canonical 43-character
   spelling. Anything else is invalid (code 3). Expiry and key rotation are the
   only revocation.
+- An empty header value is the same as no header.
 - With neither key set (or not 64 hex characters), a token gets no verdict:
   code 0, never 3, and the Worker logs `owner_key_unset` once per isolate.
   Nothing else changes.
-- Recorded as blob 14 (identity) and blob 15 (agent). A request carrying the
-  header is recorded even when its user agent classifies as nothing (family
-  `unclassified-machine`): always for code 3, and for code 2 on every surface
-  except `asset`. Without the header, recording is exactly as before. The
-  admin bypass and `/_sn/*` paths are never observed, header or not. A
-  forced row whose user agent the taxonomy did not match carries the usual
-  sanitized user-agent sample in blob 8. A valid token's read of a rights file
-  stays out of `sn_machine_readers_rights`, like a first-party read. `webmcp`
-  beacon rows are written elsewhere and do not carry blobs 14 and 15.
+- Recorded as blob 14 (identity) and blob 15 (agent). A valid token (code 2)
+  is own infrastructure: its row carries `first_party` = `1` (blob 7), so every
+  reader figure excludes it like the site's other tools, and it is recorded
+  even when its user agent classifies as nothing (family
+  `unclassified-machine`), on every surface except `asset`. An invalid token
+  (code 3) never creates a row: the request is recorded only if it would have
+  been recorded without the header, with blob 14 = `3` and nothing else
+  changed; the Worker counts code-3 requests in isolate memory only. Without the
+  header, recording is exactly as before. The admin bypass and `/_sn/*` paths
+  are never observed, header or not. A forced row whose user agent the taxonomy
+  did not match carries the usual sanitized user-agent sample in blob 8. No
+  token-bearing read lands in `sn_machine_readers_rights`. `webmcp` beacon rows
+  are written elsewhere and do not carry blobs 14 and 15.
 - The header is removed before every origin fetch, with `x-sn-first-party`,
   whatever its value and whether or not a key is set. Its value is never
   stored, logged or echoed; only the two codes are written. The same two limits
   as the first-party header apply: a sibling Worker's more specific route never
   reaches this Worker, and `passThroughOnException` forwards the original
   request on an uncaught throw.
+
+Handling a token (it is a bearer credential for its TTL):
+
+- Put `wp sn owner-token` output straight into an environment variable, never
+  echo it into a terminal or an agent transcript:
+  `export SN_OWNER_AGENT="$(wp sn owner-token --agent=script)"`.
+- curl: `curl -H "SN-Owner-Agent: $SN_OWNER_AGENT" https://juanlentino.com/...`,
+  never with `-L` (curl forwards custom headers to every host a redirect leads to).
+- Playwright: attach it with `page.route` limited to `https://juanlentino.com/**`,
+  never with `extraHTTPHeaders`, which sends it to every host the page loads:
+
+```js
+await page.route("https://juanlentino.com/**", (route) =>
+  route.continue({ headers: { ...route.request().headers(), "sn-owner-agent": process.env.SN_OWNER_AGENT } }),
+);
+```
 
 This Worker deploys by hand (CI only tests). **Set `SN_OWNER_AGENT_KEY` before
 deploying this version** (the same value as the plugin's `owner_agent_key`
