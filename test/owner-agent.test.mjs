@@ -39,28 +39,28 @@ describe("SN-Owner-Agent verification: the contract's test vector", () => {
   });
 
   it("the pinned header is valid one second before expiry: code 2, agent claude-code (3)", async () => {
-    const env = { SN_OWNER_AGENT_KEY: KEY };
+    const env = { SN_OWNER_KEY: KEY };
     expect(await verifyOwnerAgent(withToken(VECTOR), env, VECTOR_EXP - 1)).toEqual({ identity: 2, agent: 3 });
   });
 
   it("expired: checked at exp + 1 it is code 3", async () => {
-    const env = { SN_OWNER_AGENT_KEY: KEY };
+    const env = { SN_OWNER_KEY: KEY };
     expect(await verifyOwnerAgent(withToken(VECTOR), env, VECTOR_EXP + 1)).toEqual({ identity: 3, agent: 0 });
   });
 
   it("valid only while now < exp: at exp itself it is code 3", async () => {
-    const env = { SN_OWNER_AGENT_KEY: KEY };
+    const env = { SN_OWNER_KEY: KEY };
     expect((await verifyOwnerAgent(withToken(VECTOR), env, VECTOR_EXP)).identity).toBe(3);
   });
 
   it("too far in the future: exp - now may be 43500, not 43501", async () => {
-    const env = { SN_OWNER_AGENT_KEY: KEY };
+    const env = { SN_OWNER_KEY: KEY };
     expect((await verifyOwnerAgent(withToken(VECTOR), env, VECTOR_EXP - MAX_AHEAD)).identity).toBe(2);
     expect((await verifyOwnerAgent(withToken(VECTOR), env, VECTOR_EXP - MAX_AHEAD - 1)).identity).toBe(3);
   });
 
   it("tampered: a changed agent, expiry or signature byte is code 3", async () => {
-    const env = { SN_OWNER_AGENT_KEY: KEY };
+    const env = { SN_OWNER_KEY: KEY };
     const at = VECTOR_EXP - 60;
     for (const bad of [
       VECTOR.replace("claude-code", "playwright"),
@@ -73,24 +73,24 @@ describe("SN-Owner-Agent verification: the contract's test vector", () => {
   });
 
   it("malformed values are code 3", async () => {
-    const env = { SN_OWNER_AGENT_KEY: KEY };
+    const env = { SN_OWNER_KEY: KEY };
     for (const bad of ["garbage", "v1.claude-code.1792140000", `${VECTOR}.extra`, "v1.claude-code.17921400x0.abc", "v1.claude-code.1792140000.!!!"]) {
       expect((await verifyOwnerAgent(withToken(bad), env, VECTOR_EXP - 60)).identity).toBe(3);
     }
   });
 
   it("the previous key is accepted during an overlap", async () => {
-    const env = { SN_OWNER_AGENT_KEY: OTHER_KEY, SN_OWNER_AGENT_KEY_PREVIOUS: KEY };
+    const env = { SN_OWNER_KEY: OTHER_KEY, SN_OWNER_KEY_PREVIOUS: KEY };
     expect(await verifyOwnerAgent(withToken(VECTOR), env, VECTOR_EXP - 60)).toEqual({ identity: 2, agent: 3 });
   });
 
   it("a token signed by neither key is code 3", async () => {
-    const env = { SN_OWNER_AGENT_KEY: OTHER_KEY, SN_OWNER_AGENT_KEY_PREVIOUS: "ef".repeat(32) };
+    const env = { SN_OWNER_KEY: OTHER_KEY, SN_OWNER_KEY_PREVIOUS: "ef".repeat(32) };
     expect((await verifyOwnerAgent(withToken(VECTOR), env, VECTOR_EXP - 60)).identity).toBe(3);
   });
 
   it("maps every allowlisted agent to its code", async () => {
-    const env = { SN_OWNER_AGENT_KEY: KEY };
+    const env = { SN_OWNER_KEY: KEY };
     const codes = { browser: 1, "chrome-extension": 2, "claude-code": 3, playwright: 4, script: 5, "mcp-local": 6, other: 7 };
     for (const [agent, code] of Object.entries(codes)) {
       const exp = now() + 3600;
@@ -99,24 +99,24 @@ describe("SN-Owner-Agent verification: the contract's test vector", () => {
   });
 
   it("a correctly signed agent outside the allowlist is code 3", async () => {
-    const env = { SN_OWNER_AGENT_KEY: KEY };
+    const env = { SN_OWNER_KEY: KEY };
     expect((await verifyOwnerAgent(withToken(await sign("evil", now() + 3600)), env)).identity).toBe(3);
   });
 
   it("an empty value is the same as no header (review round 1)", async () => {
-    expect(await verifyOwnerAgent(withToken(""), { SN_OWNER_AGENT_KEY: KEY })).toBeNull();
+    expect(await verifyOwnerAgent(withToken(""), { SN_OWNER_KEY: KEY })).toBeNull();
     expect(getInvalidTokenCount()).toBe(0);
   });
 
   it("no header: null, nothing to verify", async () => {
-    expect(await verifyOwnerAgent(req("/", { "user-agent": CURL }), { SN_OWNER_AGENT_KEY: KEY })).toBeNull();
+    expect(await verifyOwnerAgent(req("/", { "user-agent": CURL }), { SN_OWNER_KEY: KEY })).toBeNull();
   });
 });
 
 describe("SN-Owner-Agent verification: key unset is no verdict, never code 3", () => {
   it("returns code 0 and logs owner_key_unset once per isolate", async () => {
     const log = vi.spyOn(console, "warn").mockImplementation(() => {});
-    for (const env of [{}, { SN_OWNER_AGENT_KEY: "" }, { SN_OWNER_AGENT_KEY: "not-hex" }]) {
+    for (const env of [{}, { SN_OWNER_KEY: "" }, { SN_OWNER_KEY: "not-hex" }]) {
       expect(await verifyOwnerAgent(withToken(VECTOR), env, VECTOR_EXP - 60)).toEqual({ identity: 0, agent: 0 });
     }
     expect(log).toHaveBeenCalledTimes(1);
@@ -124,8 +124,14 @@ describe("SN-Owner-Agent verification: key unset is no verdict, never code 3", (
     expect(String(log.mock.calls[0][0])).not.toContain(VECTOR);
   });
 
+  it("the retired per-purpose secret name is not read (owner decision: one key)", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = { SN_OWNER_AGENT_KEY: KEY, SN_OWNER_AGENT_KEY_PREVIOUS: KEY };
+    expect(await verifyOwnerAgent(withToken(VECTOR), env, VECTOR_EXP - 60)).toEqual({ identity: 0, agent: 0 });
+  });
+
   it("only the previous key set still verifies", async () => {
-    const env = { SN_OWNER_AGENT_KEY_PREVIOUS: KEY };
+    const env = { SN_OWNER_KEY_PREVIOUS: KEY };
     expect((await verifyOwnerAgent(withToken(VECTOR), env, VECTOR_EXP - 60)).identity).toBe(2);
   });
 });
@@ -138,7 +144,7 @@ function harness(extraEnv = {}) {
   const env = {
     SN_MR: { writeDataPoint: (d) => agg.push(d) },
     SN_MR_RIGHTS: { writeDataPoint: (d) => detail.push(d) },
-    SN_OWNER_AGENT_KEY: KEY,
+    SN_OWNER_KEY: KEY,
     ...extraEnv,
   };
   const origin = vi.fn().mockImplementation(() => Promise.resolve(new Response("ok", { headers: { "content-type": "text/plain" } })));
@@ -185,7 +191,7 @@ describe("sn_machine_readers: blob14 identity, blob15 agent (append only)", () =
 
   it("key unset: 0/0, exactly as without the header", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { agg, env } = harness({ SN_OWNER_AGENT_KEY: undefined });
+    const { agg, env } = harness({ SN_OWNER_KEY: undefined });
     await worker.fetch(req("/llms.txt", { "user-agent": CURL, [OWNER_AGENT_HEADER]: VECTOR }), env, {});
     expect(agg[0].blobs.slice(13)).toEqual(["0", "0"]);
   });
@@ -239,7 +245,7 @@ describe("no force-record (review round 2): a token never creates a row", () => 
 
   it("key unset: a browser with the header is not force-recorded (nothing changes)", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { agg, env } = harness({ SN_OWNER_AGENT_KEY: undefined });
+    const { agg, env } = harness({ SN_OWNER_KEY: undefined });
     await worker.fetch(req("/notes/x/", { "user-agent": BROWSER, [OWNER_AGENT_HEADER]: "forged" }), env, {});
     expect(agg).toHaveLength(0);
   });
@@ -287,7 +293,7 @@ describe("the header value goes nowhere", () => {
 
   it("is stripped with the key unset", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { env, origin } = harness({ SN_OWNER_AGENT_KEY: undefined });
+    const { env, origin } = harness({ SN_OWNER_KEY: undefined });
     await worker.fetch(req("/notes/x/", { "user-agent": CURL, [OWNER_AGENT_HEADER]: VECTOR }), env, {});
     expect(forwarded(origin).headers.get(OWNER_AGENT_HEADER)).toBeNull();
   });

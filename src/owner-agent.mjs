@@ -4,8 +4,11 @@
 //   SN-Owner-Agent: v1.<agent>.<exp>.<sig>
 //   sig = base64url (no padding) of HMAC-SHA256(key, "v1|agent|<agent>|<exp>")
 //
-// The key is 32 raw bytes, held as 64 hex characters in SN_OWNER_AGENT_KEY
-// (and SN_OWNER_AGENT_KEY_PREVIOUS during a rotation). Valid iff the signature
+// The key is 32 raw bytes, held as 64 hex characters in SN_OWNER_KEY (and
+// SN_OWNER_KEY_PREVIOUS during a rotation). It is the ONE owner key (owner
+// decision 2026-10-15): the analytics Worker signs-checks the device marker
+// with the same secret. The messages are domain-separated (`v1|agent|...`
+// here, `v1|dev|...` there), so a marker can never pass as a token. Valid iff the signature
 // matches either key AND now < exp AND exp - now <= 12h + 5m. The plugin mints
 // tokens (`wp sn owner-token`); expiry and key rotation are the only revocation.
 //
@@ -78,11 +81,11 @@ export async function verifyOwnerAgent(request, env, nowSeconds = Math.floor(Dat
   const value = request.headers.get(OWNER_AGENT_HEADER);
   if (value === null || value === "") return null;
 
-  const keys = [env?.SN_OWNER_AGENT_KEY, env?.SN_OWNER_AGENT_KEY_PREVIOUS].filter((k) => typeof k === "string" && KEY_RE.test(k));
+  const keys = [env?.SN_OWNER_KEY, env?.SN_OWNER_KEY_PREVIOUS].filter((k) => typeof k === "string" && KEY_RE.test(k));
   if (keys.length === 0) {
     if (!keyUnsetLogged) {
       keyUnsetLogged = true;
-      console.warn("[owner-agent] owner_key_unset: SN_OWNER_AGENT_KEY is unset or not 64 hex characters; tokens get no verdict");
+      console.warn("[owner-agent] owner_key_unset: SN_OWNER_KEY is unset or not 64 hex characters; tokens get no verdict");
     }
     return { identity: IDENTITY_NONE, agent: 0 };
   }

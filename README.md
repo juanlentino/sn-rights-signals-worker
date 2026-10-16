@@ -410,8 +410,11 @@ sig = base64url, no padding, of HMAC-SHA256(key, "v1|agent|<agent>|<exp>")
 ```
 
 - The key is 32 random bytes held as 64 hex characters in the secret
-  `SN_OWNER_AGENT_KEY`; `SN_OWNER_AGENT_KEY_PREVIOUS` is also accepted during a
-  rotation. The plugin mints tokens (`wp sn owner-token --agent=<label>`) with
+  `SN_OWNER_KEY`; `SN_OWNER_KEY_PREVIOUS` is also accepted during a rotation.
+  It is the one owner key: the analytics Worker holds the same value and checks
+  the device marker with it. The signed messages are domain-separated
+  (`v1|agent|...` here, `v1|dev|...` for the marker), so one can never pass as
+  the other. The plugin mints tokens (`wp sn owner-token --agent=<label>`) with
   the same key from its keyring.
 - Valid iff the signature matches either key, `now < exp`, and
   `exp - now <= 43500` (12 hours plus 5 minutes of clock skew). `agent` must be
@@ -457,15 +460,15 @@ await page.route("https://juanlentino.com/**", (route) =>
 );
 ```
 
-This Worker deploys by hand (CI only tests). **Set `SN_OWNER_AGENT_KEY` before
-deploying this version** (the same value as the plugin's `owner_agent_key`
+This Worker deploys by hand (CI only tests). **Set `SN_OWNER_KEY` before
+deploying this version** (the same value as the plugin's `owner_key`
 keyring row), following steps 1 to 3 of the first-party runbook above: confirm
 which version a secret edit will deploy, and check that Workers Logs does not
 keep the header. With the secret unset the deploy changes nothing but the two
 appended blobs (`0`, `0`).
 
 ```bash
-wrangler secret put SN_OWNER_AGENT_KEY
+wrangler secret put SN_OWNER_KEY
 ```
 
 ## What this Worker serves gets anchored
@@ -547,8 +550,8 @@ cron (`23 7 * * 1`) and the `juanlentino.com/*` route. The read path needs
 `SN_MR_READ_TOKEN`, `SN_MR_SQL_TOKEN` and `CF_ACCOUNT_ID`, which are not in
 `wrangler.jsonc`. The optional secret `SN_FIRST_PARTY_TOKEN` turns on the
 first-party header (1.30.0); unset, the header is ignored and still stripped.
-The optional secrets `SN_OWNER_AGENT_KEY` and `SN_OWNER_AGENT_KEY_PREVIOUS`
-verify the owner agent token; unset, it gets code 0 and is still stripped.
+The optional secrets `SN_OWNER_KEY` and `SN_OWNER_KEY_PREVIOUS` (the one owner
+key, shared with the analytics Worker) verify the owner agent token; unset, it gets code 0 and is still stripped.
 
 CI (`.github/workflows/test.yml`) runs, as steps of one job, the
 dependency-provenance gate, the dependency cooldown gate, the outbound redirect
