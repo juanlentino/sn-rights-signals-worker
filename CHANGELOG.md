@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.32.1 - 2026-10-16
+
+### Security
+- **Security hardening from the 2026-10-16 audit.** The Web Bot Auth key-directory fetch goes to a host the requester names in `Signature-Agent`. That origin must now be https on a hostname: an IP literal (any IPv4 spelling the URL parser folds to dotted form, or IPv6) or `localhost` / `*.localhost` reads as no header, and nothing is fetched (L1).
+- A cache miss on the directory now spends a per-IP budget on the existing `WEBMCP_LIMITER` binding, in its own `wba-dir:<ip>` bucket (10 per 10 seconds). Over it, or with the limiter unbound or failing, nothing is fetched, the request reads as `unsigned`, and nothing is cached, so the refusal never poisons the directory for other readers. Cache hits spend nothing (L1).
+- The rights-detail stream (`SN_MR_RIGHTS`) takes at most 30 rows per connecting IP per minute, counted per isolate. Past that the read still lands in the aggregate row; only the detail row is skipped (L2).
+- Actions pinned to commit SHAs (`actions/checkout` and `actions/setup-node` v4.4.0). A new `.github/dependabot.yml` covers npm and GitHub Actions, weekly, grouped, with the same 7-day cooldown as the cooldown gate.
+- The two 0.x runtime dependencies are pinned exactly: `web-bot-auth` 0.1.3 and `jsonwebkey-thumbprint` 0.1.0 (were `^`, which for 0.x still floats patches).
+
 ## 1.32.0 - 2026-10-16
 
 ### Added

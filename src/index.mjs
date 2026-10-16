@@ -137,7 +137,7 @@ export default {
         // key directories are Cache-API cached (6h positive, 15m negative), so
         // the common case is an edge-local lookup and an Ed25519 verify. No
         // unsigned request pays anything: that branch is untouched below.
-        signatureState = await resolveSignatureState(request);
+        signatureState = await resolveSignatureState(request, env);
         // Resolved ONCE and reused. Calling resolveSignatureState again for the
         // headers would double every verification, and could report a different
         // state from the one recorded if a directory rotated between the two.

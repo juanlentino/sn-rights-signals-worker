@@ -19,6 +19,24 @@
 // Separate dataset, deliberately: different retention question, different
 // query shape, and it must never be summed with the aggregate stream.
 
+// L2 (1.32.1): at most DETAIL_PER_IP_PER_MIN detail rows per connecting IP per
+// minute, counted in-isolate. The window resets each minute, and a minute that
+// already tracks DETAIL_TRACKED_IPS distinct IPs admits no NEW one, so the map
+// is bounded. ponytail: per isolate, not global; a Durable Object if it ever
+// needs to be exact.
+const DETAIL_PER_IP_PER_MIN = 30;
+const DETAIL_TRACKED_IPS = 10000;
+let detailWindow = { minute: -1, counts: new Map() };
+function underDetailCap(ip, now = Date.now()) {
+  const minute = Math.floor(now / 60000);
+  if (minute !== detailWindow.minute) detailWindow = { minute, counts: new Map() };
+  const n = detailWindow.counts.get(ip) || 0;
+  if (n >= DETAIL_PER_IP_PER_MIN) return false;
+  if (0 === n && detailWindow.counts.size >= DETAIL_TRACKED_IPS) return false;
+  detailWindow.counts.set(ip, n + 1);
+  return true;
+}
+
 /** Surface classes that get full-fidelity retention. Widening is a one-line change. */
 export const DETAIL_SURFACES = Object.freeze(["rights"]);
 
@@ -63,6 +81,10 @@ export function observeRightsSurfaceDetail(request, env, pathname, surface, fami
   if (vp?.first_party === true) return false;
   const ds = env && env.SN_MR_RIGHTS;
   if (!ds || typeof ds.writeDataPoint !== "function") return false;
+  // 1.32.1 (2026-10-16 audit L2): this is the one stream that keeps full UAs,
+  // so a single IP must not be able to flood it. Over the cap the aggregate
+  // row has already landed; only the detail row is skipped.
+  if (!underDetailCap(request.headers.get("cf-connecting-ip") || "")) return false;
 
   ds.writeDataPoint({
     blobs: [

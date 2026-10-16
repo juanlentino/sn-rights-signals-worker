@@ -238,7 +238,7 @@ describe("WebMCP bridge (Task 4)", () => {
 import { signWithFixture } from "./helpers/sign-fixture.mjs";
 
 describe("licence handshake wiring (v1.24.0)", () => {
-  const aeEnv = () => ({ SN_MR: { writeDataPoint() {} }, SN_MR_RIGHTS: { writeDataPoint() {} } });
+  const aeEnv = () => ({ SN_MR: { writeDataPoint() {} }, SN_MR_RIGHTS: { writeDataPoint() {} }, WEBMCP_LIMITER: { limit: async () => ({ success: true }) } });
 
   // One stub serving BOTH hops: the agent's key directory and the origin. A
   // stub that answered only the origin would resolve every signature to

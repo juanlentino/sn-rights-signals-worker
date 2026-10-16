@@ -161,7 +161,11 @@ Signatures) itself, as a sensor and never a gate. A request with no
 A signed request has the agent's key directory fetched from
 `<Signature-Agent origin>/.well-known/http-message-signatures-directory`
 (redirects refused, 2 s timeout, 64 KB cap, cached 6 hours, failures cached 15
-minutes) and resolves to one of `unsigned`, `valid`, `invalid` or
+minutes). Since 1.32.1 the origin must be https on a hostname, never an IP
+literal or localhost, and a cache miss spends the connecting IP's budget on the
+`WEBMCP_LIMITER` binding (its own `wba-dir:` bucket, 10 per 10 seconds); over
+it, or with the limiter unbound or failing, nothing is fetched and the request
+reads as `unsigned`. It resolves to one of `unsigned`, `valid`, `invalid` or
 `unknown-key`, recorded in blob 11 of the sensor row. Ed25519 keys only. An
 empty or unreachable directory reads as `unsigned`; `unknown-key` means the
 directory published keys and this one was not among them; `invalid` means the
@@ -342,6 +346,8 @@ written in full to a second dataset, **`sn_machine_readers_rights`** (binding
 User-Agent (512 characters at most), the `Accept` header and a timestamp. A
 first-party read (the provenance worker's hourly capture, for example) is not
 written there (v1.26.1), so it does not spend the stream's 500-row read cap.
+Since 1.32.1 one connecting IP writes at most 30 detail rows a minute (counted
+per isolate); past that its reads still land in the aggregate.
 The two datasets are never summed.
 
 Observation is fail-open by contract (a sensor failure can

@@ -1,0 +1,22 @@
+# Weekly and grouped. The 7-day cooldown matches scripts/dependency-cooldown.mjs,
+# so a Dependabot PR never opens on a version that gate would refuse.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      npm:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]

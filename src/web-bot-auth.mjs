@@ -20,6 +20,7 @@
 import { verify } from "web-bot-auth";
 import { helpers, verifierFromJWK } from "web-bot-auth/crypto";
 import { jwkThumbprint } from "jsonwebkey-thumbprint";
+import { underWebmcpLimit } from "./webmcp-call.mjs";
 
 export const SIG_UNSIGNED = "unsigned";
 export const SIG_VALID = "valid";
@@ -52,10 +53,24 @@ export function signatureAgentOrigin(request) {
   if (!m) return null;
   try {
     const url = new URL(m[1]);
-    return url.protocol === "https:" ? url.origin : null;
+    return url.protocol === "https:" && isPublicHostname(url.hostname) ? url.origin : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * 1.32.1 (2026-10-16 audit L1): the requester names the host we fetch, so a
+ * host that is an IP literal or localhost is never fetched. The WHATWG URL
+ * parser has already folded decimal, hex and octal IPv4 spellings
+ * ("https://2130706433") to dotted form, so one dotted-quad test covers them.
+ */
+function isPublicHostname(hostname) {
+  const h = hostname.toLowerCase().replace(/\.$/, "");
+  if (h === "localhost" || h.endsWith(".localhost")) return false;
+  if (h.startsWith("[")) return false;                     // IPv6 literal
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return false;     // IPv4 literal
+  return true;
 }
 
 /** The keyid is the JWK thumbprint of the signing key, not a free-form name. */
@@ -84,7 +99,7 @@ const FETCH_TIMEOUT_MS = 2000;
  * "no keys" from "fetch failed", and must not: both mean the signature cannot
  * be checked, and both resolve to unsigned.
  */
-export async function fetchDirectoryKeys(origin) {
+export async function fetchDirectoryKeys(origin, admit = async () => true) {
   const url = origin + DIRECTORY_PATH;
   const cache = caches.default;
   const cacheKey = new Request(url, { method: "GET" });
@@ -98,6 +113,12 @@ export async function fetchDirectoryKeys(origin) {
       return [];
     }
   }
+
+  // 1.32.1 (2026-10-16 audit L1): only a cache MISS costs an outbound fetch to
+  // a host the requester chose, so only a miss spends the per-IP budget. Over
+  // it, return [] (unsigned) and cache nothing: the refusal is about this
+  // requester, not the directory, and must not poison it for everyone else.
+  if (!(await admit())) return [];
 
   let res;
   try {
@@ -203,7 +224,7 @@ function emptyDirectory(ttl) {
  * Anything unexpected resolves to SIG_UNSIGNED. This function has no failure
  * mode that reaches the caller.
  */
-export async function resolveSignatureState(request) {
+export async function resolveSignatureState(request, env) {
   try {
     if (!hasWebBotAuthHeaders(request)) return SIG_UNSIGNED;
 
@@ -211,7 +232,9 @@ export async function resolveSignatureState(request) {
     const keyId = keyIdFromSignatureInput(request.headers.get("signature-input"));
     if (!origin || !keyId) return SIG_UNSIGNED;
 
-    const keys = await fetchDirectoryKeys(origin);
+    // Per-IP cap on directory fetches, on the existing WEBMCP_LIMITER binding
+    // under its own "wba-dir:" bucket. Unbound or failing means no fetch.
+    const keys = await fetchDirectoryKeys(origin, () => underWebmcpLimit(request, env, "wba-dir:"));
     if (keys.length === 0) return SIG_UNSIGNED;
 
     let match = null;
