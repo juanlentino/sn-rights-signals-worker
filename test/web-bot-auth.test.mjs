@@ -138,6 +138,10 @@ import {
   SIG_VALID,
 } from "../src/web-bot-auth.mjs";
 
+// A limiter that always admits: these cases are about the signature, not the
+// 1.32.1 directory-fetch cap (tested on its own below).
+const okEnv = { WEBMCP_LIMITER: { limit: async () => ({ success: true }) } };
+
 describe("resolveSignatureState", () => {
   beforeEach(() => { vi.restoreAllMocks(); });
 
@@ -150,7 +154,7 @@ describe("resolveSignatureState", () => {
   it("is valid for a correctly signed request whose key is published", async () => {
     const { request, directory } = await signWithFixture("https://juanlentino.com/n/1", "https://agent-valid.test");
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(directory)));
-    expect(await resolveSignatureState(request)).toBe(SIG_VALID);
+    expect(await resolveSignatureState(request, okEnv)).toBe(SIG_VALID);
   });
 
   it("is invalid when the signature bytes are tampered with", async () => {
@@ -158,12 +162,13 @@ describe("resolveSignatureState", () => {
     const tampered = new Request("https://juanlentino.com/n/2", {
       headers: {
         "signature-agent": '"https://agent-tampered.test"',
+        "cf-connecting-ip": "203.0.113.7",
         "signature-input": request.headers.get("signature-input"),
         signature: "sig1=:GhijKLmnOPqrSTuvWXyz0123456789abcdefGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789AB==:",
       },
     });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(directory)));
-    expect(await resolveSignatureState(tampered)).toBe(SIG_INVALID);
+    expect(await resolveSignatureState(tampered, okEnv)).toBe(SIG_INVALID);
   });
 
   it("is unknown-key when the directory publishes keys but not THIS one", async () => {
@@ -172,18 +177,18 @@ describe("resolveSignatureState", () => {
     // not vouch for the key that signed this request.
     const other = await signWithFixture("https://juanlentino.com/n/3b", "https://agent-other.test");
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(other.directory)));
-    expect(await resolveSignatureState(request)).toBe(SIG_UNKNOWN_KEY);
+    expect(await resolveSignatureState(request, okEnv)).toBe(SIG_UNKNOWN_KEY);
   });
 
   it("degrades to unsigned when the directory is empty — indistinguishable from a failed fetch", async () => {
     const { request } = await signWithFixture("https://juanlentino.com/n/3c", "https://agent-empty.test");
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ keys: [] })));
-    expect(await resolveSignatureState(request)).toBe(SIG_UNSIGNED);
+    expect(await resolveSignatureState(request, okEnv)).toBe(SIG_UNSIGNED);
   });
 
   it("degrades to unsigned when the directory is unreachable", async () => {
     const { request } = await signWithFixture("https://juanlentino.com/n/4", "https://agent-down.test");
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network"));
-    expect(await resolveSignatureState(request)).toBe(SIG_UNSIGNED);
+    expect(await resolveSignatureState(request, okEnv)).toBe(SIG_UNSIGNED);
   });
 });

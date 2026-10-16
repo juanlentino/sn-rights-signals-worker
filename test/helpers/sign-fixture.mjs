@@ -31,6 +31,9 @@ export async function signWithFixture(url, agent = "https://signature-agent.test
     request: new Request(url, {
       headers: {
         "signature-agent": `"${agent}"`,
+        // Cloudflare sets this on every real request; the directory-fetch
+        // limiter (1.32.1) keys on it and refuses a request without it.
+        "cf-connecting-ip": "203.0.113.7",
         Signature: headers["Signature"],
         "Signature-Input": headers["Signature-Input"],
       },

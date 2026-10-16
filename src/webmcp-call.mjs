@@ -54,16 +54,19 @@ export function isSameOriginBeacon(request) {
  * The per-IP limit, keyed on the connecting IP. A limiter that is not bound
  * or throws answers false: the beacon then records nothing, which is the
  * safe side (a signal lost, never a flood admitted).
+ * 1.32.1: `prefix` lets another caller share the binding with its own
+ * per-IP bucket (the Web Bot Auth directory fetch uses "wba-dir:").
  * @param {Request} request
  * @param {{WEBMCP_LIMITER?: {limit: Function}}} env
+ * @param {string} [prefix]
  */
-export async function underWebmcpLimit(request, env) {
+export async function underWebmcpLimit(request, env, prefix = "webmcp:") {
   const limiter = env && env.WEBMCP_LIMITER;
   if (!limiter || typeof limiter.limit !== "function") return false;
   const ip = request.headers.get("cf-connecting-ip") || "";
   if (!ip) return false;
   try {
-    const { success } = await limiter.limit({ key: "webmcp:" + ip });
+    const { success } = await limiter.limit({ key: prefix + ip });
     return !!success;
   } catch {
     return false;
