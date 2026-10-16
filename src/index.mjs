@@ -19,6 +19,10 @@ import { noteMarkdownResponse, noteMarkdownSlug } from "./note-markdown-url.mjs"
 import { webmcpBridgeResponse } from "./webmcp-bridge.mjs";
 import { webmcpCallResponse, WEBMCP_CALL_PATH } from "./webmcp-call.mjs";
 import { stripMarketing, withRestoredParams } from "./marketing-params.mjs";
+import { OWNER_AGENT_HEADER, verifyOwnerAgent } from "./owner-agent.mjs";
+
+// Headers that prove something to THIS Worker and must never reach the origin.
+const EDGE_ONLY_HEADERS = [FIRST_PARTY_HEADER, OWNER_AGENT_HEADER];
 
 // Content negotiation for /tdm-policy/, deliberately conservative: HTML is the
 // default and only an explicit JSON preference switches representation.
@@ -85,13 +89,16 @@ export default {
     // at a URL without marketing params (marketing-params.mjs). new Request(url,
     // request) keeps method, headers and cf; redirect is pinned to "manual", the
     // incoming request's own mode, so a copy never starts following redirects.
+    //
+    // Traffic Lanes: SN-Owner-Agent is stripped the same way, on the same
+    // three forwarding sites, whatever its value and whether or not a key is set.
     const forwardable = (url = null) => {
-      const hasHeader = request.headers.has(FIRST_PARTY_HEADER);
+      const hasHeader = EDGE_ONLY_HEADERS.some((h) => request.headers.has(h));
       if (!hasHeader && !url) return request;
       const copy = url ? new Request(new Request(url, request), { redirect: "manual" }) : request;
       if (!hasHeader) return copy;
       const headers = new Headers(copy.headers);
-      headers.delete(FIRST_PARTY_HEADER);
+      for (const h of EDGE_ONLY_HEADERS) headers.delete(h);
       return new Request(copy, { headers });
     };
     // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
@@ -110,6 +117,9 @@ export default {
       // 1.30.0: only a request that carries the header pays the async compare;
       // every other request observes synchronously, exactly as before.
       const firstParty = request.headers.has(FIRST_PARTY_HEADER) && (await firstPartyByHeader(request, env));
+      // Traffic Lanes: same rule, only a request carrying SN-Owner-Agent pays
+      // the HMAC verify. null for everyone else, so they observe as before.
+      const owner = request.headers.has(OWNER_AGENT_HEADER) ? await verifyOwnerAgent(request, env) : null;
       // TWO PATHS ON PURPOSE (v1.19.0). An unsigned request observes exactly as
       // it did before this feature existed: synchronous, no await, nothing
       // scheduled. A signed one defers the WHOLE observation, because
@@ -131,9 +141,9 @@ export default {
         // Resolved ONCE and reused. Calling resolveSignatureState again for the
         // headers would double every verification, and could report a different
         // state from the one recorded if a directory rotated between the two.
-        observeMachineReader(request, env, pathname, signatureState, firstParty);
+        observeMachineReader(request, env, pathname, signatureState, firstParty, owner);
       } else {
-        observeMachineReader(request, env, pathname, undefined, firstParty);
+        observeMachineReader(request, env, pathname, undefined, firstParty, owner);
       }
     }
 

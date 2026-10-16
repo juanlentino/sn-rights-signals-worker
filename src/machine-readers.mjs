@@ -193,9 +193,11 @@ export function _resetSensorStateForTests() {
  * @param {boolean} [firstPartyHeader] 1.30.0: the request proved it is ours
  *   with the x-sn-first-party secret (see firstPartyByHeader). Resolved by the
  *   caller, because the compare is async and this function is not.
+ * @param {{identity:number, agent:number}|null} [owner] Traffic Lanes: the
+ *   verified SN-Owner-Agent result (src/owner-agent.mjs), null without the header.
  * @returns {{family:string, surface:string}|null} What was recorded, or null.
  */
-export function observeMachineReader(request, env, pathname, signatureState = SIG_UNSIGNED, firstPartyHeader = false) {
+export function observeMachineReader(request, env, pathname, signatureState = SIG_UNSIGNED, firstPartyHeader = false, owner = null) {
   try {
     const bound = !!(env && env.SN_MR && typeof env.SN_MR.writeDataPoint === "function");
     sensorState.ae_bound = bound;
@@ -225,6 +227,11 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     // original 18 families returns bit-identical results across the cutover.
     const family = legacyFamily === null ? UNCLASSIFIED_MACHINE : legacyFamily;
     const surface = classifySurface(pathname);
+    // Traffic Lanes (review round 2): SN-Owner-Agent never creates a row. A
+    // request is recorded exactly when it would be without the header, so every
+    // total is unchanged; the token only adds blob14/15 and, when valid, marks
+    // the row first-party (own infrastructure, like the site's other tools).
+    const identity = owner?.identity ?? 0;
 
     // RULE 2: the unknown bucket has to be reviewable or it is not a
     // measurement. Sample the UA ONLY when the taxonomy failed to match —
@@ -269,7 +276,9 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
         // 1.30.0: first-party from the taxonomy OR from the signed header. The
         // header changes this flag only; the agent id (blob9) stays the
         // taxonomy's, so dev-curl stays dev-curl and is now marked ours.
-        vp?.first_party || firstPartyHeader === true ? "1" : "0",
+        // Review round 1: a valid owner token is own infrastructure too, so
+        // every existing reader figure excludes it like the site's other tools.
+        vp?.first_party || firstPartyHeader === true || identity === 2 ? "1" : "0",
         uaSample,
         // v1.12.0: the taxonomy entry id, so the surface can name the EXACT
         // agent rather than leaving it to be inferred from vendor+purpose.
@@ -298,6 +307,13 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
         // strings and the ASN number adds nothing a reader can act on here.
         // APPENDED like blob11/blob12; old rows carry "" and read as NOT MEASURED.
         String(request.cf?.asOrganization ?? "").trim().slice(0, 128),
+        // Traffic Lanes Phase 1: blob14 identity code (2 owner_token, 3
+        // owner_token_invalid, 0 otherwise) and blob15 agent code (0 none,
+        // 1 browser ... 7 other; 0 unless the token verified), decimal strings.
+        // APPENDED like blob11-13; old rows carry "" and read as NOT MEASURED.
+        // Codes only: the header value is never stored.
+        String(identity),
+        String(identity === 2 ? owner.agent : 0),
       ],
       doubles: [1],
       // Still exactly one index: Analytics Engine permits one per data point,
@@ -319,8 +335,11 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     try {
       // 1.30.0: a header-proved first-party read keeps out of the detail
       // stream too, the 1.26.1 rule the taxonomy's first-party agents follow
-      // inside observeRightsSurfaceDetail.
-      if (firstPartyHeader !== true && observeRightsSurfaceDetail(request, env, pathname, surface, family, vp)) {
+      // inside observeRightsSurfaceDetail. Traffic Lanes: a valid owner token
+      // (code 2) is self-traffic and stays out too. An invalid one (code 3)
+      // stays IN: otherwise a junk header would let a crawler drop out of the
+      // signed evidence record (review round 2).
+      if (firstPartyHeader !== true && identity !== 2 && observeRightsSurfaceDetail(request, env, pathname, surface, family, vp)) {
         sensorState.detail_last_write_ok = true;
       }
     } catch (err) {
@@ -519,11 +538,15 @@ export function buildQuery(view, days, filter = {}) {
     "blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, " +
     "blob9 AS agent, blob10 AS markdown_requested, blob11 AS signed_agent, blob12 AS verified_bot, " +
     "blob13 AS network, " +
+    // Traffic Lanes (checkpoint 3): the owner identity and agent codes, so the
+    // plugin can derive machine-side lanes. Named owner_* because `agent` is
+    // already blob9. Additive: rows split further, their hits still sum the same.
+    "blob14 AS owner_identity, blob15 AS owner_agent, " +
     "toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
     "FROM sn_machine_readers " +
     since +
     "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, " +
-    `first_party, agent, markdown_requested, signed_agent, verified_bot, network, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
+    `first_party, agent, markdown_requested, signed_agent, verified_bot, network, owner_identity, owner_agent, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
   );
 }
 

@@ -70,7 +70,7 @@ delete these routes to "tidy up" without reading this paragraph.
 | `GET /_sn/rights-signals/version` | Deploy verification, mirrors the sibling workers' `/_sn/version` pattern (namespaced because sn-analytics already owns the bare path): `{ worker, version, source_commit, cf_version_id, cf_version_tag, deployed_at, sensor{ ae_bound, last_write_ok, last_write_at, detail_last_write_ok } }`. `no-store`. |
 | `GET /_sn/rights-signals/crawler-list-status` | Last result of the weekly crawler-list drift check (see below), as `{ worker, last_check }`. The verdict is kept in isolate memory and in the colo's Cache API (v1.4.3), so it survives isolate eviction. When it is missing, failed or older than 8 days, the request starts one background re-check (v1.4.1), at most once every 10 minutes per isolate: the last-attempt time lives in isolate memory, so a fresh or concurrent isolate can start its own. A failed check publishes a classified code only; the raw reason stays in the logs. |
 | `GET /_sn/rights-signals/taxonomy` | Public, cacheable (`max-age=3600`) copy of `src/machine-reader-taxonomy.json`, the published vendor and purpose definitions the sensor classifies with. `X-SN-Taxonomy-Version` names the version. |
-| `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`, compared in constant time). `?days=N` clamped to 1–90, default 30. `?view=` is `aggregate` (the default, and the fallback for an unknown value; up to 10,000 grouped rows), `unknown` (unmatched User-Agent samples, hits descending, top 50 as `user_agent` and `hits`; with `&detail=network`, up to 10,000 rows where each row is one sample with one `verified_bot` category and one `network`, so a sample spans several rows and a reader sums them by `user_agent`, 1.30.0), `rights` (up to 500 rows of the rights-detail stream) or `totals` (hits per day, WebMCP beacon rows excluded). `?view=rights` also takes `family=<one family>` and `exclude_purpose=<comma list of purposes>`, both allowlisted (400 otherwise, and 400 on any other view); the response echoes them as `filter`. The response is `{ worker, days, view, detail, taxonomy_version, taxonomy_effective_date, limit, rows, truncated, data }`. Queries the Analytics Engine SQL API (redirects refused, 10 s timeout, 10 MiB response cap); `401` on a bad token, `503` when `SN_MR_READ_TOKEN`, `CF_ACCOUNT_ID` or `SN_MR_SQL_TOKEN` is not configured, `502` on an upstream failure. |
+| `GET /_sn/rights-signals/machine-readers` | Token-auth read path for the machine-readership dataset (`Authorization: Bearer <SN_MR_READ_TOKEN>`, compared in constant time). `?days=N` clamped to 1–90, default 30. `?view=` is `aggregate` (the default, and the fallback for an unknown value; up to 10,000 grouped rows; each row also carries `owner_identity` (blob 14) and `owner_agent` (blob 15), Traffic Lanes, `""` on rows written before them), `unknown` (unmatched User-Agent samples, hits descending, top 50 as `user_agent` and `hits`; with `&detail=network`, up to 10,000 rows where each row is one sample with one `verified_bot` category and one `network`, so a sample spans several rows and a reader sums them by `user_agent`, 1.30.0), `rights` (up to 500 rows of the rights-detail stream) or `totals` (hits per day, WebMCP beacon rows excluded). `?view=rights` also takes `family=<one family>` and `exclude_purpose=<comma list of purposes>`, both allowlisted (400 otherwise, and 400 on any other view); the response echoes them as `filter`. The response is `{ worker, days, view, detail, taxonomy_version, taxonomy_effective_date, limit, rows, truncated, data }`. Queries the Analytics Engine SQL API (redirects refused, 10 s timeout, 10 MiB response cap); `401` on a bad token, `503` when `SN_MR_READ_TOKEN`, `CF_ACCOUNT_ID` or `SN_MR_SQL_TOKEN` is not configured, `502` on an upstream failure. |
 
 ## Native WebMCP — the fifth rights surface
 
@@ -307,7 +307,7 @@ runs. Two independent passes read the User-Agent: the frozen family enum
 `src/machine-reader-taxonomy.json` (vendor, purpose, agent id). When either
 matches, it writes one datapoint to the Analytics Engine dataset
 **`sn_machine_readers`**. A request neither pass recognizes (a browser) is
-never recorded, and the observer skips internal `/_sn/` paths. The one
+never recorded, whatever `SN-Owner-Agent` header it carries, and the observer skips internal `/_sn/` paths. The one
 `/_sn/` route that writes is the WebMCP beacon, which records its own `webmcp`
 row (see above). A row the taxonomy
 matches and the frozen enum does not is stored under the family
@@ -321,13 +321,15 @@ matches and the frozen enum does not is stored under the family
 | 4 | purpose | from the taxonomy's `purpose_vocabulary`; `unknown` when it did not match; on a `webmcp` beacon row, the call outcome: `ok`, `absent`, `error` |
 | 5 | taxonomy version | |
 | 6 | training corpus source | `1` or `0` |
-| 7 | first party | `1` or `0`; `1` from the taxonomy's `first_party`, or from the signed `x-sn-first-party` header (1.30.0, see below) |
+| 7 | first party | `1` or `0`; `1` from the taxonomy's `first_party`, from the signed `x-sn-first-party` header (1.30.0, see below), or from a valid `SN-Owner-Agent` token |
 | 8 | User-Agent sample | only when the taxonomy did not match: allowlisted characters, 96 at most (v1.11.0) |
 | 9 | agent (v1.12.0) | the taxonomy entry id; an id whose entry carries `no_user_agent: true` (`google-extended`, `apple-bot-extended`, taxonomy 1.4.0) is a robots.txt control token the vendor never sends, so that hit is impersonation |
 | 10 | markdown requested (v1.18.0; a `/notes/<slug>.md` read counts too) | `1` or `0` |
 | 11 | signed agent (v1.19.0) | `unsigned`, `valid`, `invalid`, `unknown-key` |
 | 12 | verified bot (v1.27.0) | Cloudflare's verified-bot category, read from the `x-sn-verified-bot` header that a zone Transform Rule sets on every request; empty when Cloudflare did not verify the client |
 | 13 | network (v1.28.0) | `cf.asOrganization`, 128 characters at most; empty when Cloudflare supplies none |
+| 14 | owner identity (Traffic Lanes) | `2` valid `SN-Owner-Agent` token, `3` token present but invalid or expired, `0` otherwise (no header, or no key configured) |
+| 15 | owner agent (Traffic Lanes) | the token's agent code when blob 14 is `2`: `1` browser, `2` chrome-extension, `3` claude-code, `4` playwright, `5` script, `6` mcp-local, `7` other; `0` otherwise |
 
 Double 1 is the count (always 1) and index 1 is the family. The layout is
 append-only: blob order is the read query's contract, and a row written before
@@ -393,6 +395,83 @@ to every host a redirect leads to.
 
 ```bash
 curl -H "x-sn-first-party: $SN_FIRST_PARTY_TOKEN" https://juanlentino.com/llms.txt
+```
+
+### Owner agent token (Traffic Lanes Phase 1)
+
+The owner's own tools (Bash curl, Playwright, the local MCP server) can say
+they are his with a short-lived signed header, so their reads land in lane
+`owner_agent` instead of passing as crawlers. The design and the shared contract
+are in signal-and-noise-tools `docs/plans/traffic-lanes-2026-10-15.md`.
+
+```
+SN-Owner-Agent: v1.<agent>.<exp>.<sig>
+sig = base64url, no padding, of HMAC-SHA256(key, "v1|agent|<agent>|<exp>")
+```
+
+- The key is 32 random bytes held as 64 hex characters in the secret
+  `SN_OWNER_KEY`; `SN_OWNER_KEY_PREVIOUS` is also accepted during a rotation.
+  It is the one owner key: the analytics Worker holds the same value and checks
+  the device marker with it. The signed messages are domain-separated
+  (`v1|agent|...` here, `v1|dev|...` for the marker), so one can never pass as
+  the other. The plugin mints tokens (`wp sn owner-token --agent=<label>`) with
+  the same key from its keyring.
+- Valid iff the signature matches either key, `now < exp`, and
+  `exp - now <= 43500` (12 hours plus 5 minutes of clock skew). `agent` must be
+  one of `browser`, `chrome-extension`, `claude-code`, `playwright`, `script`,
+  `mcp-local`, `other`. The signature must be the canonical 43-character
+  spelling. Anything else is invalid (code 3). Expiry and key rotation are the
+  only revocation.
+- An empty header value is the same as no header.
+- With neither key set (or not 64 hex characters), a token gets no verdict:
+  code 0, never 3, and the Worker logs `owner_key_unset` once per isolate.
+  Nothing else changes.
+- Recorded as blob 14 (identity) and blob 15 (agent), and read back by the
+  aggregate view as `owner_identity` and `owner_agent`. The header never
+  creates a row: a request is recorded exactly when it would be without it, so
+  every total stays the same. On a recorded row, a valid token (code 2) also
+  sets `first_party` = `1` (blob 7, own infrastructure like the site's other
+  tools) and stays out of `sn_machine_readers_rights`; an invalid one (code 3)
+  changes only blob 14 and stays IN the rights-detail stream, so a junk header
+  cannot take a crawler out of the evidence record. The Worker also counts
+  code-3 requests in isolate memory. The admin bypass and `/_sn/*` paths are
+  never observed. `webmcp` beacon rows are written elsewhere and do not carry
+  blobs 14 and 15.
+- The header is removed before every origin fetch, with `x-sn-first-party`,
+  whatever its value and whether or not a key is set. Its value is never
+  stored, logged or echoed; only the two codes are written. The same two limits
+  as the first-party header apply: a sibling Worker's more specific route never
+  reaches this Worker, and `passThroughOnException` forwards the original
+  request on an uncaught throw.
+
+Handling a token (it is a bearer credential for its TTL):
+
+- Put `wp sn owner-token` output straight into an environment variable, never
+  echo it into a terminal or an agent transcript:
+  `export SN_OWNER_AGENT="$(wp sn owner-token --agent=script)"`.
+- curl: `curl -H "SN-Owner-Agent: $SN_OWNER_AGENT" https://juanlentino.com/...`,
+  never with `-L` (curl forwards custom headers to every host a redirect leads to).
+- Playwright: attach it with `page.route` limited to `https://juanlentino.com/**`,
+  never with `extraHTTPHeaders`, which sends it to every host the page loads:
+
+```js
+await page.route("https://juanlentino.com/**", (route) =>
+  route.continue({ headers: { ...route.request().headers(), "sn-owner-agent": process.env.SN_OWNER_AGENT } }),
+);
+```
+
+**Merge = deploy.** This Worker ships through the Workers Builds git
+integration when the PR merges to `main`. **Set `SN_OWNER_KEY` before merging**
+(the same value as the plugin's `owner_key` and the analytics Worker's
+`SN_OWNER_KEY`), following steps 1 to 3 of the first-party runbook above. While
+the PR is open its preview build may be the latest UPLOADED version; runbook
+step 1 says how to set the secret on the deployed version instead, and never to
+accept "deploy latest" then. Check that Workers Logs does not keep the header. If the key is
+unset when the merge deploys, the only change is that rows gain blob 14 and
+blob 15 as `"0"`, `"0"`.
+
+```bash
+wrangler secret put SN_OWNER_KEY   # only when the deployed version is the latest upload; see runbook step 1
 ```
 
 ## What this Worker serves gets anchored
@@ -474,6 +553,8 @@ cron (`23 7 * * 1`) and the `juanlentino.com/*` route. The read path needs
 `SN_MR_READ_TOKEN`, `SN_MR_SQL_TOKEN` and `CF_ACCOUNT_ID`, which are not in
 `wrangler.jsonc`. The optional secret `SN_FIRST_PARTY_TOKEN` turns on the
 first-party header (1.30.0); unset, the header is ignored and still stripped.
+The optional secrets `SN_OWNER_KEY` and `SN_OWNER_KEY_PREVIOUS` (the one owner
+key, shared with the analytics Worker) verify the owner agent token; unset, it gets code 0 and is still stripped.
 
 CI (`.github/workflows/test.yml`) runs, as steps of one job, the
 dependency-provenance gate, the dependency cooldown gate, the outbound redirect
