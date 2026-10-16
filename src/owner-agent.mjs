@@ -47,12 +47,12 @@ let keyUnsetLogged = false;
 // in Analytics Engine, so a junk header cannot buy a row. Resets on eviction.
 let invalidTokenCount = 0;
 
-/** Test seam: module state persists across cases within a pool isolate. */
 /** Code-3 requests seen by this isolate (best effort, resets on eviction). */
 export function getInvalidTokenCount() {
   return invalidTokenCount;
 }
 
+/** Test seam: module state persists across cases within a pool isolate. */
 export function _resetOwnerAgentForTests() {
   keyUnsetLogged = false;
   invalidTokenCount = 0;

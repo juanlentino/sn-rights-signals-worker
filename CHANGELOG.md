@@ -14,7 +14,7 @@
 - **`SN-Owner-Agent` never reaches the origin.** It is stripped with `x-sn-first-party` at the same three forwarding sites (admin bypass, `robots.txt`, page passthrough), whatever its value and whether or not a key is set. Its value is never written to a row (aggregate or rights detail), a log line or a response.
 
 ### Notes
-- Owner action: this Worker deploys by hand. Set `SN_OWNER_KEY` (the plugin keyring's `owner_key`, 64 hex characters, the same value as on the analytics Worker) BEFORE deploying, following the first-party runbook's version and Workers Logs checks. Unset, a token gets code 0, the Worker logs `owner_key_unset` once per isolate, and nothing changes but the two appended `"0"` blobs. No version bump in this entry; the cut names the number.
+- Owner action: merge = deploy (Workers Builds ships `main`). Set `SN_OWNER_KEY` (the plugin keyring's `owner_key`, 64 hex characters, the same value as on the analytics Worker) BEFORE merging, following the first-party runbook's version and Workers Logs checks (while this PR is open its preview may be the latest upload; runbook step 1 covers setting the secret on the deployed version). Unset, a token gets code 0, the Worker logs `owner_key_unset` once per isolate, and rows only gain blob14 and blob15 as `"0"`, `"0"`. No version bump in this entry; the cut names the number.
 - The 1.30.0 note "a browser is still not recorded, header or not" holds for `SN-Owner-Agent` too.
 
 ## 1.31.0 - 2026-10-13

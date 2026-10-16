@@ -460,15 +460,18 @@ await page.route("https://juanlentino.com/**", (route) =>
 );
 ```
 
-This Worker deploys by hand (CI only tests). **Set `SN_OWNER_KEY` before
-deploying this version** (the same value as the plugin's `owner_key`
-keyring row), following steps 1 to 3 of the first-party runbook above: confirm
-which version a secret edit will deploy, and check that Workers Logs does not
-keep the header. With the secret unset the deploy changes nothing but the two
-appended blobs (`0`, `0`).
+**Merge = deploy.** This Worker ships through the Workers Builds git
+integration when the PR merges to `main`. **Set `SN_OWNER_KEY` before merging**
+(the same value as the plugin's `owner_key` and the analytics Worker's
+`SN_OWNER_KEY`), following steps 1 to 3 of the first-party runbook above. While
+the PR is open its preview build may be the latest UPLOADED version; runbook
+step 1 says how to set the secret on the deployed version instead, and never to
+accept "deploy latest" then. Check that Workers Logs does not keep the header. If the key is
+unset when the merge deploys, the only change is that rows gain blob 14 and
+blob 15 as `"0"`, `"0"`.
 
 ```bash
-wrangler secret put SN_OWNER_KEY
+wrangler secret put SN_OWNER_KEY   # only when the deployed version is the latest upload; see runbook step 1
 ```
 
 ## What this Worker serves gets anchored

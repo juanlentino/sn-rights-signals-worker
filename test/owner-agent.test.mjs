@@ -98,6 +98,18 @@ describe("SN-Owner-Agent verification: the contract's test vector", () => {
     }
   });
 
+  it("a device marker signed with the same key is rejected as a token (one key, domain-separated)", async () => {
+    const env = { SN_OWNER_KEY: KEY };
+    const at = VECTOR_EXP - 60;
+    // The contract's device-marker vector, presented as the agent header.
+    const marker = "v1.0123456789abcdef.20261015.anHSQ9ch5h07TmKcjtSoniVfPuP9aRaSNJ5UjEgtLpc";
+    expect(await verifyOwnerAgent(withToken(marker), env, at)).toEqual({ identity: 3, agent: 0 });
+    // A `v1|dev|...` MAC over a token-shaped body must not verify either.
+    const key = await crypto.subtle.importKey("raw", hexBytes(KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const devSig = b64url(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`v1|dev|claude-code|${VECTOR_EXP}`)));
+    expect(await verifyOwnerAgent(withToken(`v1.claude-code.${VECTOR_EXP}.${devSig}`), env, at)).toEqual({ identity: 3, agent: 0 });
+  });
+
   it("a correctly signed agent outside the allowlist is code 3", async () => {
     const env = { SN_OWNER_KEY: KEY };
     expect((await verifyOwnerAgent(withToken(await sign("evil", now() + 3600)), env)).identity).toBe(3);
