@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Owner agent token (Traffic Lanes Phase 1).** A request carrying `SN-Owner-Agent: v1.<agent>.<exp>.<sig>` is verified at the edge: HMAC-SHA256 over `v1|agent|<agent>|<exp>` with the 32-byte key hex-decoded from the secret `SN_OWNER_AGENT_KEY`, then `SN_OWNER_AGENT_KEY_PREVIOUS`, compared in constant time (`crypto.subtle.verify`). Valid iff the signature matches, `now < exp`, and `exp - now <= 43500`; the agent must be on the contract's allowlist and the signature in its canonical 43-character spelling. The contract's test vector is pinned byte for byte, with tampered, expired, too-far-future and previous-key cases. Only a request carrying the header pays the verify.
+- **`sn_machine_readers` blob14 (identity) and blob15 (agent), appended.** blob14 is `2` (valid token), `3` (invalid or expired) or `0` (anything else, including no key configured); blob15 is the token's agent code (`1` browser to `7` other) when blob14 is `2`, else `0`. Decimal strings. Blobs 1 to 13 are untouched; rows from before this release read `""`, not measured.
+- **A token-bearing request is always recorded.** Code 3 is recorded on every surface; code 2 on every surface except `asset`. When neither classifier matches the user agent, the row's family is `unclassified-machine`. A request without the header is recorded exactly as before.
+
+### Changed
+- **`SN-Owner-Agent` never reaches the origin.** It is stripped with `x-sn-first-party` at the same three forwarding sites (admin bypass, `robots.txt`, page passthrough), whatever its value and whether or not a key is set. Its value is never written to a row (aggregate or rights detail), a log line or a response.
+
+### Notes
+- Owner action: this Worker deploys by hand. Set `SN_OWNER_AGENT_KEY` (the plugin keyring's `owner_agent_key`, 64 hex characters) BEFORE deploying, following the first-party runbook's version and Workers Logs checks. Unset, a token gets code 0, nothing is force-recorded, the Worker logs `owner_key_unset` once per isolate, and nothing changes but the two appended `"0"` blobs. No version bump in this entry; the cut names the number.
+- The 1.30.0 note "a browser is still not recorded, header or not" stays true for `x-sn-first-party`; it no longer holds for `SN-Owner-Agent`.
+- The read views (`/_sn/rights-signals/machine-readers`) do not select blob14 or blob15 yet. The plugin's lanes rollup needs them; that is a separate, additive change.
+
 ## 1.31.0 - 2026-10-13
 
 ### Added

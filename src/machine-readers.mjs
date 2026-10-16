@@ -193,9 +193,11 @@ export function _resetSensorStateForTests() {
  * @param {boolean} [firstPartyHeader] 1.30.0: the request proved it is ours
  *   with the x-sn-first-party secret (see firstPartyByHeader). Resolved by the
  *   caller, because the compare is async and this function is not.
+ * @param {{identity:number, agent:number}|null} [owner] Traffic Lanes: the
+ *   verified SN-Owner-Agent result (src/owner-agent.mjs), null without the header.
  * @returns {{family:string, surface:string}|null} What was recorded, or null.
  */
-export function observeMachineReader(request, env, pathname, signatureState = SIG_UNSIGNED, firstPartyHeader = false) {
+export function observeMachineReader(request, env, pathname, signatureState = SIG_UNSIGNED, firstPartyHeader = false, owner = null) {
   try {
     const bound = !!(env && env.SN_MR && typeof env.SN_MR.writeDataPoint === "function");
     sensorState.ae_bound = bound;
@@ -215,7 +217,16 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     // Neither pass recognised it: a browser, or a machine nobody has named yet
     // and whose UA carries no bot/crawler marker. Unchanged from v1.4.0 — we do
     // not start recording humans in order to widen a crawler taxonomy.
-    if (legacyFamily === null && vp === null) return null;
+    //
+    // Traffic Lanes force-record: a request carrying SN-Owner-Agent must not
+    // vanish here, or a forged or expired token (code 3) would leave no trace.
+    // Code 3 is always recorded; a valid token (code 2) only off `asset`, so an
+    // owner's browser session does not book every image it loads. Code 0 (no
+    // key configured) forces nothing: unset key, nothing changes.
+    const surface = classifySurface(pathname);
+    const identity = owner?.identity ?? 0;
+    const forced = identity === 3 || (identity === 2 && surface !== "asset");
+    if (legacyFamily === null && vp === null && !forced) return null;
 
     // The additive family value (v1.11.0), used ONLY where the frozen
     // classifier would have dropped the row entirely — facebookexternalhit,
@@ -224,7 +235,6 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
     // family value changes meaning or population, so any query filtering the
     // original 18 families returns bit-identical results across the cutover.
     const family = legacyFamily === null ? UNCLASSIFIED_MACHINE : legacyFamily;
-    const surface = classifySurface(pathname);
 
     // RULE 2: the unknown bucket has to be reviewable or it is not a
     // measurement. Sample the UA ONLY when the taxonomy failed to match —
@@ -298,6 +308,13 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
         // strings and the ASN number adds nothing a reader can act on here.
         // APPENDED like blob11/blob12; old rows carry "" and read as NOT MEASURED.
         String(request.cf?.asOrganization ?? "").trim().slice(0, 128),
+        // Traffic Lanes Phase 1: blob14 identity code (2 owner_token, 3
+        // owner_token_invalid, 0 otherwise) and blob15 agent code (0 none,
+        // 1 browser ... 7 other; 0 unless the token verified), decimal strings.
+        // APPENDED like blob11-13; old rows carry "" and read as NOT MEASURED.
+        // Codes only: the header value is never stored.
+        String(identity),
+        String(identity === 2 ? owner.agent : 0),
       ],
       doubles: [1],
       // Still exactly one index: Analytics Engine permits one per data point,

@@ -307,7 +307,8 @@ runs. Two independent passes read the User-Agent: the frozen family enum
 `src/machine-reader-taxonomy.json` (vendor, purpose, agent id). When either
 matches, it writes one datapoint to the Analytics Engine dataset
 **`sn_machine_readers`**. A request neither pass recognizes (a browser) is
-never recorded, and the observer skips internal `/_sn/` paths. The one
+not recorded, unless it carries an `SN-Owner-Agent` token (see "Owner agent
+token" below), and the observer skips internal `/_sn/` paths. The one
 `/_sn/` route that writes is the WebMCP beacon, which records its own `webmcp`
 row (see above). A row the taxonomy
 matches and the frozen enum does not is stored under the family
@@ -328,6 +329,8 @@ matches and the frozen enum does not is stored under the family
 | 11 | signed agent (v1.19.0) | `unsigned`, `valid`, `invalid`, `unknown-key` |
 | 12 | verified bot (v1.27.0) | Cloudflare's verified-bot category, read from the `x-sn-verified-bot` header that a zone Transform Rule sets on every request; empty when Cloudflare did not verify the client |
 | 13 | network (v1.28.0) | `cf.asOrganization`, 128 characters at most; empty when Cloudflare supplies none |
+| 14 | owner identity (Traffic Lanes) | `2` valid `SN-Owner-Agent` token, `3` token present but invalid or expired, `0` otherwise (no header, or no key configured) |
+| 15 | owner agent (Traffic Lanes) | the token's agent code when blob 14 is `2`: `1` browser, `2` chrome-extension, `3` claude-code, `4` playwright, `5` script, `6` mcp-local, `7` other; `0` otherwise |
 
 Double 1 is the count (always 1) and index 1 is the family. The layout is
 append-only: blob order is the read query's contract, and a row written before
@@ -393,6 +396,53 @@ to every host a redirect leads to.
 
 ```bash
 curl -H "x-sn-first-party: $SN_FIRST_PARTY_TOKEN" https://juanlentino.com/llms.txt
+```
+
+### Owner agent token (Traffic Lanes Phase 1)
+
+The owner's own tools (Bash curl, Playwright, the local MCP server) can say
+they are his with a short-lived signed header, so their reads land in lane
+`owner_agent` instead of passing as crawlers. The design and the shared contract
+are in signal-and-noise-tools `docs/plans/traffic-lanes-2026-10-15.md`.
+
+```
+SN-Owner-Agent: v1.<agent>.<exp>.<sig>
+sig = base64url, no padding, of HMAC-SHA256(key, "v1|agent|<agent>|<exp>")
+```
+
+- The key is 32 random bytes held as 64 hex characters in the secret
+  `SN_OWNER_AGENT_KEY`; `SN_OWNER_AGENT_KEY_PREVIOUS` is also accepted during a
+  rotation. The plugin mints tokens (`wp sn owner-token --agent=<label>`) with
+  the same key from its keyring.
+- Valid iff the signature matches either key, `now < exp`, and
+  `exp - now <= 43500` (12 hours plus 5 minutes of clock skew). `agent` must be
+  one of `browser`, `chrome-extension`, `claude-code`, `playwright`, `script`,
+  `mcp-local`, `other`. The signature must be the canonical 43-character
+  spelling. Anything else is invalid (code 3). Expiry and key rotation are the
+  only revocation.
+- With neither key set (or not 64 hex characters), a token gets no verdict:
+  code 0, never 3, and the Worker logs `owner_key_unset` once per isolate.
+  Nothing else changes.
+- Recorded as blob 14 (identity) and blob 15 (agent). A request carrying the
+  header is recorded even when its user agent classifies as nothing (family
+  `unclassified-machine`): always for code 3, and for code 2 on every surface
+  except `asset`. Without the header, recording is exactly as before.
+- The header is removed before every origin fetch, with `x-sn-first-party`,
+  whatever its value and whether or not a key is set. Its value is never
+  stored, logged or echoed; only the two codes are written. The same two limits
+  as the first-party header apply: a sibling Worker's more specific route never
+  reaches this Worker, and `passThroughOnException` forwards the original
+  request on an uncaught throw.
+
+This Worker deploys by hand (CI only tests). **Set `SN_OWNER_AGENT_KEY` before
+deploying this version** (the same value as the plugin's `owner_agent_key`
+keyring row), following steps 1 to 3 of the first-party runbook above: confirm
+which version a secret edit will deploy, and check that Workers Logs does not
+keep the header. With the secret unset the deploy changes nothing but the two
+appended blobs (`0`, `0`).
+
+```bash
+wrangler secret put SN_OWNER_AGENT_KEY
 ```
 
 ## What this Worker serves gets anchored
@@ -474,6 +524,8 @@ cron (`23 7 * * 1`) and the `juanlentino.com/*` route. The read path needs
 `SN_MR_READ_TOKEN`, `SN_MR_SQL_TOKEN` and `CF_ACCOUNT_ID`, which are not in
 `wrangler.jsonc`. The optional secret `SN_FIRST_PARTY_TOKEN` turns on the
 first-party header (1.30.0); unset, the header is ignored and still stripped.
+The optional secrets `SN_OWNER_AGENT_KEY` and `SN_OWNER_AGENT_KEY_PREVIOUS`
+verify the owner agent token; unset, it gets code 0 and is still stripped.
 
 CI (`.github/workflows/test.yml`) runs, as steps of one job, the
 dependency-provenance gate, the dependency cooldown gate, the outbound redirect
