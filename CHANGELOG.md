@@ -1,9 +1,12 @@
 # Changelog
 
-## Unreleased
+## 1.33.0 - 2026-10-18
 
 ### Added
 - **Taxonomy 1.5.0: `cf_verified` on 55 agents, and on every aggregate row.** An entry carries `"cf_verified": true` when Cloudflare's verified-bots directory lists the agent, so Cloudflare sets its verified-bot category on a genuine request from it. Source: the Radar bots directory as mirrored in microlinkhq/cloudflare-bot-directory (`src/index.json`, pushed 2026-10-12, a copy of `api.cloudflare.com/client/v4/radar/bots`), matched by each entry's `match` token against the directory's user-agent patterns; Radar itself refused a direct read. Agents the directory does not list stay unmarked (PerplexityBot, Perplexity-User, CCBot, Bytespider, cohere-ai among them), as do Googlebot-News and Uptime Kuma, which only matched a shorter pattern. The aggregate read stamps `cf_verified` (`1` or `0`) on each row from its agent id at read time, so rows written before this release carry it too; the other views are unchanged. The validator requires a boolean and refuses it beside `observable: false`. This lets the plugin count a hit that claims a verified agent but failed Cloudflare's check as an impostor (counted, never credited): over 14 days, 1,378 of ClaudeBot's 1,436 reads came from "Google LLC" networks with no verification.
+
+### Dependencies
+- The npm group update from Dependabot (#93), test and build tooling.
 
 ## 1.32.1 - 2026-10-16
 
