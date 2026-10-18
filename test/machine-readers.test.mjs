@@ -88,7 +88,7 @@ describe("markdown adoption signal (v1.18.0)", () => {
 
   it("is ADDITIVE — the first ten blobs keep their meaning and position", () => {
     const d = writeFor("text/markdown");
-    expect(d.blobs).toHaveLength(15); // Traffic Lanes appended blob14/15
+    expect(d.blobs).toHaveLength(16); // Traffic Lanes appended blob14/15; taxonomy 1.6.0 blob16
     expect(d.blobs[1]).toBe("html");        // surface unchanged: NOT drained into a new class
     expect(d.doubles).toEqual([1]);
     expect(d.indexes).toEqual([d.blobs[0]]); // still exactly one index, still family
@@ -183,7 +183,7 @@ describe("observeMachineReader — aggregate-only AE writes", () => {
       // v1.18.0 appends blob10 (markdown_requested). APPENDED, never inserted:
       // blob order IS the read query's contract, so a new axis may only ever go
       // on the end — inserting one would silently relabel every column after it.
-      blobs: ["openai", "llms", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot", "0", "unsigned", "", "", "0", "0"],
+      blobs: ["openai", "llms", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot", "0", "unsigned", "", "", "0", "0", ""],
       doubles: [1],
       indexes: ["openai"],
     });
@@ -361,7 +361,7 @@ describe("blob11 — signature state", () => {
 
     observeMachineReader(request, envWith(written), "/notes/x", SIG_VALID);
 
-    expect(written[0].blobs).toHaveLength(15); // Traffic Lanes appended blob14/15
+    expect(written[0].blobs).toHaveLength(16); // Traffic Lanes appended blob14/15; taxonomy 1.6.0 blob16
     expect(written[0].blobs[0]).toBe("openai");
     expect(written[0].blobs[9]).toBe("0");
     expect(written[0].blobs[10]).toBe("valid");
@@ -513,7 +513,7 @@ describe("verified-bot category (v1.27.0)", () => {
 
   it("appends: existing blob positions keep their meaning", () => {
     const d = writeFor("Search Engine Crawler");
-    expect(d.blobs).toHaveLength(15); // Traffic Lanes appended blob14/15
+    expect(d.blobs).toHaveLength(16); // Traffic Lanes appended blob14/15; taxonomy 1.6.0 blob16
     expect(d.blobs.slice(0, 11)).toEqual(
       ["openai", "html", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot", "0", "unsigned"],
     );
@@ -550,7 +550,7 @@ describe("network (v1.28.0)", () => {
 
   it("appends: blobs 1 to 12 keep their positions", () => {
     const d = writeFor({ asOrganization: "OpenAI" });
-    expect(d.blobs).toHaveLength(15); // Traffic Lanes appended blob14/15
+    expect(d.blobs).toHaveLength(16); // Traffic Lanes appended blob14/15; taxonomy 1.6.0 blob16
     expect(d.blobs.slice(0, 12)).toEqual(
       ["openai", "html", "openai", "train", TAXONOMY_VERSION, "1", "0", "", "openai-gptbot", "0", "unsigned", "AI Crawler"],
     );
@@ -559,6 +559,6 @@ describe("network (v1.28.0)", () => {
   it("the aggregate query selects and groups blob13 as network", () => {
     const q = buildQuery("aggregate", 30);
     expect(q).toContain("blob13 AS network");
-    expect(q).toMatch(/GROUP BY[^F]*network, owner_identity, owner_agent, day/); // Traffic Lanes appended after network
+    expect(q).toMatch(/GROUP BY[^F]*network, owner_identity, owner_agent, vendor_verified, day/); // Traffic Lanes appended after network, then 1.6.0 vendor_verified
   });
 });

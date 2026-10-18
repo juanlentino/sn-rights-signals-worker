@@ -10,7 +10,7 @@ const entry = (id) => TAXONOMY.entries.find((e) => e.id === id);
 
 describe("cf_verified in the taxonomy data (1.5.0)", () => {
   it("is taxonomy 1.5.0 and documents the field", () => {
-    expect(TAXONOMY_VERSION).toBe("1.5.0");
+    expect(["1.5.0", "1.6.0"]).toContain(TAXONOMY_VERSION); // 1.6.0: see vendor-ranges.test.mjs
     expect(TAXONOMY.field_contract.cf_verified).toMatch(/verified-bots directory/);
   });
 
@@ -48,7 +48,7 @@ describe("withCfVerified stamps aggregate rows from their agent id", () => {
     const out = withCfVerified(rows);
     expect(out[0]).not.toBe(rows[0]);
     expect(rows[0].cf_verified).toBeUndefined();
-    expect(out[0]).toEqual({ agent: "openai-gptbot", hits: 1, cf_verified: "1" });
+    expect(out[0]).toEqual({ agent: "openai-gptbot", hits: 1, cf_verified: "1", home_network: "" });
   });
 });
 
@@ -60,7 +60,7 @@ describe("the aggregate read carries cf_verified; other views do not", () => {
   it("aggregate rows gain the field", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ agent: "anthropic-claudebot", verified_bot: "", network: "Google LLC", hits: 9 }], rows: 1 }))));
     const body = await (await read("days=14")).json();
-    expect(body.data[0]).toEqual({ agent: "anthropic-claudebot", verified_bot: "", network: "Google LLC", hits: 9, cf_verified: "1" });
+    expect(body.data[0]).toEqual({ agent: "anthropic-claudebot", verified_bot: "", network: "Google LLC", hits: 9, cf_verified: "1", home_network: "" });
   });
 
   it("the totals view passes through untouched", async () => {
