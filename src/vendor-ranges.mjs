@@ -69,8 +69,10 @@ async function refresh(url, now) {
   }
   let cidrs = null;
   try {
-    // Follow: this URL is the taxonomy's, never requester-chosen.
-    const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    // manual: the taxonomy stores each list's final URL, so any 3xx means the
+    // vendor moved it, which reads as a failed fetch ('') until the taxonomy
+    // is updated, never as a list from somewhere else.
+    const res = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     cidrs = res.ok ? parseRanges(await res.json()) : null;
   } catch {
     cidrs = null;

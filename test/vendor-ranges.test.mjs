@@ -113,7 +113,7 @@ describe("vendorVerified: '1' in range, '0' out of range, '' not measured", () =
   });
 
   it("a fetch failure, a non-200, junk JSON or an empty list all mean '' (fail closed), never '0'", async () => {
-    for (const bad of [() => Promise.reject(new Error("boom")), () => Promise.resolve(new Response("x", { status: 503 })), () => Promise.resolve(new Response("<html>")), () => Promise.resolve(new Response(JSON.stringify({ prefixes: [] })))]) {
+    for (const bad of [() => Promise.reject(new Error("boom")), () => Promise.resolve(new Response("x", { status: 503 })), () => Promise.resolve(new Response(null, { status: 302, headers: { location: "https://elsewhere.example/x.json" } })), () => Promise.resolve(new Response("<html>")), () => Promise.resolve(new Response(JSON.stringify({ prefixes: [] })))]) {
       _resetVendorRangesForTests();
       _setVendorRangesCacheForTests(memCache());
       vi.stubGlobal("fetch", vi.fn().mockImplementation(bad));
@@ -150,6 +150,7 @@ describe("vendorVerified: '1' in range, '0' out of range, '' not measured", () =
     expect(f).toHaveBeenCalledTimes(1);
     expect(f.mock.calls[0][0]).toBe("https://www.perplexity.ai/perplexitybot.json");
     expect(f.mock.calls[0][1].signal).toBeDefined();
+    expect(f.mock.calls[0][1].redirect).toBe("manual");
   });
 
   it("a fresh isolate reads the colo cache instead of fetching again", async () => {
