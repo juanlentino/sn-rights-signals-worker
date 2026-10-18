@@ -28,6 +28,7 @@ import {
   sanitizeUnknownUa,
   TAXONOMY_VERSION,
   TAXONOMY_EFFECTIVE_DATE,
+  withCfVerified,
 } from "./taxonomy.mjs";
 import { observeRightsSurfaceDetail } from "./machine-readers-rights-detail.mjs";
 import { prefersMarkdown } from "./accept-markdown.mjs";
@@ -678,7 +679,9 @@ export async function machineReadersResponse(request, env) {
       // `truncated` is read against the filtered rows it describes.
       ...(view === "rights" ? { filter: parsed.filter } : {}),
       truncated: (data.data || []).length >= limit,
-      data: data.data || [],
+      // 1.5.0: aggregate rows carry cf_verified, read from the taxonomy by
+      // agent id. The other views pass through untouched.
+      data: view === "aggregate" ? withCfVerified(data.data || []) : data.data || [],
     });
   } catch {
     return json(502, { error: "upstream" });

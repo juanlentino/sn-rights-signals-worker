@@ -1,7 +1,7 @@
 {
   "$comment": "The published cohort definition for the Machine Readers surface. DATA, not code — no switch statements anywhere. Served verbatim at https://juanlentino.com/_sn/rights-signals/taxonomy so any number derived from it can be checked against it. See docs/MACHINE-READERS.md in signal-and-noise-tools for the full contract.",
-  "taxonomy_version": "1.4.0",
-  "effective_date": "2026-10-11",
+  "taxonomy_version": "1.5.0",
+  "effective_date": "2026-10-18",
   "matching": {
     "algorithm": "ordered-substring-case-insensitive",
     "note": "Entries are tested in array order and the FIRST match wins, so specific tokens must precede the generic ones they contain (applebot-extended before applebot; googlebot-image before googlebot). Plain substring rather than regex on purpose: no escaping subtleties, no catastrophic backtracking on a hostile UA, and a reviewer can verify a match by eye. Tokens that risk matching inside an unrelated word carry their punctuation (curl/, axios/, java/)."
@@ -30,6 +30,7 @@
     "training_corpus_source": "true when content collected by this agent is known to feed AI training corpora, REGARDLESS of purpose. Keeps the dual role queryable without overloading purpose.",
     "observable": "false for tokens that never appear in a request (robots.txt control tokens). Any observed hit on these is spoofed or synthetic.",
     "no_user_agent": "true when the vendor documents the token as a robots.txt control token with no HTTP user agent of its own (taxonomy 1.4.0). The vendor never sends it, so a request presenting it is impersonation, and a reader should count the hit under this entry's id as never the vendor. Present only with observable false; the sensor records the entry id as agent.",
+    "cf_verified": "true when the agent is listed in Cloudflare's public verified-bots directory (Radar bots directory; taxonomy 1.5.0), so Cloudflare sets its verified-bot category on a genuine request from it. A hit claiming this agent that Cloudflare did NOT verify, on a day the sensor recorded verification, is an impostor: counted, never credited. Absent reads as false, and false never reclassifies a hit. Never on an entry with observable false. The read path stamps it on every aggregate row from the row's agent id.",
     "note": "Present only where the call is contested or the vendor's declaration is internally mixed.",
     "first_party": "true when the request comes from this site's own tooling. Self-traffic is not readership and headline totals exclude it. Identified from Workers Logs, not guessed."
   },
@@ -107,7 +108,8 @@
       "purpose": "train",
       "source": "https://developers.openai.com/api/docs/bots",
       "declared": true,
-      "training_corpus_source": true
+      "training_corpus_source": true,
+      "cf_verified": true
     },
     {
       "id": "openai-searchbot",
@@ -117,6 +119,7 @@
       "source": "https://developers.openai.com/api/docs/bots",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "OpenAI: 'used to surface websites in search results in ChatGPT's search features'. Distinct from GPTBot and NOT a training crawler."
     },
     {
@@ -127,6 +130,7 @@
       "source": "https://developers.openai.com/api/docs/bots",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "User-directed. OpenAI states robots.txt training rules may not apply because a person asked for this specific fetch. MUST NOT be counted as train."
     },
     {
@@ -137,6 +141,7 @@
       "source": "https://developers.openai.com/api/docs/bots",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "OpenAI: validates 'the safety of web pages submitted as ads on ChatGPT', and explicitly does not train generative models. Filed under the 'ads' purpose added in taxonomy 1.1.0 rather than stretched into 'security', which would have implied a scanner."
     },
     {
@@ -146,7 +151,8 @@
       "purpose": "train",
       "source": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
       "declared": true,
-      "training_corpus_source": true
+      "training_corpus_source": true,
+      "cf_verified": true
     },
     {
       "id": "anthropic-searchbot",
@@ -156,6 +162,7 @@
       "source": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "Anthropic: 'navigates the web to improve search result quality for users'. Falls to family other-bot under the frozen v1.4.0 family regex, which never matched this token — the vendor axis is what makes it visible."
     },
     {
@@ -166,6 +173,7 @@
       "source": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "User-directed. MUST NOT be counted as train."
     },
     {
@@ -198,6 +206,7 @@
       "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "CONTESTED FILING. Google: 'crawls requested by site owners for building Vertex AI Agents'. Filed retrieval because it builds grounding corpora that serve AI answers rather than foundation-model weights; a reasonable reader could argue train."
     },
     {
@@ -208,6 +217,7 @@
       "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "Search Console's Rich Result Test and URL inspection — owner-triggered SEO tooling, not a crawl."
     },
     {
@@ -217,7 +227,8 @@
       "purpose": "search",
       "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "google-other-image",
@@ -226,7 +237,8 @@
       "purpose": "unknown",
       "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "google-other-video",
@@ -235,7 +247,8 @@
       "purpose": "unknown",
       "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "google-other",
@@ -245,6 +258,7 @@
       "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "CORRECTS A LIVE OVER-COUNT. Google documents GoogleOther as a 'generic crawler that may be used by various product teams for fetching publicly accessible content' — it is not AI-specific. The frozen family regex files it as google-ai, which sits inside the published AI-training set, so generic Google fetches are currently reported as AI-training reads. family is frozen and stays wrong; purpose is what should be read. Re-checked for taxonomy 1.4.0 (2026-10-11, https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers): Google adds that it may be used for one-off crawls for internal research and development, and that its robots.txt rules affect no specific product. No value in purpose_vocabulary names generic product-team or research fetching, and unknown is defined to cover a documented agent whose declared purpose has no home here, so purpose stays unknown."
     },
     {
@@ -254,7 +268,8 @@
       "purpose": "search",
       "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "google-bot-video",
@@ -263,7 +278,8 @@
       "purpose": "search",
       "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "google-bot-news",
@@ -281,7 +297,8 @@
       "purpose": "search",
       "source": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "perplexity-user",
@@ -323,6 +340,7 @@
       "source": "https://support.apple.com/en-us/119829",
       "declared": true,
       "training_corpus_source": true,
+      "cf_verified": true,
       "note": "The only Apple agent that actually fetches. training_corpus_source is true because Applebot-Extended governs the training use of exactly this agent's collection."
     },
     {
@@ -333,6 +351,7 @@
       "source": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
       "declared": true,
       "training_corpus_source": true,
+      "cf_verified": true,
       "note": "Meta declares a mixed function: 'training foundation AI models or improving products by indexing content directly'. Filed train because training is named first and is the reason the rights surfaces exist."
     },
     {
@@ -343,6 +362,7 @@
       "source": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "Meta: 'helping AI navigate websites to complete tasks for users' — agent-initiated grounding, not corpus collection."
     },
     {
@@ -353,6 +373,7 @@
       "source": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "Improves Meta AI search results. Invisible to the frozen family classifier, which returns null for this token — recorded only under the additive unclassified-machine family."
     },
     {
@@ -363,6 +384,7 @@
       "source": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "Meta's advertising and business products. Same class as OAI-AdsBot; see the 'ads' purpose."
     },
     {
@@ -373,6 +395,7 @@
       "source": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "Link unfurler: fetches 'title, description, and thumbnail image' for content shared into Meta apps. Returns null from the frozen family classifier (no bot/crawler/spider substring), so it has never been recorded at all."
     },
     {
@@ -393,6 +416,7 @@
       "source": "https://developer.amazon.com/amazonbot",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "FOUND BY THE UNKNOWN-AGENT REVIEW, 40 minutes after the sensor went live , the first thing RULE 2 surfaced. Amazon: 'used to improve search experiences in Amazon products and services', eligible to appear in surfaces such as Alexa, and explicitly does NOT train generative models. The frozen /amazonbot/i family does not match this token, so it lands in other-bot; the vendor axis is what makes it visible."
     },
     {
@@ -413,6 +437,7 @@
       "source": "https://developer.amazon.com/amazonbot",
       "declared": true,
       "training_corpus_source": true,
+      "cf_verified": true,
       "note": "RECLASSIFIED in taxonomy 1.2.0, on evidence found by the RULE 2 unknown-agent review. Amazon documents THREE agents on one page: Amazonbot, Amzn-SearchBot and Amzn-User. The v1.0.0 filing of `search` rested on Amazon leading with 'improve our products and services' while hedging training as 'may be used'. That reading does not survive a dedicated Amzn-SearchBot existing: with search and user-directed fetching carved into their own agents, the only AI purpose Amazonbot still declares is model training. Filing it `search` would double-book a purpose Amazon assigns elsewhere and hide the training signal, which is the one the rights claim turns on."
     },
     {
@@ -442,6 +467,7 @@
       "source": "https://docs.mistral.ai/robots/",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "CORRECTS A LIVE OVER-COUNT. Mistral: 'indexing purposes only', explicitly 'not used for generative AI training'. The frozen family regex /mistralai/i files all three Mistral agents as the mistral family, which sits inside the published AI-training set."
     },
     {
@@ -452,6 +478,7 @@
       "source": "https://docs.mistral.ai/robots/",
       "declared": true,
       "training_corpus_source": false,
+      "cf_verified": true,
       "note": "User-directed; Mistral states it is not used for generative AI training. Same over-count as mistralai-index."
     },
     {
@@ -501,7 +528,8 @@
       "purpose": "retrieval",
       "source": null,
       "declared": false,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "microsoft-bingbot",
@@ -510,7 +538,8 @@
       "purpose": "search",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "duckduckgo",
@@ -519,7 +548,8 @@
       "purpose": "search",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "yandex",
@@ -528,7 +558,8 @@
       "purpose": "search",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "baidu",
@@ -537,7 +568,8 @@
       "purpose": "search",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "seznam",
@@ -546,7 +578,8 @@
       "purpose": "search",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "you-com",
@@ -555,7 +588,8 @@
       "purpose": "search",
       "source": null,
       "declared": false,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "seo-ahrefs",
@@ -564,7 +598,8 @@
       "purpose": "seo",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "seo-semrush",
@@ -573,7 +608,8 @@
       "purpose": "seo",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "seo-majestic",
@@ -582,7 +618,8 @@
       "purpose": "seo",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "seo-moz",
@@ -591,7 +628,8 @@
       "purpose": "seo",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "seo-petal",
@@ -600,7 +638,8 @@
       "purpose": "seo",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "feed-feedly",
@@ -609,7 +648,8 @@
       "purpose": "feed",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "feed-feedbin",
@@ -618,7 +658,8 @@
       "purpose": "feed",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "feed-inoreader",
@@ -627,7 +668,8 @@
       "purpose": "feed",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "feed-newsblur",
@@ -636,7 +678,8 @@
       "purpose": "feed",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "feed-feedfetcher",
@@ -645,7 +688,8 @@
       "purpose": "feed",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "feed-miniflux",
@@ -721,7 +765,8 @@
       "purpose": "ops",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "ops-uptimekuma",
@@ -739,7 +784,8 @@
       "purpose": "ops",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "ops-statuscake",
@@ -748,7 +794,8 @@
       "purpose": "ops",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "ops-cf-healthcheck",
@@ -757,7 +804,8 @@
       "purpose": "ops",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "archive-org",
@@ -766,7 +814,8 @@
       "purpose": "archive",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "archive-ia",
@@ -802,7 +851,8 @@
       "purpose": "social",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "social-discord",
@@ -811,7 +861,8 @@
       "purpose": "social",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "social-twitter",
@@ -820,7 +871,8 @@
       "purpose": "social",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "social-linkedin",
@@ -829,7 +881,8 @@
       "purpose": "social",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "social-telegram",
@@ -838,7 +891,8 @@
       "purpose": "social",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "social-whatsapp",
@@ -874,7 +928,8 @@
       "purpose": "social",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "social-embedly",
@@ -883,7 +938,8 @@
       "purpose": "social",
       "source": null,
       "declared": true,
-      "training_corpus_source": false
+      "training_corpus_source": false,
+      "cf_verified": true
     },
     {
       "id": "security-censys",
