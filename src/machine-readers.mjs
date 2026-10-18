@@ -1,3 +1,4 @@
+import { vendorVerified } from "./vendor-ranges.mjs";
 import { readSqlJson } from "./sql-response.mjs";
 // Machine-readership sensor (v1.4.0) — the edge half of the plugin's v10.0.0
 // Machine Readers surface. AI crawlers do not execute JavaScript, so the
@@ -315,6 +316,12 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
         // Codes only: the header value is never stored.
         String(identity),
         String(identity === 2 ? owner.agent : 0),
+        // Taxonomy 1.6.0: blob16 vendor_verified, the client IP checked
+        // against the vendor's own published ranges (vendor-ranges.mjs): '1'
+        // in range, '0' list read and out of range, '' not measured or no
+        // list for this agent. The answer only; the IP is never stored.
+        // APPENDED like blob11-15; old rows carry "" and read as NOT MEASURED.
+        vendorVerified(request, vp?.id),
       ],
       doubles: [1],
       // Still exactly one index: Analytics Engine permits one per data point,
@@ -543,11 +550,13 @@ export function buildQuery(view, days, filter = {}) {
     // plugin can derive machine-side lanes. Named owner_* because `agent` is
     // already blob9. Additive: rows split further, their hits still sum the same.
     "blob14 AS owner_identity, blob15 AS owner_agent, " +
+    // Taxonomy 1.6.0: blob16, checked against the vendor's published ranges.
+    "blob16 AS vendor_verified, " +
     "toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
     "FROM sn_machine_readers " +
     since +
     "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, " +
-    `first_party, agent, markdown_requested, signed_agent, verified_bot, network, owner_identity, owner_agent, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
+    `first_party, agent, markdown_requested, signed_agent, verified_bot, network, owner_identity, owner_agent, vendor_verified, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
   );
 }
 

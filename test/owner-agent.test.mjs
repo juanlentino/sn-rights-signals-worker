@@ -173,9 +173,9 @@ describe("sn_machine_readers: blob14 identity, blob15 agent (append only)", () =
     await worker.fetch(r, env, {});
     expect(agg).toHaveLength(1);
     const blobs = agg[0].blobs;
-    expect(blobs).toHaveLength(15);
+    expect(blobs).toHaveLength(16); // 1.6.0 appended blob16
     expect(blobs.slice(0, 13)).toEqual(["other-bot", "llms", blobs[2], blobs[3], blobs[4], blobs[5], "1", "", "dev-curl", "0", "unsigned", "", "Charter Communications, Inc"]);
-    expect(blobs.slice(13)).toEqual(["2", "3"]);
+    expect(blobs.slice(13, 15)).toEqual(["2", "3"]);
     expect(agg[0].doubles).toEqual([1]);
     expect(agg[0].indexes).toEqual(["other-bot"]);
   });
@@ -184,11 +184,11 @@ describe("sn_machine_readers: blob14 identity, blob15 agent (append only)", () =
     const { agg, env } = harness();
     await worker.fetch(req("/llms.txt", { "user-agent": CURL }), env, {});
     await worker.fetch(req("/llms.txt", { "user-agent": CURL, [OWNER_AGENT_HEADER]: await sign("script", now() + 60) }), env, {});
-    expect(agg[0].blobs.slice(13)).toEqual(["0", "0"]);
+    expect(agg[0].blobs.slice(13, 15)).toEqual(["0", "0"]);
     expect(agg[0].blobs[6]).toBe("0");
     expect(agg[1].blobs[6]).toBe("1");
     expect([...agg[1].blobs.slice(0, 6), "0", ...agg[1].blobs.slice(7, 13)]).toEqual(agg[0].blobs.slice(0, 13));
-    expect(agg[1].blobs.slice(13)).toEqual(["2", "5"]);
+    expect(agg[1].blobs.slice(13, 15)).toEqual(["2", "5"]);
   });
 
   it("a junk header on a taxonomy-matched UA writes the normal row, blob14=3, nothing else changed", async () => {
@@ -197,7 +197,7 @@ describe("sn_machine_readers: blob14 identity, blob15 agent (append only)", () =
     await worker.fetch(req("/llms.txt", { "user-agent": CURL, [OWNER_AGENT_HEADER]: "v1.claude-code.1.AAAA" }), env, {});
     expect(agg).toHaveLength(2);
     expect(agg[1].blobs.slice(0, 13)).toEqual(agg[0].blobs.slice(0, 13));
-    expect(agg[1].blobs.slice(13)).toEqual(["3", "0"]);
+    expect(agg[1].blobs.slice(13, 15)).toEqual(["3", "0"]);
     expect(getInvalidTokenCount()).toBe(1);
   });
 
@@ -205,7 +205,7 @@ describe("sn_machine_readers: blob14 identity, blob15 agent (append only)", () =
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const { agg, env } = harness({ SN_OWNER_KEY: undefined });
     await worker.fetch(req("/llms.txt", { "user-agent": CURL, [OWNER_AGENT_HEADER]: VECTOR }), env, {});
-    expect(agg[0].blobs.slice(13)).toEqual(["0", "0"]);
+    expect(agg[0].blobs.slice(13, 15)).toEqual(["0", "0"]);
   });
 });
 
@@ -225,7 +225,7 @@ describe("no force-record (review round 2): a token never creates a row", () => 
     await worker.fetch(req("/wp-content/x.png", { "user-agent": CURL, [OWNER_AGENT_HEADER]: "forged" }), env, {});
     expect(agg).toHaveLength(1);
     expect(agg[0].blobs[6]).toBe("0");
-    expect(agg[0].blobs.slice(13)).toEqual(["3", "0"]);
+    expect(agg[0].blobs.slice(13, 15)).toEqual(["3", "0"]);
   });
 
   it("code 2 with a browser user agent writes no row on a page either", async () => {
@@ -246,7 +246,7 @@ describe("no force-record (review round 2): a token never creates a row", () => 
     const { agg, env } = harness();
     await worker.fetch(req("/wp-content/x.png", { "user-agent": CURL, [OWNER_AGENT_HEADER]: await sign("script", now() + 600) }), env, {});
     expect(agg).toHaveLength(1);
-    expect(agg[0].blobs.slice(13)).toEqual(["2", "5"]);
+    expect(agg[0].blobs.slice(13, 15)).toEqual(["2", "5"]);
   });
 
   it("no header, browser user agent: not recorded, as today", async () => {
@@ -278,7 +278,7 @@ describe("rights detail stream: a valid token stays out, an invalid one stays in
     await worker.fetch(req("/license.xml", { "user-agent": CURL, [OWNER_AGENT_HEADER]: "forged" }), env, {});
     await worker.fetch(req("/license.xml", { "user-agent": CURL }), env, {});
     expect(agg).toHaveLength(3);
-    expect(agg[1].blobs.slice(13)).toEqual(["3", "0"]);
+    expect(agg[1].blobs.slice(13, 15)).toEqual(["3", "0"]);
     expect(detail).toHaveLength(2);
   });
 });
@@ -345,9 +345,9 @@ describe("read endpoint: the aggregate view carries owner_identity and owner_age
 
   it("aggregate: blob14 AS owner_identity and blob15 AS owner_agent, selected and grouped, appended after network", () => {
     expect(buildQuery("aggregate", 30)).toBe(
-      "SELECT blob1 AS family, blob2 AS surface, blob3 AS vendor, blob4 AS purpose, blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, blob9 AS agent, blob10 AS markdown_requested, blob11 AS signed_agent, blob12 AS verified_bot, blob13 AS network, blob14 AS owner_identity, blob15 AS owner_agent, toDate(timestamp) AS day, sum(_sample_interval) AS hits FROM sn_machine_readers " +
+      "SELECT blob1 AS family, blob2 AS surface, blob3 AS vendor, blob4 AS purpose, blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, blob9 AS agent, blob10 AS markdown_requested, blob11 AS signed_agent, blob12 AS verified_bot, blob13 AS network, blob14 AS owner_identity, blob15 AS owner_agent, blob16 AS vendor_verified, toDate(timestamp) AS day, sum(_sample_interval) AS hits FROM sn_machine_readers " +
         SINCE +
-        "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, first_party, agent, markdown_requested, signed_agent, verified_bot, network, owner_identity, owner_agent, day ORDER BY day ASC LIMIT 10000 FORMAT JSON",
+        "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, first_party, agent, markdown_requested, signed_agent, verified_bot, network, owner_identity, owner_agent, vendor_verified, day ORDER BY day ASC LIMIT 10000 FORMAT JSON",
     );
   });
 

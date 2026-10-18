@@ -9,8 +9,9 @@ import { TDM_RESERVATION_HEADERS, LICENSE_LINK_HEADER } from "./constants.mjs";
 import { versionResponse } from "./version.mjs";
 import { bypassesRightsSignals } from "./admin-bypass.mjs";
 import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawler-list-status.mjs";
+import { ensureVendorRanges } from "./vendor-ranges.mjs";
 import { FIRST_PARTY_HEADER, firstPartyByHeader, machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
-import { taxonomyResponse } from "./taxonomy.mjs";
+import { classifyVendorPurpose, taxonomyResponse } from "./taxonomy.mjs";
 import { best, parseAccept, prefersMarkdown } from "./accept-markdown.mjs";
 import { hasWebBotAuthHeaders, resolveSignatureState, signatureAgentOrigin } from "./web-bot-auth.mjs";
 import { licenceOfferHeaders } from "./licence-handshake.mjs";
@@ -120,6 +121,10 @@ export default {
       // Traffic Lanes: same rule, only a request carrying SN-Owner-Agent pays
       // the HMAC verify. null for everyone else, so they observe as before.
       const owner = request.headers.has(OWNER_AGENT_HEADER) ? await verifyOwnerAgent(request, env) : null;
+      // Taxonomy 1.6.0: an agent whose vendor publishes IP ranges schedules a
+      // (daily, background) refresh of that list. Never awaited: observe reads
+      // only what is already loaded, and an unloaded list records ''.
+      ensureVendorRanges(ctx, classifyVendorPurpose(request.headers.get("user-agent"))?.id);
       // TWO PATHS ON PURPOSE (v1.19.0). An unsigned request observes exactly as
       // it did before this feature existed: synchronous, no await, nothing
       // scheduled. A signed one defers the WHOLE observation, because

@@ -334,6 +334,7 @@ matches and the frozen enum does not is stored under the family
 | 13 | network (v1.28.0) | `cf.asOrganization`, 128 characters at most; empty when Cloudflare supplies none |
 | 14 | owner identity (Traffic Lanes) | `2` valid `SN-Owner-Agent` token, `3` token present but invalid or expired, `0` otherwise (no header, or no key configured) |
 | 15 | owner agent (Traffic Lanes) | the token's agent code when blob 14 is `2`: `1` browser, `2` chrome-extension, `3` claude-code, `4` playwright, `5` script, `6` mcp-local, `7` other; `0` otherwise |
+| 16 | vendor verified (taxonomy 1.6.0) | the client IP checked against the vendor's own published IP ranges, for an agent whose entry has `ip_ranges_url` (PerplexityBot, Perplexity-User, CCBot): `1` in range, `0` the list was read and the IP is outside it, empty when not measured (no list for the agent, or the list could not be read). Only the answer is stored, never the IP |
 
 Double 1 is the count (always 1) and index 1 is the family. The layout is
 append-only: blob order is the read query's contract, and a row written before
@@ -344,6 +345,18 @@ which is not a blob: it is looked up from the taxonomy by the row's agent id at
 read time, so every row has it, old rows included. `1` means Cloudflare's
 verified-bots directory lists the agent, so a hit claiming it that Cloudflare
 did not verify is an impostor. `0` claims nothing.
+
+Taxonomy 1.6.0 adds `home_network` the same way: `1` when the row's network
+contains one of the agent's `home_networks` (lowercase substrings of
+`cf.asOrganization`: `amazon` for PerplexityBot, Perplexity-User and CCBot;
+`bytedance`, `tiktok`, `byteplus` for Bytespider), `0` when it contains none,
+empty when the agent has no list or the network was not measured. Empty never
+reclassifies a hit.
+
+The vendor lists are fetched in the background at most once a day per list
+(`ctx.waitUntil`, 3 second timeout, kept in the colo Cache API), and only once
+a request claiming that agent arrives. A fetch that fails leaves blob 16 empty:
+it fails closed to not measured, never to `0`.
 
 For a recognized agent nothing but the fields above is stored: enum values plus blob 13, a free-form network name truncated to 128 characters. Rights-surface
 reads (`/.well-known/tdmrep.json`, `/license.xml`, `/tdm-policy/`) are also

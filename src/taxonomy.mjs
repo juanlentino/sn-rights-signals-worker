@@ -13,6 +13,7 @@
 // counted since v1.4.0) while gaining vendor=anthropic, purpose=search.
 
 import TAXONOMY from "./machine-reader-taxonomy.json";
+import { homeNetworkFlag, validateEvidenceFields } from "./taxonomy-evidence.mjs";
 
 export const PURPOSES = Object.freeze(Object.keys(TAXONOMY.purpose_vocabulary));
 
@@ -50,6 +51,7 @@ export function validateEntries(entries) {
       if (typeof e.cf_verified !== "boolean") throw new Error(`taxonomy: cf_verified must be a boolean (${e.id})`);
       if (e.cf_verified && e.observable === false) throw new Error(`taxonomy: cf_verified cannot sit beside observable: false (${e.id})`);
     }
+    validateEvidenceFields(e); // 1.6.0: ip_ranges_url, home_networks
     for (let j = i + 1; j < entries.length; j++) {
       if (entries[j].match.includes(e.match)) {
         throw new Error(`taxonomy: "${e.id}" (${e.match}) shadows later "${entries[j].id}" (${entries[j].match}) — reorder`);
@@ -65,17 +67,31 @@ export const TAXONOMY_VERSION = TAXONOMY.taxonomy_version;
 
 const CF_VERIFIED_IDS = new Set(ENTRIES.filter((e) => e.cf_verified === true).map((e) => e.id));
 
+const HOME_NETWORKS = new Map(ENTRIES.filter((e) => e.home_networks).map((e) => [e.id, e.home_networks]));
+const IP_RANGES_URLS = new Map(ENTRIES.filter((e) => e.ip_ranges_url).map((e) => [e.id, e.ip_ranges_url]));
+
+/** 1.6.0: the vendor's published IP-range list for an agent id, or null. */
+export function ipRangesUrlFor(id) {
+  return IP_RANGES_URLS.get(String(id ?? "")) ?? null;
+}
+
 /**
- * 1.5.0: stamp each aggregate row with `cf_verified` ("1"/"0", the blob
- * booleans' encoding) from its agent id, at READ time, so rows written before
- * the field existed carry it too. A row with no agent, or an id the taxonomy
- * does not mark, reads "0". Returns new rows; the input is not modified.
+ * Stamp each aggregate row at READ time from its agent id, so rows written
+ * before a field existed carry it too. Returns new rows; the input is not
+ * modified.
+ *   cf_verified  (1.5.0) "1"/"0": Cloudflare's directory lists the agent.
+ *   home_network (1.6.0) "1"/"0"/"": the row's network is one of the agent's
+ *                home_networks / is none of them / not applicable or not
+ *                measured. "" never reclassifies a hit.
  *
  * @param {Array<object>} rows Aggregate rows.
  * @returns {Array<object>}
  */
 export function withCfVerified(rows) {
-  return rows.map((r) => ({ ...r, cf_verified: CF_VERIFIED_IDS.has(String(r?.agent ?? "")) ? "1" : "0" }));
+  return rows.map((r) => {
+    const id = String(r?.agent ?? "");
+    return { ...r, cf_verified: CF_VERIFIED_IDS.has(id) ? "1" : "0", home_network: homeNetworkFlag(HOME_NETWORKS.get(id), r?.network) };
+  });
 }
 export const TAXONOMY_EFFECTIVE_DATE = TAXONOMY.effective_date;
 

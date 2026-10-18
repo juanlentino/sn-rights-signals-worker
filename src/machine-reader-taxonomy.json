@@ -1,6 +1,6 @@
 {
   "$comment": "The published cohort definition for the Machine Readers surface. DATA, not code — no switch statements anywhere. Served verbatim at https://juanlentino.com/_sn/rights-signals/taxonomy so any number derived from it can be checked against it. See docs/MACHINE-READERS.md in signal-and-noise-tools for the full contract.",
-  "taxonomy_version": "1.5.0",
+  "taxonomy_version": "1.6.0",
   "effective_date": "2026-10-18",
   "matching": {
     "algorithm": "ordered-substring-case-insensitive",
@@ -31,6 +31,8 @@
     "observable": "false for tokens that never appear in a request (robots.txt control tokens). Any observed hit on these is spoofed or synthetic.",
     "no_user_agent": "true when the vendor documents the token as a robots.txt control token with no HTTP user agent of its own (taxonomy 1.4.0). The vendor never sends it, so a request presenting it is impersonation, and a reader should count the hit under this entry's id as never the vendor. Present only with observable false; the sensor records the entry id as agent.",
     "cf_verified": "true when the agent is listed in Cloudflare's public verified-bots directory (Radar bots directory; taxonomy 1.5.0), so Cloudflare sets its verified-bot category on a genuine request from it. A hit claiming this agent that Cloudflare did NOT verify, on a day the sensor recorded verification, is an impostor: counted, never credited. Absent reads as false, and false never reclassifies a hit. Never on an entry with observable false. The read path stamps it on every aggregate row from the row's agent id.",
+    "ip_ranges_url": "The vendor's own published list of the IP ranges its crawler uses (taxonomy 1.6.0), fetched at most daily. The sensor checks the client IP of a request claiming this agent against it and records only the answer as vendor_verified (blob16): '1' in range, '0' list read and out of range, '' not measured. An out-of-range IP alone is not an impostor (vendor lists are incomplete); a reader needs a second signal. No IP is stored.",
+    "home_networks": "Lowercase substrings of cf.asOrganization the vendor's crawler is known to run from (taxonomy 1.6.0). The read path stamps home_network on each aggregate row: '1' the row's network matches one, '0' it matches none, '' the agent has no list or the network was not measured. Off a home network AND unverified reads as an impostor to the plugin; '' never reclassifies.",
     "note": "Present only where the call is contested or the vendor's declaration is internally mixed.",
     "first_party": "true when the request comes from this site's own tooling. Self-traffic is not readership and headline totals exclude it. Identified from Workers Logs, not guessed."
   },
@@ -307,6 +309,8 @@
       "purpose": "user",
       "source": "https://docs.perplexity.ai/guides/bots",
       "declared": true,
+      "ip_ranges_url": "https://www.perplexity.ai/perplexity-user.json",
+      "home_networks": ["amazon"],
       "training_corpus_source": false,
       "note": "Perplexity: 'not used for web crawling or to collect content for training AI foundation models'."
     },
@@ -317,6 +321,8 @@
       "purpose": "search",
       "source": "https://docs.perplexity.ai/guides/bots",
       "declared": true,
+      "ip_ranges_url": "https://www.perplexity.ai/perplexitybot.json",
+      "home_networks": ["amazon"],
       "training_corpus_source": false,
       "note": "Perplexity: 'designed to surface and link websites in search results', and 'not used to crawl content for AI foundation models'."
     },
@@ -405,6 +411,8 @@
       "purpose": "archive",
       "source": "https://commoncrawl.org/ccbot",
       "declared": true,
+      "ip_ranges_url": "https://index.commoncrawl.org/ccbot.json",
+      "home_networks": ["amazon"],
       "training_corpus_source": true,
       "note": "DECIDED: archive. Common Crawl's own declaration is 'an open repository of web crawl data that is universally accessible and analyzable by anyone' — archiving, with no claim to train models. Its role as one of the largest AI training corpora is real but is a downstream fact about consumers, not the operator's declared purpose, so it rides training_corpus_source rather than overloading purpose. Filing it train would attribute to Common Crawl an intent it does not state; filing it archive alone would hide the dual role. This is the case the boolean exists for."
     },
@@ -447,6 +455,7 @@
       "purpose": "train",
       "source": null,
       "declared": false,
+      "home_networks": ["bytedance", "tiktok", "byteplus"],
       "training_corpus_source": true,
       "note": "NO FIRST-PARTY DECLARATION EXISTS. ByteDance publishes no crawler page comparable to OpenAI's or Anthropic's; the training purpose rests on third-party reporting only. declared=false is the honest record of that, and this surface must not present an inference as a declaration."
     },
