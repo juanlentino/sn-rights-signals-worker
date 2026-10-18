@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.23.0",
-    "vitest": "^5.0.3",
+    "vitest": "^4.1.9",
     "wrangler": "^4.149.0"
   },
   "overrides": {
@@ -24,6 +24,6 @@
   },
   "dependencies": {
     "jsonwebkey-thumbprint": "0.1.0",
-    "web-bot-auth": "0.2.0"
+    "web-bot-auth": "0.1.3"
   }
 }
