@@ -339,6 +339,12 @@ Double 1 is the count (always 1) and index 1 is the family. The layout is
 append-only: blob order is the read query's contract, and a row written before
 a blob existed reads as an empty string, which means not measured.
 
+The aggregate read also carries `cf_verified` (`1` or `0`, taxonomy 1.5.0),
+which is not a blob: it is looked up from the taxonomy by the row's agent id at
+read time, so every row has it, old rows included. `1` means Cloudflare's
+verified-bots directory lists the agent, so a hit claiming it that Cloudflare
+did not verify is an impostor. `0` claims nothing.
+
 For a recognized agent nothing but the fields above is stored: enum values plus blob 13, a free-form network name truncated to 128 characters. Rights-surface
 reads (`/.well-known/tdmrep.json`, `/license.xml`, `/tdm-policy/`) are also
 written in full to a second dataset, **`sn_machine_readers_rights`** (binding

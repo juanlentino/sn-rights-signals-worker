@@ -43,6 +43,13 @@ export function validateEntries(entries) {
         throw new Error(`taxonomy: no_user_agent requires observable: false (${e.id})`);
       }
     }
+    // 1.5.0: Cloudflare verifies this agent when genuine. A boolean when
+    // present, and never on a control token: no genuine request presents one,
+    // so there is nothing for Cloudflare to verify.
+    if (e.cf_verified !== undefined) {
+      if (typeof e.cf_verified !== "boolean") throw new Error(`taxonomy: cf_verified must be a boolean (${e.id})`);
+      if (e.cf_verified && e.observable === false) throw new Error(`taxonomy: cf_verified cannot sit beside observable: false (${e.id})`);
+    }
     for (let j = i + 1; j < entries.length; j++) {
       if (entries[j].match.includes(e.match)) {
         throw new Error(`taxonomy: "${e.id}" (${e.match}) shadows later "${entries[j].id}" (${entries[j].match}) — reorder`);
@@ -55,6 +62,21 @@ export function validateEntries(entries) {
 const ENTRIES = Object.freeze(validateEntries(TAXONOMY.entries));
 
 export const TAXONOMY_VERSION = TAXONOMY.taxonomy_version;
+
+const CF_VERIFIED_IDS = new Set(ENTRIES.filter((e) => e.cf_verified === true).map((e) => e.id));
+
+/**
+ * 1.5.0: stamp each aggregate row with `cf_verified` ("1"/"0", the blob
+ * booleans' encoding) from its agent id, at READ time, so rows written before
+ * the field existed carry it too. A row with no agent, or an id the taxonomy
+ * does not mark, reads "0". Returns new rows; the input is not modified.
+ *
+ * @param {Array<object>} rows Aggregate rows.
+ * @returns {Array<object>}
+ */
+export function withCfVerified(rows) {
+  return rows.map((r) => ({ ...r, cf_verified: CF_VERIFIED_IDS.has(String(r?.agent ?? "")) ? "1" : "0" }));
+}
 export const TAXONOMY_EFFECTIVE_DATE = TAXONOMY.effective_date;
 
 /**
