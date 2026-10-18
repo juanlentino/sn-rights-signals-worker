@@ -12,7 +12,7 @@
     "check:live": "node scripts/check-rights-signals.mjs"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.23.0",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "vitest": "^4.1.9",
     "wrangler": "^4.149.0"
   },
