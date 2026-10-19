@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.36.0 - 2026-10-19
 
 ### Changed
 - CI: the dependency-provenance, dependency cooldown and outbound redirect gates now run from one canonical copy, the `juanlentino/gha` worker-gates composite action, still as steps inside the one test job. `scripts/attestation-gate.mjs`, `scripts/dependency-cooldown.mjs` and `scripts/outbound-redirect-gate.mjs` are removed; this repo's outbound floors are now action inputs. The attestation gate gains the #31 fix: drift is judged per `name@version`, so an unattested older copy of a package can no longer hide behind an attested newer one.
