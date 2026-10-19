@@ -100,6 +100,33 @@ export function classifyMachineReader(ua) {
   return null;
 }
 
+// The résumé format files, EXACT paths (the PDF by its own directory), and the
+// format each one is. Page reads of /resume/ and /cv/ are "html", or "md" when
+// they ask for Markdown; see resumeFormat().
+const RESUME_FORMATS = Object.freeze({
+  "/resume.md": "md", "/cv.md": "md",
+  "/resume/json-resume.json": "json", "/cv/json-resume.json": "json",
+  "/resume/contact.vcf": "vcf",
+  "/resume.json": "twin", "/cv.json": "twin",
+});
+const RESUME_PDF = /^\/wp-content\/uploads\/resume\/[^/]+\.pdf$/i;
+const RESUME_PAGE = /^\/(resume|cv)\/?$/;
+
+/**
+ * blob17: which résumé format a read took, '' for anything not the résumé.
+ * md | json | vcf | pdf | twin for the files; html or md for the pages.
+ */
+export function resumeFormat(request, pathname) {
+  const p = String(pathname || "/");
+  if (RESUME_FORMATS[p]) return RESUME_FORMATS[p];
+  if (RESUME_PDF.test(p)) return "pdf";
+  if (!RESUME_PAGE.test(p)) return "";
+  const wantsMd =
+    prefersMarkdown(request.headers.get("accept")) ||
+    new URL(request.url).searchParams.get("output_format") === "markdown";
+  return wantsMd ? "md" : "html";
+}
+
 /** Fixed surface-class enum — coarse on purpose (no full paths stored). */
 export function classifySurface(pathname) {
   const p = String(pathname || "/");
@@ -141,6 +168,13 @@ export function classifySurface(pathname) {
     return "agent-discovery";
   }
   if (p.startsWith("/.well-known/")) return "well-known";
+  // Résumé formats: the résumé's machine formats. Same reasoning as agent-discovery:
+  // "which crawlers read the résumé, and in which format?" had no answer while
+  // these sat in "html" and "asset". What moves: the /resume.json and /cv.json
+  // page twins leave "html", the résumé PDF leaves "asset"; the other files
+  // were new with this class. The HTML pages /resume/ and /cv/ stay "html",
+  // so a Markdown read negotiated on them is not drained (blob17 names it).
+  if (RESUME_FORMATS[p] || RESUME_PDF.test(p)) return "resume";
   if (p === "/feed" || p === "/feed/" || p.startsWith("/feed/") || p.endsWith("/feed/")) return "feed";
   if (p === "/wp-json" || p.startsWith("/wp-json/")) return "wp-json";
   // The sitemap FILES, not any path mentioning the word: a note about
@@ -322,6 +356,9 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
         // list for this agent. The answer only; the IP is never stored.
         // APPENDED like blob11-15; old rows carry "" and read as NOT MEASURED.
         vendorVerified(request, vp?.id),
+        // Résumé formats: blob17 resume_format (see resumeFormat()). APPENDED like
+        // blob11-16; old rows carry "" and read as not a résumé read.
+        resumeFormat(request, pathname),
       ],
       doubles: [1],
       // Still exactly one index: Analytics Engine permits one per data point,
@@ -552,11 +589,13 @@ export function buildQuery(view, days, filter = {}) {
     "blob14 AS owner_identity, blob15 AS owner_agent, " +
     // Taxonomy 1.6.0: blob16, checked against the vendor's published ranges.
     "blob16 AS vendor_verified, " +
+    // Résumé formats: blob17, the résumé format a read took ('' for everything else).
+    "blob17 AS resume_format, " +
     "toDate(timestamp) AS day, sum(_sample_interval) AS hits " +
     "FROM sn_machine_readers " +
     since +
     "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, " +
-    `first_party, agent, markdown_requested, signed_agent, verified_bot, network, owner_identity, owner_agent, vendor_verified, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
+    `first_party, agent, markdown_requested, signed_agent, verified_bot, network, owner_identity, owner_agent, vendor_verified, resume_format, day ORDER BY day ASC LIMIT ${AGGREGATE_LIMIT} FORMAT JSON`
   );
 }
 

@@ -189,7 +189,7 @@ describe("sn_machine_readers blob16 vendor_verified (append only), and no IP any
     observeMachineReader(reqFrom(PPLX, IN_V4), env, "/notes/x/");
     observeMachineReader(reqFrom(PPLX, OUT_V4), env, "/notes/x/");
     observeMachineReader(reqFrom(GPTBOT, IN_V4), env, "/notes/x/");
-    expect(agg.map((p) => p.blobs.length)).toEqual([16, 16, 16]);
+    expect(agg.map((p) => p.blobs.length)).toEqual([17, 17, 17]);
     expect(agg.map((p) => p.blobs[15])).toEqual(["1", "0", ""]);
     expect(agg[0].blobs.slice(0, 15)).toEqual(agg[1].blobs.slice(0, 15));
     expect(agg[0].blobs[8]).toBe("perplexity-bot");
@@ -212,8 +212,8 @@ describe("sn_machine_readers blob16 vendor_verified (append only), and no IP any
 
   it("the aggregate read selects and groups blob16 AS vendor_verified, after owner_agent", () => {
     const q = buildQuery("aggregate", 30);
-    expect(q).toContain("blob15 AS owner_agent, blob16 AS vendor_verified, toDate(timestamp)");
-    expect(q).toContain("owner_identity, owner_agent, vendor_verified, day ORDER BY");
+    expect(q).toContain("blob15 AS owner_agent, blob16 AS vendor_verified, blob17 AS resume_format, toDate(timestamp)");
+    expect(q).toContain("owner_identity, owner_agent, vendor_verified, resume_format, day ORDER BY");
     for (const v of ["totals", "unknown", "rights"]) expect(buildQuery(v, 30)).not.toMatch(/blob16|vendor_verified/);
   });
 });
