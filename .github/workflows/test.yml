@@ -53,29 +53,16 @@ jobs:
             exit 1
           fi
       - run: npm ci
-      # R6c dependency-provenance gate. A STEP, not a job: Actions bills per job
-      # rounded up to the whole minute, so a separate job for a ~3s check would
-      # cost a full extra minute on every run for no added signal.
-      #
-      # node 24 is pinned above BECAUSE of this gate: it needs npm >= 11. npm 10
-      # accepts --include-attestations but silently omits the `verified` array,
-      # which would make every package read as unattested. The gate asserts that
-      # rather than trusting it, and exits 2 with a clear message if npm is old.
-      - name: Dependency-provenance gate
-        run: node scripts/attestation-gate.mjs
-      # R6c leg 2: minimum-age cooldown (see sn-remote-mcp-worker v1.1.0 for
-      # the full rationale). No locked version younger than min_age_days;
-      # deliberate young bumps are accepted per version in
-      # .cooldown-accept.json with a reason. Fail-closed on unmeasured ages.
-      - name: Dependency cooldown gate
-        run: node scripts/dependency-cooldown.mjs
-      # Every outbound call in src/ must either set redirect:"manual"/"error" or
-      # carry a `redirect-ok:` comment saying why it needs no guard. A NEW call
-      # site fails until classified. A step, not a job: per-job billing rounds up,
-      # and this runs in ~1s. Plain Node on purpose — this repo's vitest may run
-      # inside workerd, where the parser's native binding cannot load.
-      - name: Outbound redirect gate
-        run: node scripts/outbound-redirect-gate.mjs
+      # The dependency-provenance, dependency-cooldown and outbound-redirect
+      # gates, from one canonical copy (juanlentino/gha, worker-gates). A
+      # COMPOSITE action: its steps run inside this job, so no billed job is
+      # added. Needs node 24 (npm >= 11) and npm ci above. min-files/min-calls
+      # are this repo's outbound-scan floors; lower them deliberately, in the
+      # commit that removes the src/ files or calls.
+      - uses: juanlentino/gha/worker-gates@2ed81cd623d49a250fa2ea0d3f116c1dba5e0787 # v1.1.0
+        with:
+          min-files: 27
+          min-calls: 8
       # Includes test/rights-consistency.test.mjs — the STATIC rights check:
       # drives the real Worker over a stubbed origin and asserts all four
       # signal layers agree as composed. Fails the PR on drift.

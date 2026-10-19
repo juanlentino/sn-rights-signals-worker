@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Changed
+- CI: the dependency-provenance, dependency cooldown and outbound redirect gates now run from one canonical copy, the `juanlentino/gha` worker-gates composite action, still as steps inside the one test job. `scripts/attestation-gate.mjs`, `scripts/dependency-cooldown.mjs` and `scripts/outbound-redirect-gate.mjs` are removed; this repo's outbound floors are now action inputs. The attestation gate gains the #31 fix: drift is judged per `name@version`, so an unattested older copy of a package can no longer hide behind an attested newer one.
+
 ### Added
 - **Which crawlers and agents read the résumé, and in which format.** A new surface class, `resume`, covers the résumé's format files: `/resume.md` and `/cv.md`, `/resume/json-resume.json` and `/cv/json-resume.json`, `/resume/contact.vcf`, a PDF under `/wp-content/uploads/resume/`, and the `/resume.json` and `/cv.json` page twins. Exact paths only. The sensor appends **blob17 `resume_format`**: `md`, `json`, `vcf`, `pdf` or `twin` for those files, and `html` or `md` for a read of the `/resume/` or `/cv/` page itself (`md` when it asked by `Accept: text/markdown` or `?output_format=markdown`), empty for everything else. The aggregate read selects and groups it. What moves: the two page twins leave `html` and the PDF leaves `asset`; the other files are new. The pages stay `html`, so a negotiated Markdown read is not drained out of it. `resume` is not a rights surface and writes nothing to the detail stream. The plugin coerces a surface it does not know to `html`, so this can ship first. A MINOR release when cut.
 
