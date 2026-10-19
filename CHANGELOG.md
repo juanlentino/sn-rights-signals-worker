@@ -1,9 +1,13 @@
 # Changelog
 
-## 1.35.0 - 2026-10-18
+## Unreleased
 
 ### Added
 - **Which crawlers and agents read the résumé, and in which format.** A new surface class, `resume`, covers the résumé's format files: `/resume.md` and `/cv.md`, `/resume/json-resume.json` and `/cv/json-resume.json`, `/resume/contact.vcf`, a PDF under `/wp-content/uploads/resume/`, and the `/resume.json` and `/cv.json` page twins. Exact paths only. The sensor appends **blob17 `resume_format`**: `md`, `json`, `vcf`, `pdf` or `twin` for those files, and `html` or `md` for a read of the `/resume/` or `/cv/` page itself (`md` when it asked by `Accept: text/markdown` or `?output_format=markdown`), empty for everything else. The aggregate read selects and groups it. What moves: the two page twins leave `html` and the PDF leaves `asset`; the other files are new. The pages stay `html`, so a negotiated Markdown read is not drained out of it. `resume` is not a rights surface and writes nothing to the detail stream. The plugin coerces a surface it does not know to `html`, so this can ship first. A MINOR release when cut.
+
+## 1.35.0 - 2026-10-18
+
+### Added
 - **A page can name its own Markdown.** When an agent asks for a page with `Accept: text/markdown` and the origin's HTML response carries `Link: <...md>; rel="alternate"; type="text/markdown"`, the Worker fetches that file and serves it instead of converting the HTML. The plugin sends it on the résumé, whose generic conversion opened with "Skip to content", split each stat from its label and kept the footer icons as empty links; `/resume.md` is written for AI readers instead. Same origin and a `.md` path with no query only, fetched with fresh headers and no redirects; the file's cache-control and x-robots-tag carry over, `Vary: Accept` and the reservation headers ride it as on any Markdown answer. Anything but a 200 `text/markdown` falls back to the conversion, so the plugin and the Worker can ship in either order, and a page that names nothing converts exactly as before. A MINOR release when cut.
 
 ## 1.34.0 - 2026-10-18
