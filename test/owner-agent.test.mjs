@@ -173,7 +173,7 @@ describe("sn_machine_readers: blob14 identity, blob15 agent (append only)", () =
     await worker.fetch(r, env, {});
     expect(agg).toHaveLength(1);
     const blobs = agg[0].blobs;
-    expect(blobs).toHaveLength(16); // 1.6.0 appended blob16
+    expect(blobs).toHaveLength(17); // 1.6.0 appended blob16; résumé format blob17
     expect(blobs.slice(0, 13)).toEqual(["other-bot", "llms", blobs[2], blobs[3], blobs[4], blobs[5], "1", "", "dev-curl", "0", "unsigned", "", "Charter Communications, Inc"]);
     expect(blobs.slice(13, 15)).toEqual(["2", "3"]);
     expect(agg[0].doubles).toEqual([1]);
@@ -345,9 +345,9 @@ describe("read endpoint: the aggregate view carries owner_identity and owner_age
 
   it("aggregate: blob14 AS owner_identity and blob15 AS owner_agent, selected and grouped, appended after network", () => {
     expect(buildQuery("aggregate", 30)).toBe(
-      "SELECT blob1 AS family, blob2 AS surface, blob3 AS vendor, blob4 AS purpose, blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, blob9 AS agent, blob10 AS markdown_requested, blob11 AS signed_agent, blob12 AS verified_bot, blob13 AS network, blob14 AS owner_identity, blob15 AS owner_agent, blob16 AS vendor_verified, toDate(timestamp) AS day, sum(_sample_interval) AS hits FROM sn_machine_readers " +
+      "SELECT blob1 AS family, blob2 AS surface, blob3 AS vendor, blob4 AS purpose, blob5 AS taxonomy_version, blob6 AS training_corpus_source, blob7 AS first_party, blob9 AS agent, blob10 AS markdown_requested, blob11 AS signed_agent, blob12 AS verified_bot, blob13 AS network, blob14 AS owner_identity, blob15 AS owner_agent, blob16 AS vendor_verified, blob17 AS resume_format, toDate(timestamp) AS day, sum(_sample_interval) AS hits FROM sn_machine_readers " +
         SINCE +
-        "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, first_party, agent, markdown_requested, signed_agent, verified_bot, network, owner_identity, owner_agent, vendor_verified, day ORDER BY day ASC LIMIT 10000 FORMAT JSON",
+        "GROUP BY family, surface, vendor, purpose, taxonomy_version, training_corpus_source, first_party, agent, markdown_requested, signed_agent, verified_bot, network, owner_identity, owner_agent, vendor_verified, resume_format, day ORDER BY day ASC LIMIT 10000 FORMAT JSON",
     );
   });
 

@@ -320,7 +320,7 @@ matches and the frozen enum does not is stored under the family
 | Blob | Field | Values |
 |---|---|---|
 | 1 | family | the enum above, `unclassified-machine`, or `webmcp` for a bridge beacon row |
-| 2 | surface | `robots`, `rights`, `llms`, `agents-manifest`, `agent-discovery`, `well-known`, `feed`, `wp-json`, `sitemap`, `asset`, `html`; on a `webmcp` beacon row, the tool name: `verify-page`, `get-rights-terms`, `related-notes`, `get-site-map`, `get-citation` |
+| 2 | surface | `robots`, `rights`, `llms`, `agents-manifest`, `agent-discovery`, `well-known`, `feed`, `wp-json`, `sitemap`, `resume`, `asset`, `html`; on a `webmcp` beacon row, the tool name: `verify-page`, `get-rights-terms`, `related-notes`, `get-site-map`, `get-citation` |
 | 3 | vendor | from the taxonomy; empty when it did not match |
 | 4 | purpose | from the taxonomy's `purpose_vocabulary`; `unknown` when it did not match; on a `webmcp` beacon row, the call outcome: `ok`, `absent`, `error` |
 | 5 | taxonomy version | |
@@ -335,6 +335,7 @@ matches and the frozen enum does not is stored under the family
 | 14 | owner identity (Traffic Lanes) | `2` valid `SN-Owner-Agent` token, `3` token present but invalid or expired, `0` otherwise (no header, or no key configured) |
 | 15 | owner agent (Traffic Lanes) | the token's agent code when blob 14 is `2`: `1` browser, `2` chrome-extension, `3` claude-code, `4` playwright, `5` script, `6` mcp-local, `7` other; `0` otherwise |
 | 16 | vendor verified (taxonomy 1.6.0) | the client IP checked against the vendor's own published IP ranges, for an agent whose entry has `ip_ranges_url` (PerplexityBot, Perplexity-User, CCBot): `1` in range, `0` the list was read and the IP is outside it, empty when not measured (no list for the agent, or the list could not be read). Only the answer is stored, never the IP |
+| 17 | résumé format | `md`, `json`, `vcf`, `pdf` or `twin` for a read of the résumé's format files (surface `resume`: `/resume.md`, `/cv.md`, `/resume/json-resume.json`, `/cv/json-resume.json`, `/resume/contact.vcf`, a PDF under `/wp-content/uploads/resume/`, and the `/resume.json` and `/cv.json` page twins); `html` or `md` for a read of the `/resume/` or `/cv/` page, `md` when it asked for Markdown by `Accept` or `?output_format=markdown` (the page stays surface `html`); empty for every other read |
 
 Double 1 is the count (always 1) and index 1 is the family. The layout is
 append-only: blob order is the read query's contract, and a row written before
