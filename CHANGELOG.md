@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **A page can name its own Markdown.** When an agent asks for a page with `Accept: text/markdown` and the origin's HTML response carries `Link: <...md>; rel="alternate"; type="text/markdown"`, the Worker fetches that file and serves it instead of converting the HTML. The plugin sends it on the résumé, whose generic conversion opened with "Skip to content", split each stat from its label and kept the footer icons as empty links; `/resume.md` is written for AI readers instead. Same origin and a `.md` path with no query only, fetched with fresh headers and no redirects; the file's cache-control and x-robots-tag carry over, `Vary: Accept` and the reservation headers ride it as on any Markdown answer. Anything but a 200 `text/markdown` falls back to the conversion, so the plugin and the Worker can ship in either order, and a page that names nothing converts exactly as before. A MINOR release when cut.
+
 ## 1.34.0 - 2026-10-18
 
 ### Added

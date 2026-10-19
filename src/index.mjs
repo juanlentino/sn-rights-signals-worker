@@ -255,7 +255,7 @@ export default {
     // be thrown away. The reservation still rides the markdown response —
     // withTdmHeaders() wraps both branches, per the v1.5.0 rule that content
     // taken in ANY representation is content taken.
-    const markdown = await maybeMarkdown(origin, wantsMarkdown);
+    const markdown = await maybeMarkdown(origin, wantsMarkdown, request.url, request.headers.get("user-agent"));
     if (markdown) return withTdmHeaders(markdown, licenceOffer);
 
     return withTdmHeaders(withVaryAccept(injectTdmMeta(origin)), licenceOffer);
