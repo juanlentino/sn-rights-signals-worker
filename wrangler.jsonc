@@ -53,8 +53,11 @@
   // over it, the route answers 204 and writes nothing (src/webmcp-call.mjs).
   // 1.32.1: also caps Web Bot Auth key-directory fetches, keyed "wba-dir:<ip>"
   // so they never share the beacon's per-IP bucket (src/web-bot-auth.mjs).
+  // namespace_id is account-wide, not per-Worker: 1001 is analytics PX_LIMITER,
+  // 1002 login-guard LOGIN_RL, 1003 provenance VERIFY_RL. This sat on 1001
+  // through 1.35.0, sharing the analytics counters (the login-guard outage shape).
   "ratelimits": [
-    { "name": "WEBMCP_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 10 } }
+    { "name": "WEBMCP_LIMITER", "namespace_id": "1004", "simple": { "limit": 10, "period": 10 } }
   ],
   "analytics_engine_datasets": [
     { "binding": "SN_MR", "dataset": "sn_machine_readers" },

@@ -5,6 +5,9 @@
 ### Added
 - **Which crawlers and agents read the résumé, and in which format.** A new surface class, `resume`, covers the résumé's format files: `/resume.md` and `/cv.md`, `/resume/json-resume.json` and `/cv/json-resume.json`, `/resume/contact.vcf`, a PDF under `/wp-content/uploads/resume/`, and the `/resume.json` and `/cv.json` page twins. Exact paths only. The sensor appends **blob17 `resume_format`**: `md`, `json`, `vcf`, `pdf` or `twin` for those files, and `html` or `md` for a read of the `/resume/` or `/cv/` page itself (`md` when it asked by `Accept: text/markdown` or `?output_format=markdown`), empty for everything else. The aggregate read selects and groups it. What moves: the two page twins leave `html` and the PDF leaves `asset`; the other files are new. The pages stay `html`, so a negotiated Markdown read is not drained out of it. `resume` is not a rights surface and writes nothing to the detail stream. The plugin coerces a surface it does not know to `html`, so this can ship first. A MINOR release when cut.
 
+### Fixed
+- **`WEBMCP_LIMITER` has its own rate-limit namespace, `1004`.** It shared `namespace_id` `1001` with the analytics Worker's `PX_LIMITER`. A namespace is account-wide, not per-Worker, so the two shared counters, and an IPv4 key here (the client IP) could collide with the same IP's pageview key there: the shape of the login-guard outage, where sharing `1001` let eight pageviews in a minute 429 the next login POST. Cloudflare's docs ask for a unique id per binding unless sharing is intended. In use on the account: `1001` analytics, `1002` login guard, `1003` provenance. `test/ratelimit-namespace.test.mjs` fails if the binding reuses one of them. The first minute after the deploy starts from empty counters.
+
 ## 1.35.0 - 2026-10-18
 
 ### Added
