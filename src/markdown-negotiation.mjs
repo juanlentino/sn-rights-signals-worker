@@ -42,6 +42,52 @@ export async function markdownResponse(origin) {
   return new Response(markdown, { status: 200, headers });
 }
 
+// THE ORIGIN'S OWN MARKDOWN. A page can name a Markdown file written for it,
+// with `Link: <...md>; rel="alternate"; type="text/markdown"` on its HTML
+// response (the plugin does this for the résumé: /resume.md). An agent that
+// asked for Markdown then gets that file instead of the generic conversion.
+// Same origin and a .md path only, so the header can never point the edge at
+// another host or loop back into a negotiated page URL. Anything but a 200
+// text/markdown answer falls back to the conversion, so a plugin that has not
+// shipped the file yet costs one 404 and nothing else.
+export function originMarkdownHref(link, base) {
+  if (!link) return null;
+  for (const part of link.split(/,(?=\s*<)/)) {
+    const m = /^\s*<([^>]*)>(.*)$/.exec(part);
+    if (!m) continue;
+    const params = m[2].toLowerCase();
+    const rel = (/;\s*rel\s*=\s*"?([^";]*)"?/.exec(params) || [])[1] || "";
+    const type = (/;\s*type\s*=\s*"?([^";]*)"?/.exec(params) || [])[1] || "";
+    if (!rel.split(/\s+/).includes("alternate") || type.trim() !== "text/markdown") continue;
+    let url;
+    try {
+      url = new URL(m[1], base);
+    } catch {
+      continue;
+    }
+    if (url.origin === new URL(base).origin && url.pathname.endsWith(".md") && !url.search) return url.href;
+  }
+  return null;
+}
+
+async function originMarkdown(origin, requestUrl, userAgent) {
+  const href = requestUrl ? originMarkdownHref(origin.headers.get("link"), requestUrl) : null;
+  if (!href) return null;
+  // Fresh headers, as note-markdown-url.mjs does: no cookie, no validators.
+  // redirect-ok: a moved .md is not this page's Markdown; falls back below.
+  const res = await fetch(new Request(href, { method: "GET", headers: { accept: "text/markdown", "user-agent": userAgent || "" }, redirect: "manual" }));
+  if (res.status !== 200 || !(res.headers.get("content-type") || "").includes("text/markdown")) {
+    if (res.body) res.body.cancel().catch(() => {});
+    return null;
+  }
+  const headers = new Headers({ "content-type": "text/markdown; charset=utf-8", vary: "Accept", "cache-control": "public, max-age=300" });
+  for (const name of ["content-type", "cache-control", "x-robots-tag", "content-language"]) {
+    const value = res.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  return new Response(res.body, { status: 200, headers });
+}
+
 // Convert when the client asked and the origin gave us a page to convert;
 // otherwise hand back null and let the caller serve HTML unchanged.
 //
@@ -50,7 +96,7 @@ export async function markdownResponse(origin) {
 // is a strictly worse answer than the HTML the reader could have had. It is
 // LOGGED, not swallowed — observability is on for this Worker, so a converter
 // that starts failing is visible rather than quietly serving HTML forever.
-export async function maybeMarkdown(origin, wantsMarkdown) {
+export async function maybeMarkdown(origin, wantsMarkdown, requestUrl = null, userAgent = "") {
   if (!wantsMarkdown) return null;
   // 200 only. Error pages are chrome, and a Cloudflare 1xxx interstitial
   // rendered as markdown would be a confident-looking document about nothing.
@@ -64,6 +110,15 @@ export async function maybeMarkdown(origin, wantsMarkdown) {
   // underneath) and keep `origin` untouched for the fallback; on success the
   // unread branch is cancelled so the tee does not buffer the whole page.
   let markdown;
+  try {
+    markdown = await originMarkdown(origin, requestUrl, userAgent);
+  } catch (err) {
+    console.error("origin markdown fetch failed", err && err.message ? err.message : err);
+  }
+  if (markdown) {
+    if (origin.body) origin.body.cancel().catch(() => {});
+    return markdown;
+  }
   try {
     markdown = await markdownResponse(origin.clone());
   } catch (err) {
