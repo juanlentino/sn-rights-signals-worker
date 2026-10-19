@@ -1,7 +1,7 @@
 {
   "_comment": [
     "Dependency-provenance gate — the REVIEWED set of packages that carry no",
-    "provenance attestation. Enforced by scripts/attestation-gate.mjs.",
+    "provenance attestation. Enforced by juanlentino/gha worker-gates.",
     "",
     "Adding a name here is a REVIEWED EVENT, never a way to make CI green.",
     "Before adding, check whether the package attests at a newer version: an",

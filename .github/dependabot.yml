@@ -1,4 +1,4 @@
-# Weekly and grouped. The 7-day cooldown matches scripts/dependency-cooldown.mjs,
+# Weekly and grouped. The 7-day cooldown matches .cooldown-accept.json's min_age_days,
 # so a Dependabot PR never opens on a version that gate would refuse.
 version: 2
 updates:
