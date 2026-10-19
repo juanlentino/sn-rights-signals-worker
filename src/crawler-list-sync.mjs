@@ -12,7 +12,11 @@ const FETCH_TIMEOUT_MS = 10000;
 // naive regex entirely (0 matches). Pull every "User-agent: X ... Disallow:
 // /" pair out of the cleaned text (excluding the wildcard block) as the
 // ground truth to diff our hand-maintained list against. Fragile by nature
-// (scrapes prose docs, not an API — none exists).
+// (scrapes prose docs, not an API). Radar's GET /radar/bots is an API but not
+// this list: checked 2026-10-19, its AI_CRAWLER category (39 bots) lacks 5 of
+// these 9 (Google-Extended, Applebot-Extended, CCBot, Bytespider,
+// CloudflareBrowserRenderingCrawler) and adds ~34 the managed block never
+// named, so diffing against it would report permanent drift.
 export function parseCrawlersFromDocs(html) {
   const text = html.replace(/<[^>]+>/g, "");
   const matches = [...text.matchAll(/User-agent:\s*([A-Za-z0-9_.-]+)\s*\n\s*Disallow:\s*\//g)];
