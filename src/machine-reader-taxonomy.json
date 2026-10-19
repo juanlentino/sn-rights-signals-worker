@@ -1,7 +1,7 @@
 {
   "$comment": "The published cohort definition for the Machine Readers surface. DATA, not code — no switch statements anywhere. Served verbatim at https://juanlentino.com/_sn/rights-signals/taxonomy so any number derived from it can be checked against it. See docs/MACHINE-READERS.md in signal-and-noise-tools for the full contract.",
-  "taxonomy_version": "1.6.0",
-  "effective_date": "2026-10-18",
+  "taxonomy_version": "1.6.1",
+  "effective_date": "2026-10-19",
   "matching": {
     "algorithm": "ordered-substring-case-insensitive",
     "note": "Entries are tested in array order and the FIRST match wins, so specific tokens must precede the generic ones they contain (applebot-extended before applebot; googlebot-image before googlebot). Plain substring rather than regex on purpose: no escaping subtleties, no catastrophic backtracking on a hostile UA, and a reviewer can verify a match by eye. Tokens that risk matching inside an unrelated word carry their punctuation (curl/, axios/, java/)."
@@ -531,6 +531,17 @@
       "note": "Diffbot documents 'Diffbot' for general web crawling into its commercial Knowledge Graph. CONTESTED: a structured-data product is corpus collection, but not foundation-model training, and Diffbot markets the graph for AI grounding. Filed train with the boolean set. NOTE that customer-run Crawlbot crawls use a CUSTOMER-SET user agent, so they do not appear here at all."
     },
     {
+      "id": "reflection-bot",
+      "match": "reflectionbot",
+      "vendor": "reflection-ai",
+      "purpose": "train",
+      "source": "https://reflection.ai/bot",
+      "declared": true,
+      "training_corpus_source": true,
+      "cf_verified": true,
+      "note": "Reflection AI: Reflectionbot 'visits publicly available web pages to help build and improve Reflection AI's models'. The page never says 'train', but building models from crawled pages is corpus collection; Cloudflare lists it as AI_CRAWLER. Added 1.6.1: 148 of 207 reads over 30 days were Cloudflare-verified, most from ReflectionAI Inc's own network."
+    },
+    {
       "id": "microsoft-copilot-preview",
       "match": "microsoftpreview",
       "vendor": "microsoft",
@@ -601,6 +612,28 @@
       "cf_verified": true
     },
     {
+      "id": "exa-searchbot",
+      "match": "exasearchbot",
+      "vendor": "exa",
+      "purpose": "search",
+      "source": "https://crawler.exa.ai/",
+      "declared": true,
+      "training_corpus_source": false,
+      "cf_verified": true,
+      "note": "Exa: 'Its purpose is search and retrieval', an index AI applications search, so pages can be found, retrieved and cited. Signs every request (Web Bot Auth, keys at crawler.exa.ai/.well-known/http-message-signatures-directory); Cloudflare lists it as SEARCH_ENGINE_CRAWLER. Added 1.6.1: 309 of its 319 reads over 30 days were Cloudflare-verified, all from one network, yet it read as an unnamed agent."
+    },
+    {
+      "id": "parallel-shapbot",
+      "match": "shapbot",
+      "vendor": "parallel",
+      "purpose": "search",
+      "source": "https://docs.parallel.ai/resources/crawler",
+      "declared": true,
+      "training_corpus_source": false,
+      "cf_verified": true,
+      "note": "Parallel: 'ShapBot helps discover and index websites for Parallel's web APIs', a web index served to AI agents; Cloudflare lists it as AI_SEARCH. The page says nothing of training. Added 1.6.1: 274 of 274 reads over 30 days were Cloudflare-verified (from Google LLC networks, verified all the same)."
+    },
+    {
       "id": "seo-ahrefs",
       "match": "ahrefsbot",
       "vendor": "ahrefs",
@@ -649,6 +682,17 @@
       "declared": true,
       "training_corpus_source": false,
       "cf_verified": true
+    },
+    {
+      "id": "seo-babbar",
+      "match": "barkrowler",
+      "vendor": "babbar",
+      "purpose": "seo",
+      "source": "https://babbar.tech/crawler",
+      "declared": true,
+      "training_corpus_source": false,
+      "cf_verified": true,
+      "note": "Babbar: Barkrowler fuels a link graph of the web used to provide 'online marketing and referencing tools for the SEO community'; Cloudflare lists it as SEARCH_ENGINE_OPTIMIZATION. Added 1.6.1: 308 of 310 reads over 30 days were Cloudflare-verified."
     },
     {
       "id": "feed-feedly",

@@ -10,7 +10,7 @@ const entry = (id) => TAXONOMY.entries.find((e) => e.id === id);
 
 describe("cf_verified in the taxonomy data (1.5.0)", () => {
   it("is taxonomy 1.5.0 and documents the field", () => {
-    expect(["1.5.0", "1.6.0"]).toContain(TAXONOMY_VERSION); // 1.6.0: see vendor-ranges.test.mjs
+    expect(["1.5.0", "1.6.0", "1.6.1"]).toContain(TAXONOMY_VERSION); // 1.6.0: see vendor-ranges.test.mjs; 1.6.1: taxonomy-1.6.1.test.mjs
     expect(TAXONOMY.field_contract.cf_verified).toMatch(/verified-bots directory/);
   });
 

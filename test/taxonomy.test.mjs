@@ -365,7 +365,7 @@ describe("control tokens carry no_user_agent (taxonomy 1.4.0)", () => {
   });
 
   it("arrived in taxonomy 1.4.0 (1.5.0 added cf_verified, see cf-verified.test.mjs)", () => {
-    expect(["1.4.0", "1.5.0", "1.6.0"]).toContain(TAXONOMY_VERSION);
+    expect(["1.4.0", "1.5.0", "1.6.0", "1.6.1"]).toContain(TAXONOMY_VERSION);
   });
 });
 
