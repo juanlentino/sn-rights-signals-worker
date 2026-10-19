@@ -59,7 +59,7 @@ jobs:
       # added. Needs node 24 (npm >= 11) and npm ci above. min-files/min-calls
       # are this repo's outbound-scan floors; lower them deliberately, in the
       # commit that removes the src/ files or calls.
-      - uses: juanlentino/gha/worker-gates@2ed81cd623d49a250fa2ea0d3f116c1dba5e0787 # main, untagged
+      - uses: juanlentino/gha/worker-gates@2ed81cd623d49a250fa2ea0d3f116c1dba5e0787 # v1.1.0
         with:
           min-files: 27
           min-calls: 8
