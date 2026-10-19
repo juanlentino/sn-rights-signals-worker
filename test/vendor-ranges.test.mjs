@@ -47,8 +47,8 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("taxonomy 1.6.0: ip_ranges_url and home_networks are data", () => {
-  it("is 1.6.0 and documents both fields", () => {
-    expect(TAXONOMY_VERSION).toBe("1.6.0");
+  it("is 1.6.0 or later and documents both fields", () => {
+    expect(["1.6.0", "1.6.1"]).toContain(TAXONOMY_VERSION); // 1.6.1 added entries only
     expect(TAXONOMY.field_contract.ip_ranges_url).toMatch(/published/);
     expect(TAXONOMY.field_contract.home_networks).toMatch(/asOrganization/);
   });
