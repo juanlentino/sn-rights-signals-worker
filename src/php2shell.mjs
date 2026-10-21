@@ -15,6 +15,10 @@ const FOLDED = /PHP[_. []SESSION[_. []UPLOAD[_. []PROGRESS/;
 // streamed scan must carry so a match split across two chunks is still seen.
 const TAIL = MARKER.length * 3;
 
+// An urlencoded body is held whole and split into pairs, so it gets its own
+// small cap whatever the caller's: nothing legitimate posts a megabyte of fields.
+const URLENCODED_CAP = 1024 * 1024;
+
 const BLOCK_HEADERS = { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' };
 
 /** PHP's php_url_decode: '+' is a space, %XX is a byte, a bad escape stays. */
@@ -76,15 +80,17 @@ function multipartWindowCarriesMarker(window) {
 
 /**
  * Reads a COPY of the body (the original must reach the origin untouched).
- * True when the body carries the marker, or when it is a form body over `cap`:
+ * True when the body carries the marker, or when it is a form body over the cap
+ * (`cap`, or URLENCODED_CAP for an urlencoded body):
  * padding past a cap must not be a way around the check, so over the cap is a
  * refusal, not a pass.
  */
 export async function bodyCarriesMarker(request, cap) {
   const kind = formKind(request.headers.get('content-type'));
   if (!kind || !request.body) return false;
+  const limit = kind === 'urlencoded' ? Math.min(cap, URLENCODED_CAP) : cap;
   const declared = request.headers.get('content-length');
-  if (declared !== null && /^\d+$/.test(declared) && Number(declared) > cap) return true;
+  if (declared !== null && /^\d+$/.test(declared) && Number(declared) > limit) return true;
   const reader = request.clone().body.getReader();
   // Never await cancel(): on a tee'd branch it settles only once the other
   // branch (the forward) is finished, which would hang this request.
@@ -97,7 +103,7 @@ export async function bodyCarriesMarker(request, cap) {
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
-    if (total > cap) return stop('form body over the PHP2Shell scan cap');
+    if (total > limit) return stop('form body over the PHP2Shell scan cap');
     // UTF-8 decoding keeps every ASCII byte as itself, and the marker is ASCII.
     const chunk = decoder.decode(value, { stream: true });
     if (kind === 'urlencoded') { text += chunk; continue; }

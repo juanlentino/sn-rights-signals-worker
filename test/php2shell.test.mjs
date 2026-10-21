@@ -55,6 +55,11 @@ describe('form bodies', () => {
     expect(await bodyCarriesMarker(req('a=1', UE, undefined, { 'content-length': String(CAP + 1) }), CAP)).toBe(true);
     expect(await bodyCarriesMarker(req('a=' + 'x'.repeat(2048), UE), 1024)).toBe(true);
   });
+  it('caps an urlencoded body at 1 MiB whatever the caller allows, while multipart gets the full cap', async () => {
+    const big = 'a=' + '&'.repeat(1024 * 1024);
+    expect(await bodyCarriesMarker(req(big, UE), 32 * CAP)).toBe(true);
+    expect(await bodyCarriesMarker(req(multipart('f', { value: big }), MP), 32 * CAP)).toBe(false);
+  });
   it.each([`${M}=1`, `log=juan&${M}=x`, 'PHP.SESSION.UPLOAD.PROGRESS=1', 'PHP%5FSESSION%5FUPLOAD%5FPROGRESS=1', `+${M}=1`])(
     'blocks urlencoded %j', async (b) => expect(await bodyCarriesMarker(req(b, UE), CAP)).toBe(true));
   it.each([
