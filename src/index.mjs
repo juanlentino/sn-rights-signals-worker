@@ -8,6 +8,7 @@ import { injectTdmMeta } from "./html-injector.mjs";
 import { TDM_RESERVATION_HEADERS, LICENSE_LINK_HEADER } from "./constants.mjs";
 import { versionResponse } from "./version.mjs";
 import { bypassesRightsSignals } from "./admin-bypass.mjs";
+import { php2shellBlock } from "./php2shell.mjs";
 import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawler-list-status.mjs";
 import { ensureVendorRanges } from "./vendor-ranges.mjs";
 import { FIRST_PARTY_HEADER, firstPartyByHeader, machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
@@ -62,6 +63,8 @@ function withTdmHeaders(response, licenceOffer = {}) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
+const PHP2SHELL_MAX_BODY_BYTES = 32 * 1024 * 1024;
+
 export default {
   // Bound to a single juanlentino.com/* route (more-specific routes on the
   // other three workers — /_sn/px*, /sn-login*, etc. — win over this wildcard
@@ -78,6 +81,14 @@ export default {
     // the page loses its reservation headers for that one response, and stays
     // up. First line, so it covers everything below it.
     ctx?.passThroughOnException?.();
+    // TEMPORARY PHP2Shell virtual patch (src/php2shell.mjs). Before the admin
+    // bypass: wp-admin, wp-login and xmlrpc are PHP endpoints like any other.
+    // php2shellBlock never throws (an error is a refusal), so the pass-through
+    // above cannot carry a marked request to the origin unchecked. Form bodies
+    // are scanned up to 32 MiB; a larger form body (a big media upload) is
+    // refused until the patch is removed.
+    const blocked = await php2shellBlock(request, PHP2SHELL_MAX_BODY_BYTES);
+    if (blocked) return blocked;
     const { pathname } = new URL(request.url);
     // 1.30.0: the first-party secret never reaches the origin, whatever its
     // value and whether or not the feature is configured. The copy is built
