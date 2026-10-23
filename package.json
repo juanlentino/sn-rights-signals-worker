@@ -12,9 +12,9 @@
     "check:live": "node scripts/check-rights-signals.mjs"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "vitest": "^4.1.9",
-    "wrangler": "^4.149.0"
+    "@cloudflare/vitest-pool-workers": "^0.23.0",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.151.0"
   },
   "overrides": {
     "undici": "^7.29.0",
@@ -24,6 +24,6 @@
   },
   "dependencies": {
     "jsonwebkey-thumbprint": "0.1.0",
-    "web-bot-auth": "0.1.3"
+    "web-bot-auth": "0.2.0"
   }
 }
