@@ -71,12 +71,14 @@ export function safeUrl(raw) {
 // while live prose came through littered with numeric entities.
 //
 // Named entities are the small set WordPress actually emits (texturized
-// punctuation plus the XML five); everything else arrives numeric and is
-// handled generically below.
+// punctuation plus the XML five), plus the arrows the theme writes by name
+// (`&rarr;` on the provenance panel reached every note's Markdown raw);
+// everything else arrives numeric and is handled generically below.
 const NAMED = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
   hellip: "…", mdash: "—", ndash: "–", middot: "·",
   lsquo: "\u2018", rsquo: "\u2019", ldquo: "\u201c", rdquo: "\u201d",
+  larr: "\u2190", rarr: "\u2192",
 };
 
 export function decodeEntities(input) {

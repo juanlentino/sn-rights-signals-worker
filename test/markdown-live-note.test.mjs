@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { htmlToMarkdown } from "../src/html-to-markdown.mjs";
+import { decodeEntities, htmlToMarkdown } from "../src/html-to-markdown.mjs";
 // The REAL page, saved from https://juanlentino.com/notes/the-pen-is-not-the-notary/
 // on 2026-10-24, untrimmed. The synthetic `.skip-link` fixture in
 // html-to-markdown.test.mjs passed while every live note still opened with the
@@ -58,5 +58,20 @@ describe("site chrome stays out of a note's Markdown", () => {
     expect(out).toContain("# Archive");
     expect(out).toContain("prose");
     expect(out).toContain("in-main footer");
+  });
+});
+
+// The provenance panel writes `&rarr;`, which was missing from the named-entity
+// table, so it reached the Markdown raw. Across 20 live pages it was the only
+// entity that survived conversion.
+describe("entities on the live note", () => {
+  it("leaves no HTML entity in the Markdown", async () => {
+    const out = await md(NOTE);
+    expect(out).toContain("[See it on the public Bitcoin ledger (mempool.space) →](https://mempool.space/block/971796)");
+    expect(out).not.toMatch(/&#?[a-z0-9]+;/i);
+  });
+
+  it("decodes both arrows", () => {
+    expect(decodeEntities("&larr; Previous · Next &rarr;")).toBe("← Previous · Next →");
   });
 });
