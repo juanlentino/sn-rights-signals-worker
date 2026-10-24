@@ -34,8 +34,9 @@ const SKIP =
   // markdown rendering. `.skip-link` is core's; the theme's own is
   // `.sn-skip-link`, which this list missed, so every note still opened with
   // "Skip to content". `.sn-article-dial` is an aria-hidden reading gauge after
-  // the footer whose tick labels came through as "889296100104108".
-  ".skip-link, .sn-skip-link, .screen-reader-text, .sn-article-dial";
+  // the footer whose tick labels came through as "889296100104108". The
+  // standalone /verify page prints its own skip link, `.sn-verify-skip`.
+  ".skip-link, .sn-skip-link, .sn-verify-skip, .screen-reader-text, .sn-article-dial";
 
 const HEADING = /^h([1-6])$/;
 

@@ -75,3 +75,20 @@ describe("entities on the live note", () => {
     expect(decodeEntities("&larr; Previous · Next &rarr;")).toBe("← Previous · Next →");
   });
 });
+
+describe("the /verify page's own skip link", () => {
+  // /verify prints its own document (not the block theme), with its own skip
+  // link; its header holds the h1 and the lede, so only the link is chrome.
+  const VERIFY =
+    '<body><div class="sn-verify"><a class="sn-verify-skip" href="#sn-verify-main">Skip to content</a>' +
+    '<header class="sn-verify-head"><p class="sn-verify-kicker">Signal &amp; Noise</p><h1>Verify a Note</h1>' +
+    '<p class="sn-verify-lede">Four checks run right here.</p></header>' +
+    '<main id="sn-verify-main"><p>Paste a note ID.</p></main></div></body>';
+
+  it("drops the skip link and keeps the heading and the lede", async () => {
+    const out = await md(VERIFY);
+    expect(out).not.toContain("Skip to content");
+    expect(out).toContain("# Verify a Note");
+    expect(out).toContain("Four checks run right here.");
+  });
+});
