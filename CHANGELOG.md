@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.36.1 - 2026-10-24
+
+### Fixed
+- **A note's Markdown starts at the note, not at the site chrome.** The converter that answers `Accept: text/markdown` and `/notes/<slug>.md` skipped core's `.skip-link`, but the theme's own skip link is `.sn-skip-link`, so every live note still opened with "Skip to content" and the "Juan Lentino" wordmark link, and closed with the footer's five empty social links, "© Juan Lentino 2026" and "889296100104108" (the tick labels of the aria-hidden reading dial). The skip list now adds `.sn-skip-link`, `.sn-article-dial` and the site header and footer by position: `.wp-site-blocks > header`, `.wp-site-blocks > footer`, and `body > header`, `body > footer` for templates without that wrapper (the /notes/ archive). Not by tag or class: a bare `header` would drop the h1 from an article header, and the note's provenance record sits in a `footer.wp-block-template-part` inside `<main>`, the same class as the site footer. Everything inside `<main>` is kept: the date, updated date, reading time, tags, the Verified and Verify links, the provenance panel and printed record, previous and next, "More on this" and "Cited by". On the live note the only lines that go are the chrome above. `test/markdown-live-note.test.mjs` adds 4 checks against the real page saved as `test/fixtures/the-pen-is-not-the-notary.html` (3 red before; the fourth guards what must stay).
+- **`&rarr;` is decoded.** The provenance panel's "See it on the public Bitcoin ledger (mempool.space) →" link reached every note's Markdown as `&rarr;`: the entity table had no arrows. It now decodes `&rarr;` and its mirror `&larr;`. Converting 20 live pages (notes, the archive, home, the pillars, objections, now, verify), `&rarr;` was the only named entity that survived; `&raquo;` appears only in a `<link title>` in the head and never reaches the Markdown. 2 more checks in the same file, both red before.
+
 ## 1.36.0 - 2026-10-19
 
 ### Changed

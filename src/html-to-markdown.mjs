@@ -16,17 +16,26 @@
 // through as their text. That is a considered floor, not an oversight: the
 // consumer is an LLM reading prose, and a wrong table is worse than a flat one.
 
-// Subtrees whose text is chrome or machinery, never content. `header`/`footer`
-// are NOT here: in a block theme the post title sits inside an <header> within
-// <article>, so skipping them by tag name loses the h1 — the single most
-// valuable line on the page. Site chrome is mostly <nav>, which is skipped.
+// Subtrees whose text is chrome or machinery, never content. A bare `header` or
+// `footer` is NOT here: in a block theme the post title sits inside a <header>
+// within <article>, so skipping them by tag name loses the h1 — the single most
+// valuable line on the page. And a note's provenance record sits in a
+// `footer.wp-block-template-part` INSIDE <main>, the same class as the site
+// footer, so the class cannot tell them apart either.
 const SKIP =
   "script, style, noscript, svg, form, iframe, template, dialog, nav, button, select, textarea, " +
+  // The SITE header and footer, by position: direct children of the block
+  // theme's `.wp-site-blocks`, or of <body> on a template without that wrapper
+  // (the /notes/ archive). Anything nested in <main> is untouched.
+  ".wp-site-blocks > header, .wp-site-blocks > footer, body > header, body > footer, " +
   // Site-specific chrome. This Worker serves exactly one site, so naming its
   // theme's classes here is precision, not coupling: skip links and
   // visually-hidden text are written FOR assistive tech and are pure noise in a
-  // markdown rendering ("Skip to content" appeared twice on every real page).
-  ".skip-link, .screen-reader-text";
+  // markdown rendering. `.skip-link` is core's; the theme's own is
+  // `.sn-skip-link`, which this list missed, so every note still opened with
+  // "Skip to content". `.sn-article-dial` is an aria-hidden reading gauge after
+  // the footer whose tick labels came through as "889296100104108".
+  ".skip-link, .sn-skip-link, .screen-reader-text, .sn-article-dial";
 
 const HEADING = /^h([1-6])$/;
 
@@ -62,12 +71,14 @@ export function safeUrl(raw) {
 // while live prose came through littered with numeric entities.
 //
 // Named entities are the small set WordPress actually emits (texturized
-// punctuation plus the XML five); everything else arrives numeric and is
-// handled generically below.
+// punctuation plus the XML five), plus the arrows the theme writes by name
+// (`&rarr;` on the provenance panel reached every note's Markdown raw);
+// everything else arrives numeric and is handled generically below.
 const NAMED = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
   hellip: "…", mdash: "—", ndash: "–", middot: "·",
   lsquo: "\u2018", rsquo: "\u2019", ldquo: "\u201c", rdquo: "\u201d",
+  larr: "\u2190", rarr: "\u2192",
 };
 
 export function decodeEntities(input) {
