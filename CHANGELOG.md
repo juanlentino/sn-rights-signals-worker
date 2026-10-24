@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.36.2 - 2026-10-24
+
+### Fixed
+- **/verify's Markdown no longer opens with "Skip to content".** The standalone /verify page prints its own skip link (`.sn-verify-skip`), which the skip list did not name. Its header keeps the h1 and the lede; only the link is dropped.
+
 ## 1.36.1 - 2026-10-24
 
 ### Fixed
