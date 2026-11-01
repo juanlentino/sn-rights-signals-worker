@@ -21,6 +21,7 @@ import { webmcpBridgeResponse } from "./webmcp-bridge.mjs";
 import { webmcpCallResponse, WEBMCP_CALL_PATH } from "./webmcp-call.mjs";
 import { stripMarketing, withRestoredParams } from "./marketing-params.mjs";
 import { OWNER_AGENT_HEADER, verifyOwnerAgent } from "./owner-agent.mjs";
+import { withResumePdfNoindex } from "./resume-pdf-noindex.mjs";
 
 // Headers that prove something to THIS Worker and must never reach the origin.
 const EDGE_ONLY_HEADERS = [FIRST_PARTY_HEADER, OWNER_AGENT_HEADER];
@@ -242,7 +243,7 @@ export default {
     // nothing to rewrite in a PNG, and running it on non-HTML would be a
     // pointless transform on the hot path.
     const contentType = origin.headers.get("content-type") || "";
-    if (!contentType.includes("text/html")) return withTdmHeaders(origin, licenceOffer);
+    if (!contentType.includes("text/html")) return withTdmHeaders(withResumePdfNoindex(origin, pathname), licenceOffer);
 
     // v1.16.0: Markdown for Agents, done here because the zone is not on a plan
     // that includes Cloudflare's own implementation. accept-markdown.mjs matches

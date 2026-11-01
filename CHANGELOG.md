@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.37.0 - 2026-11-01
+
+### Added
+- **The résumé PDFs stay out of search.** A PDF under `/wp-content/uploads/resume/` (the music résumé, `JuanLentino_Resume.pdf`, any `?v=`, and the Spanish CV) now answers with `X-Robots-Tag: noindex, nofollow`, beside the TDM reservation it already carried. The /resume/ page is the canonical résumé, and both of its PDFs are now linked from its lane switch (owner brief 2026-11-01 #2). A static file's headers are the web server's, and the owner was unsure a Cloudflare rule was available for it, so this Worker, which already fronts those reads, adds it; the Download URL and its `?v=` cache busting stay as they are. The operations PDF (`/resume/<file>.pdf`) is served by WordPress with its own header and is not touched. An origin noindex is kept as it is; the body, status and every other header pass through unchanged. Exact directory, PDFs only (`src/resume-pdf-noindex.mjs`, the machine-readers résumé match). `test/resume-pdf-noindex.test.mjs`, 4 checks, red without the wiring.
+
 ## 1.36.2 - 2026-10-24
 
 ### Fixed
