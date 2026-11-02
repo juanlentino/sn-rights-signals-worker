@@ -55,6 +55,10 @@ cost: crawler reads of plugin, theme and core assets no longer reach the
 `TDM-Reservation`, `TDM-Policy`, `Content-Signal` and `Link` headers. Do not
 delete these routes to "tidy up" without reading this paragraph.
 
+A browser prerender or prefetch (`Sec-Purpose` containing `prerender` or
+`prefetch`, or the legacy `Purpose: prefetch`) is not counted as a read, since
+the visitor may never see the page; its response is served unchanged (1.38.2).
+
 | Path | Behavior |
 |---|---|
 | `GET /robots.txt` | **Full ownership**: generates the entire content-signals block itself (`Content-Signal: search=yes,ai-train=no,ai-input=yes,use=reference`, the Article 4 preamble, the named-crawler `Disallow` list for the nine `NAMED_CRAWLERS`), appends whatever WordPress's own origin file contributes, then a `License:` directive. Bare origin rules that precede the origin's first `User-agent` line are hoisted into the owned `User-agent: *` group (v1.15.0), and a `Sitemap:` pointer is appended unless the composed file already contains the text `Sitemap:` (a case-sensitive substring test, so a commented-out `# Sitemap:` line suppresses it and a lowercase `sitemap:` directive does not). An origin 4xx still answers `200` with the owned block; an origin 5xx or 429 passes through untouched (v1.4.4, RFC 9309). See "robots.txt ownership" below for why this took two tries. |
