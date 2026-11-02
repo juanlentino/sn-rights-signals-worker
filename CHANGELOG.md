@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.37.3 - 2026-11-01
+
+### Fixed
+- **A refused Markdown alternate is logged.** When the file a page names in its `Link` header answers anything but a 200 `text/markdown`, the Worker falls back to converting the HTML, and until now said nothing: only a thrown fetch logged. It now logs one `console.warn` with the file's path and the status it answered (a 200 there means the type was not Markdown). The path only: no query value, no header. `test/origin-markdown.test.mjs` checks one warning on a 404 and on an HTML answer, none on success, and no `lane` in the line; red without the log.
+
+### Tests
+- **The lane is pinned end to end.** The origin stub in `test/origin-markdown.test.mjs` routed by path only, so a Worker that dropped `?lane=operations` on either fetch still passed. It now routes by path and query, and a new check drives `/resume/?lane=operations` with `Accept: text/markdown` through the `Link` header to a fetch of `/resume.md?lane=operations`, asserts both fetched URLs, and asserts bare `/resume/` still gets the music Markdown. Red with the alternate fetched without its query.
+- **The operations PDF passes through as WordPress sends it.** `/resume/<file>.pdf` is not under `/wp-content/uploads/resume/`, so the noindex rule leaves it alone, but the Worker still fronts it and adds the TDM reservation. `test/resume-pdf-noindex.test.mjs` checks that its `X-Robots-Tag: noindex, nofollow`, `Content-Disposition`, `Cache-Control` and body arrive unchanged beside `tdm-reservation: 1`; red with that header dropped on the pass-through.
+
 ## 1.37.2 - 2026-11-01
 
 ### Changed

@@ -38,6 +38,25 @@ describe("résumé PDF noindex", () => {
     expect((await get("/resume/")).headers.get("x-robots-tag")).toBeNull();
   });
 
+  it("passes the WordPress-served operations PDF (/resume/<file>.pdf) through with its own X-Robots-Tag, beside the TDM reservation", async () => {
+    const path = "/resume/JuanLentino_Resume_Operations.pdf";
+    // The headers inc/resume-pdf/operations.php sends.
+    stubOrigin("%PDF-1.7 ops", {
+      "content-type": "application/pdf",
+      "content-disposition": 'inline; filename="JuanLentino_Resume_Operations.pdf"',
+      "x-robots-tag": "noindex, nofollow",
+      "x-content-type-options": "nosniff",
+      "cache-control": "public, max-age=300",
+    });
+    const res = await get(path);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(res.headers.get("tdm-reservation")).toBe("1");
+    expect(res.headers.get("content-disposition")).toBe('inline; filename="JuanLentino_Resume_Operations.pdf"');
+    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
+    expect(new TextDecoder().decode(await res.arrayBuffer())).toBe("%PDF-1.7 ops");
+  });
+
   it("matches the machine-readers résumé PDF path exactly", () => {
     expect(RESUME_PDF_PATH.test("/wp-content/uploads/resume/JuanLentino_Resume.pdf")).toBe(true);
     expect(RESUME_PDF_PATH.test("/wp-content/uploads/resume/JuanLentino_Resume.PDF")).toBe(true);

@@ -81,6 +81,8 @@ async function originMarkdown(origin, requestUrl, userAgent) {
   const res = await fetch(new Request(href, { method: "GET", headers: { accept: "text/markdown", "user-agent": userAgent || "" }, redirect: "manual" }));
   if (res.status !== 200 || !(res.headers.get("content-type") || "").includes("text/markdown")) {
     if (res.body) res.body.cancel().catch(() => {});
+    // The path only: no query value, no header. A 200 here means the type was not Markdown.
+    console.warn(`origin markdown alternate ${new URL(href).pathname} answered ${res.status}; converting the HTML instead`);
     return null;
   }
   const headers = new Headers({ "content-type": "text/markdown; charset=utf-8", vary: "Accept", "cache-control": "public, max-age=300" });
