@@ -107,32 +107,66 @@ describe("web-bot-auth equivalence: key resolution", () => {
   });
 });
 
-// Today's verifier accepts each of these. web-bot-auth 0.2.0 refuses the first
-// five, and no VerifyOptions field turns those checks off.
-describe("web-bot-auth equivalence: lenient today", () => {
+// 1.38.0 (owner decision, web-bot-auth 0.2.0): these five non-conforming
+// signatures were `valid` on 0.1.3 and are `invalid` now. Deliberate.
+describe("web-bot-auth 0.2.0: refused since 1.38.0", () => {
   beforeEach(() => { vi.restoreAllMocks(); });
 
-  it("valid: no alg parameter", async () => {
-    expect((await state({ alg: null })).result).toBe(SIG_VALID);
+  it("invalid: no alg parameter", async () => {
+    expect((await state({ alg: null })).result).toBe(SIG_INVALID);
   });
 
-  it("valid: an alg parameter that does not name the key's algorithm", async () => {
-    expect((await state({ alg: "rsa-pss-sha512" })).result).toBe(SIG_VALID);
+  it("invalid: an alg parameter that does not name the key's algorithm", async () => {
+    expect((await state({ alg: "rsa-pss-sha512" })).result).toBe(SIG_INVALID);
   });
 
-  it("valid: @authority not covered", async () => {
-    expect((await state({ components: ["signature-agent"] })).result).toBe(SIG_VALID);
+  it("invalid: @authority not covered", async () => {
+    expect((await state({ components: ["signature-agent"] })).result).toBe(SIG_INVALID);
   });
 
-  it("valid: the Signature-Agent header sent but not covered", async () => {
-    expect((await state({ components: ["@authority"] })).result).toBe(SIG_VALID);
+  it("invalid: the Signature-Agent header sent but not covered", async () => {
+    expect((await state({ components: ["@authority"] })).result).toBe(SIG_INVALID);
   });
 
-  it("valid: a nonce that is not 64 base64 bytes", async () => {
-    expect((await state({ nonce: "abc" })).result).toBe(SIG_VALID);
+  it("invalid: a nonce that is not 64 base64 bytes", async () => {
+    expect((await state({ nonce: "abc" })).result).toBe(SIG_INVALID);
+  });
+});
+
+describe("web-bot-auth 0.2.0: kept from 0.1.3", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it("valid: @target-uri covered instead of @authority", async () => {
+    expect((await state({ components: ["@target-uri", "signature-agent"] })).result).toBe(SIG_VALID);
   });
 
-  it("valid: created two days ago, not yet expired", async () => {
+  it("valid: created two days ago, not yet expired (no 24-hour cap)", async () => {
     expect((await state({ created: nowS() - 172800 })).result).toBe(SIG_VALID);
+  });
+});
+
+// 0.2.0 compares `expires` in whole seconds (expires < floor(now)); 0.1.3
+// compared milliseconds. So a signature is still valid during the second its
+// `expires` names, where 0.1.3 already called it expired. One second, no more.
+describe("web-bot-auth 0.2.0: the expiry second", () => {
+  beforeEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
+
+  async function at(ms, expires) {
+    const key = await keyPair();
+    const a = agent();
+    const req = await handSign(URL_, a, key, { created: expires - 300, expires });
+    publish(key.pub);
+    vi.useFakeTimers({ now: ms, toFake: ["Date"] });
+    try { return await resolveSignatureState(req, env); } finally { vi.useRealTimers(); }
+  }
+
+  it("valid 500 ms into the second `expires` names", async () => {
+    const e = nowS() + 10;
+    expect(await at(e * 1000 + 500, e)).toBe(SIG_VALID);
+  });
+
+  it("invalid from the next second", async () => {
+    const e = nowS() + 10;
+    expect(await at((e + 1) * 1000, e)).toBe(SIG_INVALID);
   });
 });

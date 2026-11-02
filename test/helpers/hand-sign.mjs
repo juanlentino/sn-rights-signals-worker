@@ -50,7 +50,8 @@ export async function handSign(url, agent, key, opts = {}) {
     tag !== null && `tag="${tag}"`,
   ].filter(Boolean);
   const input = params[0] + (params.length > 1 ? ";" + params.slice(1).join(";") : "");
-  const lines = components.map((c) => `"${c}": ${c === "@authority" ? host : agentHeader}`);
+  const value = { "@authority": host, "@target-uri": url, "signature-agent": agentHeader };
+  const lines = components.map((c) => `"${c}": ${value[c]}`);
   lines.push(`"@signature-params": ${input}`);
   const sig = await crypto.subtle.sign("Ed25519", key.privateKey, new TextEncoder().encode(lines.join("\n")));
   const headers = {
