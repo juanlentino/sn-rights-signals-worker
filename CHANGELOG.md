@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.37.4 - 2026-11-02
+
+### Changed
+- **wrangler 4.151.1 -> 4.152.0** (dev only; the lockfile also moves miniflare to 5.20261019.2-beta and workerd to 1.20261019.1, the builds wrangler 4.152.0 pins, all with SLSA provenance). The safe part of Dependabot #112.
+- **Dependabot skips `@cloudflare/vitest-pool-workers` 0.23.0.** That release ships no provenance attestation, so the dependency-provenance gate refuses it; the same `ignore` entry and comment as sn-remote-mcp-worker (its PR #84). A later release is proposed and gated again.
+
+### Not taken from #112
+- **vitest 5.0.5:** `@cloudflare/vitest-pool-workers` peers on vitest ^4.1.0, so `npm ci` fails with ERESOLVE (#112's own CI). Stays on 4.1.12.
+- **web-bot-auth 0.1.3 -> 0.2.0:** breaking API change on a runtime signature-verification path; ported in its own PR.
+
 ## 1.37.3 - 2026-11-01
 
 ### Fixed
