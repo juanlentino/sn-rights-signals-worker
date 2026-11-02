@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.38.0 - 2026-11-02
+
+### Changed
+- **Web Bot Auth verification moves to web-bot-auth 0.2.0, with its stricter rules (owner decision).** A signed request that 1.37 recorded as `valid` now reads `invalid` when its Signature-Input:
+  - has no `alg` parameter;
+  - has an `alg` that does not name the key's algorithm (only `ed25519` is accepted);
+  - covers neither bare `@authority` nor bare `@target-uri`;
+  - does not cover the `Signature-Agent` header the request sent;
+  - carries a `nonce` that is not 64 bytes in canonical base64 or unpadded base64url.
+
+  Signers built on Cloudflare's library, either version, already meet all five. Every other verdict is unchanged: no 24-hour age cap is added (0.2.0's default `maxAge` is lifted), and only a directory key's `kty`, `crv` and `x` reach the verifier, so its own `alg` or `kid` still does not matter. Still a sensor: no response changes.
+- **The expiry second.** 0.2.0 compares `expires` in whole seconds, 0.1.3 in milliseconds, so a signature is now `valid` until the end of the second its `expires` names, up to one second longer than before.
+
+### Tests
+- `test/web-bot-auth-equivalence.test.mjs`: 24 checks against a WebCrypto-only signer (`test/helpers/hand-sign.mjs`), written against 0.1.3 before the port. The five rows above flip to `invalid`; the rest keep their 0.1.3 verdict. New: `@target-uri` coverage is valid, and the expiry second (valid 500 ms in, invalid at the next second). Mutation-checked: accepting a failed verify (15 red), dropping the `maxAge` lift, passing the whole JWK, skipping the thumbprint match, and expiring by milliseconds each go red.
+
 ## 1.37.4 - 2026-11-02
 
 ### Changed

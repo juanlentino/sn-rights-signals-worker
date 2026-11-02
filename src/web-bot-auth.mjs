@@ -18,9 +18,15 @@
  */
 
 import { verify } from "web-bot-auth";
-import { helpers, verifierFromJWK } from "web-bot-auth/crypto";
+import { verifierFromJWK } from "web-bot-auth/crypto";
 import { jwkThumbprint } from "jsonwebkey-thumbprint";
 import { underWebmcpLimit } from "./webmcp-call.mjs";
+
+// web-bot-auth 0.2.0 dropped its `helpers` export; these are the same two
+// functions (SHA-256, unpadded base64url) the thumbprint was computed with.
+const sha256 = (b) => crypto.subtle.digest("SHA-256", b);
+const base64url = (b) =>
+  btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 export const SIG_UNSIGNED = "unsigned";
 export const SIG_VALID = "valid";
@@ -242,15 +248,27 @@ export async function resolveSignatureState(request, env) {
       if (jwk?.kty !== "OKP" || jwk?.crv !== "Ed25519" || typeof jwk?.x !== "string") continue;
       const tp = await jwkThumbprint(
         { kty: jwk.kty, crv: jwk.crv, x: jwk.x },
-        helpers.WEBCRYPTO_SHA256,
-        helpers.BASE64URL_DECODE
+        sha256,
+        base64url
       );
       if (tp === keyId) { match = jwk; break; }
     }
     if (!match) return SIG_UNKNOWN_KEY;
 
     try {
-      await verify(request, await verifierFromJWK({ ...match, kid: keyId }));
+      // 1.38.0: web-bot-auth 0.2.0. Only kty/crv/x go to the verifier, so a
+      // directory JWK's own alg or kid never changes the verdict. maxAge is
+      // lifted (0.2.0 defaults to 24 hours; `expires` alone bounds a
+      // signature here, as before). Infinity is refused, so the largest
+      // finite value. 0.2.0 also requires `alg`, a matching algorithm, bare
+      // @authority or @target-uri covered, Signature-Agent covered when
+      // sent, and a canonical nonce; those have no switch, and fail here.
+      const verifier = await verifierFromJWK({ kty: match.kty, crv: match.crv, x: match.x });
+      await verify(request, {
+        resolver: async () => verifier,
+        algorithms: ["ed25519"],
+        maxAge: Number.MAX_SAFE_INTEGER,
+      });
       return SIG_VALID;
     } catch {
       // verify() throws on a bad signature, an expired `expires`, or a
