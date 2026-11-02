@@ -246,6 +246,10 @@ export function observeMachineReader(request, env, pathname, signatureState = SI
       console.error(`[machine-readers] observe skipped: ${sensorState.last_error}`);
       return null;
     }
+    // A browser prerender or prefetch the visitor may never see is not a read
+    // (1.38.2). Same check as sn-analytics' beacon gate; the response is untouched.
+    if (/prerender|prefetch/i.test(request.headers.get("sec-purpose") || "") ||
+        /prefetch/i.test(request.headers.get("purpose") || "")) return null;
     const ua = request.headers.get("user-agent");
 
     // TWO INDEPENDENT PASSES. The family pass is the frozen v1.4.0 classifier,

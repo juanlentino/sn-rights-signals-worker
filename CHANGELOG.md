@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.38.2 - 2026-11-02
+
+### Fixed
+- **A browser prerender or prefetch is no longer counted as a machine read (owner decision).** A request whose `Sec-Purpose` contains `prerender` or `prefetch`, or whose legacy `Purpose` header is `prefetch`, may never be seen, so `observeMachineReader` now records nothing for it: no aggregate row and no rights-detail row. The response is served unchanged. Same check as sn-analytics' beacon gate. `test/prerender-skip.test.mjs` adds 4 checks (three headers not recorded with an identical response, a normal read still recorded); the three header checks are red without the change, and disabling either header test or the early return turns them red again.
+
 ## 1.38.1 - 2026-11-02
 
 ### Fixed
