@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.37.1 - 2026-11-01
+
+### Fixed
+- **The Markdown of /resume is the lane a person sees.** /resume stores both of its résumés and hides the one `?lane=` did not ask for, so `Accept: text/markdown` on `/resume/` and `/resume/?lane=operations` each came back as both résumés, back to back. The converter now skips `[hidden]` subtrees. Across the live pages that touches only /resume's other lane and /verify's empty result sections, which its script fills in.
+- **A skipped block element no longer blanks the rest of the page.** workerd keeps one end-tag handler per element, and a later `onEndTag()` replaces the earlier one. A content handler that matched a skipped element, like a hidden `<div>` or a `<p class="screen-reader-text">`, replaced the skip's decrement, and everything after it was dropped. A list, quote or `<pre>` inside a skipped subtree also left its state raised. Content handlers now do nothing inside a skipped subtree, including on the element that started it (`live()` in `src/html-to-markdown.mjs`).
+- **Tests:** `test/html-to-markdown.test.mjs` gains 3 checks: the hidden lane in every form of the attribute, a skipped block element, and no list, quote or pre state left behind. Without the guard they fail, and the live /resume HTML for both lanes was converted to check them.
+
 ## 1.37.0 - 2026-11-01
 
 ### Added
