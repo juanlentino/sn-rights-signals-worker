@@ -36,7 +36,12 @@ const SKIP =
   // "Skip to content". `.sn-article-dial` is an aria-hidden reading gauge after
   // the footer whose tick labels came through as "889296100104108". The
   // standalone /verify page prints its own skip link, `.sn-verify-skip`.
-  ".skip-link, .sn-skip-link, .sn-verify-skip, .screen-reader-text, .sn-article-dial";
+  ".skip-link, .sn-skip-link, .sn-verify-skip, .screen-reader-text, .sn-article-dial, " +
+  // v1.37.1: anything the page hides is not what a person reads. /resume
+  // stores both of its résumés and hides the one `?lane=` did not ask for, so
+  // without this each address converted to both, back to back. /verify's
+  // empty result sections (filled by its script) go with it.
+  "[hidden]";
 
 const HEADING = /^h([1-6])$/;
 
@@ -158,12 +163,25 @@ function onEnd(el, cb) {
 }
 
 function openClose(md, marker) {
-  return {
+  return live(md, {
     element(el) {
       md.push(marker);
       onEnd(el, () => md.push(marker));
     },
-  };
+  });
+}
+
+// Content handlers run only outside skipped subtrees. workerd keeps ONE
+// end-tag handler per element (a later onEndTag() replaces the earlier one),
+// and the skip handler registers first: a content handler that matched the
+// same element (a hidden <div>, a <p class="screen-reader-text">) replaced its
+// decrement and blanked the rest of the page. And a list, quote or <pre>
+// inside a skipped subtree raised state its end handler then never lowered.
+// Nothing inside a skipped subtree is emitted, so its handlers do nothing at
+// all, the element that started the skip included (1.37.1).
+function live(md, handlers) {
+  const element = handlers.element;
+  return element ? { ...handlers, element(el) { if (md.skip === 0) element(el); } } : handlers;
 }
 
 export function markdownRewriter(md) {
@@ -181,7 +199,7 @@ export function markdownRewriter(md) {
     // `head > title`, not `title`: an inline <svg> carries its own <title>
     // element, and a bare selector concatenated the two into one frontmatter
     // line. `titleDone` then pins the FIRST one, so nothing later can append.
-    .on("head > title", {
+    .on("head > title", live(md, {
       element(el) {
         if (md.titleDone) return;
         md.inTitle = true;
@@ -197,31 +215,31 @@ export function markdownRewriter(md) {
         md.title += decodeEntities(md.text);
         md.text = "";
       },
-    })
-    .on("h1, h2, h3, h4, h5, h6", {
+    }))
+    .on("h1, h2, h3, h4, h5, h6", live(md, {
       element(el) {
         const level = Number.parseInt(HEADING.exec(el.tagName.toLowerCase())?.[1] ?? "1", 10);
         md.block();
         md.push("#".repeat(level) + " ");
         onEnd(el, () => md.block());
       },
-    })
-    .on("p, div, section, article, tr, dt, dd, figure, figcaption", {
+    }))
+    .on("p, div, section, article, tr, dt, dd, figure, figcaption", live(md, {
       element(el) {
         md.block();
         onEnd(el, () => md.block());
       },
-    })
+    }))
     // Cells need a boundary of their own: `<td>2026</td><td>77 reads</td>`
     // came through as `202677 reads` (#53). The table stays flat on purpose
     // (see the fidelity note at the top); this is a separator, not a table.
-    .on("tr", { element() { md.cell = 0; } })
-    .on("td, th", {
+    .on("tr", live(md, { element() { md.cell = 0; } }))
+    .on("td, th", live(md, {
       element() {
         if (md.cell++ > 0) md.push(" | ");
       },
-    })
-    .on("blockquote", {
+    }))
+    .on("blockquote", live(md, {
       element(el) {
         md.quote++;
         md.block();
@@ -230,8 +248,8 @@ export function markdownRewriter(md) {
           md.block();
         });
       },
-    })
-    .on("ul, ol", {
+    }))
+    .on("ul, ol", live(md, {
       element(el) {
         md.lists.push({ ordered: el.tagName.toLowerCase() === "ol", n: 0 });
         md.block();
@@ -240,16 +258,16 @@ export function markdownRewriter(md) {
           md.block();
         });
       },
-    })
-    .on("li", {
+    }))
+    .on("li", live(md, {
       element(el) {
         const list = md.lists[md.lists.length - 1];
         const marker = list && list.ordered ? `${++list.n}. ` : "- ";
         md.push("\n" + "> ".repeat(md.quote) + md.indent() + marker);
         onEnd(el, () => md.push(""));
       },
-    })
-    .on("pre", {
+    }))
+    .on("pre", live(md, {
       element(el) {
         md.pre++;
         md.block();
@@ -260,27 +278,27 @@ export function markdownRewriter(md) {
           md.block();
         });
       },
-    })
+    }))
     // A <code> inside <pre> is already fenced; a second backtick pair there
     // would corrupt the block.
-    .on("code", {
+    .on("code", live(md, {
       element(el) {
         if (md.pre > 0) return;
         md.push("`");
         onEnd(el, () => md.push("`"));
       },
-    })
+    }))
     .on("strong, b", openClose(md, "**"))
     .on("em, i", openClose(md, "_"))
-    .on("a", {
+    .on("a", live(md, {
       element(el) {
         const href = safeUrl(decodeEntities(el.getAttribute("href") || ""));
         if (!href) return;
         md.push("[");
         onEnd(el, () => md.push(`](${href})`));
       },
-    })
-    .on("img", {
+    }))
+    .on("img", live(md, {
       element(el) {
         // Same allowlist for images. It also drops `data:` image URIs, which are
         // legitimate HTML but would inline a base64 blob into a document whose
@@ -289,10 +307,10 @@ export function markdownRewriter(md) {
         if (!src) return;
         md.push(`![${decodeEntities(el.getAttribute("alt") || "")}](${src})`);
       },
-    })
-    .on("br", { element() { md.push("\n"); } })
-    .on("hr", { element() { md.block(); md.push("---"); md.block(); } })
-    .on("*", {
+    }))
+    .on("br", live(md, { element() { md.push("\n"); } }))
+    .on("hr", live(md, { element() { md.block(); md.push("---"); md.block(); } }))
+    .on("*", live(md, {
       text(t) {
         if (md.inTitle) return;
         md.text += t.text;
@@ -310,7 +328,7 @@ export function markdownRewriter(md) {
         if (s.trim() === "" && s !== " ") return;
         md.push(s);
       },
-    });
+    }));
 }
 
 // Drives the rewriter to completion and returns the markdown. Buffers the page

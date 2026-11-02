@@ -113,6 +113,49 @@ describe("htmlToMarkdown", () => {
     expect(out).not.toContain("for screen readers");
   });
 
+  // 1.37.1: /resume stores both of its résumés and hides the one not asked
+  // for (`?lane=`); the Markdown is the page a person sees, so a hidden subtree
+  // is not content. Every form of the boolean attribute, and a void element.
+  it("drops hidden subtrees: /resume's other lane, in every form of the attribute", async () => {
+    const out = await md(
+      '<body><main><h1>RESUME</h1>' +
+        '<div id="resume-music" class="sn-resume-variant"><p>Founder &amp; Music Executive</p></div>' +
+        '<div hidden id="resume-operations" class="sn-resume-variant"><p>Founder and Operator</p><ul><li>ops bullet</li></ul></div>' +
+        '<section hidden="">empty placeholder</section><p hidden="hidden">also hidden</p>' +
+        '<input hidden name="x"><p>after the void element</p></main></body>',
+    );
+    expect(out).toContain("RESUME");
+    expect(out).toContain("Founder & Music Executive");
+    expect(out).toContain("after the void element");
+    expect(out).not.toContain("Founder and Operator");
+    expect(out).not.toContain("ops bullet");
+    expect(out).not.toContain("empty placeholder");
+    expect(out).not.toContain("also hidden");
+  });
+
+  // 1.37.1, the same root cause: workerd keeps one end-tag handler per element,
+  // so a block element carrying a skip class used to lose the skip's decrement
+  // to the paragraph handler and blank everything after it.
+  it("keeps the page after a skipped block element", async () => {
+    const out = await md('<body><p class="screen-reader-text">sr only</p><div class="skip-link">skip</div><p>kept prose</p></body>');
+    expect(out).toContain("kept prose");
+    expect(out).not.toContain("sr only");
+  });
+
+  // A list, quote or <pre> inside a hidden subtree must leave no state behind:
+  // /resume's hidden lane is full of lists, and the visible ones after it kept
+  // an extra indent and a quote marker when only the end handler was skipped.
+  it("leaves no list, quote or pre state behind a hidden subtree", async () => {
+    const out = await md(
+      '<body><div hidden><blockquote><ul><li>gone<ul><li>deeper</li></ul></li></ul></blockquote><pre>code</pre></div>' +
+        '<ul><li>visible item</li></ul><p>visible prose</p></body>',
+    );
+    expect(out).toMatch(/^- visible item$/m);
+    expect(out).toMatch(/^visible prose$/m);
+    expect(out).not.toContain(">");
+    expect(out).not.toContain("```");
+  });
+
   it("leaves an unknown or malformed entity alone rather than corrupting it", () => {
     expect(decodeEntities("&notarealentity; &#99999999999; plain")).toBe("&notarealentity; &#99999999999; plain");
     expect(decodeEntities("&#x2197;")).toBe("↗");
