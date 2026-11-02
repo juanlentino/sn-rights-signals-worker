@@ -1,9 +1,35 @@
 # Changelog
 
-## 1.37.4 - 2026-11-02
+## 1.38.1 - 2026-11-02
 
 ### Fixed
 - **The operations PDF counts as a résumé PDF read, not a page read.** WordPress serves it at `/resume/<file>.pdf` (`JuanLentino_Resume_Operations.pdf` by default, the name an admin setting), not under `/wp-content/uploads/resume/`, so the résumé PDF match missed it: its machine reads filed under surface `html` with an empty `resume_format`, and the Machine readers Résumé panel never saw them. The match now covers both directories, one path segment, PDFs only, so those reads land in surface `resume` with blob17 `pdf`, beside the music PDF and the Spanish CV. What moves: reads of `/resume/<file>.pdf` leave `html`. No new value: the plugin already accepts `resume` and `pdf`. `/cv/<file>.pdf`, a deeper path and a `.pdf.html` stay `html`. The noindex rule is unchanged and still covers the uploads directory only. `test/resume-surface.test.mjs` adds 2 checks and one line to the format check: the new check and that line are red without the change, and the lookalike check fails if the match widens to `/cv/`.
+
+## 1.38.0 - 2026-11-02
+
+### Changed
+- **Web Bot Auth verification moves to web-bot-auth 0.2.0, with its stricter rules (owner decision).** A signed request that 1.37 recorded as `valid` now reads `invalid` when its Signature-Input:
+  - has no `alg` parameter;
+  - has an `alg` that does not name the key's algorithm (only `ed25519` is accepted);
+  - covers neither bare `@authority` nor bare `@target-uri`;
+  - does not cover the `Signature-Agent` header the request sent;
+  - carries a `nonce` that is not 64 bytes in canonical base64 or unpadded base64url.
+
+  Signers built on Cloudflare's library, either version, already meet all five. Every other verdict is unchanged: no 24-hour age cap is added (0.2.0's default `maxAge` is lifted), and only a directory key's `kty`, `crv` and `x` reach the verifier, so its own `alg` or `kid` still does not matter. Still a sensor: no response changes.
+- **The expiry second.** 0.2.0 compares `expires` in whole seconds, 0.1.3 in milliseconds, so a signature is now `valid` until the end of the second its `expires` names, up to one second longer than before.
+
+### Tests
+- `test/web-bot-auth-equivalence.test.mjs`: 24 checks against a WebCrypto-only signer (`test/helpers/hand-sign.mjs`), written against 0.1.3 before the port. The five rows above flip to `invalid`; the rest keep their 0.1.3 verdict. New: `@target-uri` coverage is valid, and the expiry second (valid 500 ms in, invalid at the next second). Mutation-checked: accepting a failed verify (15 red), dropping the `maxAge` lift, passing the whole JWK, skipping the thumbprint match, and expiring by milliseconds each go red.
+
+## 1.37.4 - 2026-11-02
+
+### Changed
+- **wrangler 4.151.1 -> 4.152.0** (dev only; the lockfile also moves miniflare to 5.20261019.2-beta and workerd to 1.20261019.1, the builds wrangler 4.152.0 pins, all with SLSA provenance). The safe part of Dependabot #112.
+- **Dependabot skips `@cloudflare/vitest-pool-workers` 0.23.0.** That release ships no provenance attestation, so the dependency-provenance gate refuses it; the same `ignore` entry and comment as sn-remote-mcp-worker (its PR #84). A later release is proposed and gated again.
+
+### Not taken from #112
+- **vitest 5.0.5:** `@cloudflare/vitest-pool-workers` peers on vitest ^4.1.0, so `npm ci` fails with ERESOLVE (#112's own CI). Stays on 4.1.12.
+- **web-bot-auth 0.1.3 -> 0.2.0:** breaking API change on a runtime signature-verification path; ported in its own PR.
 
 ## 1.37.3 - 2026-11-01
 

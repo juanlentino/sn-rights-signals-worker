@@ -169,7 +169,11 @@ reads as `unsigned`. It resolves to one of `unsigned`, `valid`, `invalid` or
 `unknown-key`, recorded in blob 11 of the sensor row. Ed25519 keys only. An
 empty or unreachable directory reads as `unsigned`; `unknown-key` means the
 directory published keys and this one was not among them; `invalid` means the
-key was found and the signature did not hold.
+key was found and the signature did not hold. Since 1.38.0 (web-bot-auth
+0.2.0) a signature must also carry `alg="ed25519"`, cover bare `@authority` or
+`@target-uri` and the `Signature-Agent` header, and use a canonical 64-byte
+nonce if it has one; otherwise it is `invalid`. No age cap beyond `expires`,
+which is compared in whole seconds.
 
 Since v1.24.0 a `valid` signature is answered with the license offer
 (`src/licence-handshake.mjs`): `TDM-Licence-Offer: conditional` (never

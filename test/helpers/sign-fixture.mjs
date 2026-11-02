@@ -1,5 +1,6 @@
-import { signatureHeaders } from "web-bot-auth";
-import { helpers, signerFromJWK } from "web-bot-auth/crypto";
+import { sign } from "web-bot-auth";
+import { signerFromJWK } from "web-bot-auth/crypto";
+const helpers = { WEBCRYPTO_SHA256: (b) => crypto.subtle.digest("SHA-256", b), BASE64URL_DECODE: (b) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") };
 import { jwkThumbprint } from "jsonwebkey-thumbprint";
 
 /**
@@ -20,11 +21,8 @@ export async function signWithFixture(url, agent = "https://signature-agent.test
   const created = new Date();
   const expires = new Date(created.getTime() + 300_000);
   const unsigned = new Request(url, { headers: { "signature-agent": `"${agent}"` } });
-  const headers = await signatureHeaders(
-    unsigned,
-    await signerFromJWK({ ...privateJwk, kid: thumbprint }),
-    { created, expires }
-  );
+  const f = await sign(unsigned, { signer: await signerFromJWK(privateJwk), created, expires });
+  const headers = { Signature: f.signature, "Signature-Input": f.signatureInput };
 
   return {
     thumbprint,
