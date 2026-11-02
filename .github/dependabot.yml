@@ -8,6 +8,13 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    # 2026-10-26 (owner): 0.23.0 was published without the SLSA provenance every
+    # release since 0.9.13 carried, and the dependency-provenance gate refuses it
+    # (sn-remote-mcp-worker PR #81). Skip that one version; a later release is proposed and gated
+    # again. Remove this entry once a newer version has landed.
+    ignore:
+      - dependency-name: "@cloudflare/vitest-pool-workers"
+        versions: ["0.23.0"]
     groups:
       npm:
         patterns: ["*"]
