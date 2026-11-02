@@ -82,4 +82,14 @@ describe("originMarkdownHref", () => {
     expect(originMarkdownHref('</resume/?output_format=markdown>; rel="alternate"; type="text/markdown"', base)).toBeNull();
     expect(originMarkdownHref(null, base)).toBeNull();
   });
+  // 1.37.2: /resume has two lanes, and its operations lane names
+  // /resume.md?lane=operations. That one query shape is read; any other stays refused.
+  it("reads a lane query on the .md alternate, and no other query", () => {
+    const ops = "https://juanlentino.com/resume/?lane=operations";
+    expect(originMarkdownHref('</resume.md?lane=operations>; rel="alternate"; type="text/markdown"', ops)).toBe("https://juanlentino.com/resume.md?lane=operations");
+    expect(originMarkdownHref('</resume.md?x=1>; rel="alternate"; type="text/markdown"', ops)).toBeNull();
+    expect(originMarkdownHref('</resume.md?lane=operations&x=1>; rel="alternate"; type="text/markdown"', ops)).toBeNull();
+    expect(originMarkdownHref('</resume.md?lane=Ops%2F..>; rel="alternate"; type="text/markdown"', ops)).toBeNull();
+    expect(originMarkdownHref('<https://evil.test/resume.md?lane=operations>; rel="alternate"; type="text/markdown"', ops)).toBeNull();
+  });
 });

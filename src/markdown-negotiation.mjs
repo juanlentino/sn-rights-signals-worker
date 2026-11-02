@@ -65,7 +65,10 @@ export function originMarkdownHref(link, base) {
     } catch {
       continue;
     }
-    if (url.origin === new URL(base).origin && url.pathname.endsWith(".md") && !url.search) return url.href;
+    // No query, or exactly `?lane=<letters>` (1.37.2): /resume's operations lane
+    // names /resume.md?lane=operations. Any other query is refused.
+    const queryOk = !url.search || /^\?lane=[a-z]+$/.test(url.search);
+    if (url.origin === new URL(base).origin && url.pathname.endsWith(".md") && queryOk) return url.href;
   }
   return null;
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.37.2 - 2026-11-01
+
+### Changed
+- **A Markdown alternate may carry `?lane=<letters>`.** /resume's operations lane names its own Markdown, `/resume.md?lane=operations`, in its `Link` header. The Worker read only a same-origin `.md` path with no query, so it refused that name and fell back to converting the HTML. The rule now accepts exactly one query shape, `?lane=` followed by lowercase letters, and still refuses any other query, any other host and any non-`.md` path. `test/origin-markdown.test.mjs` adds 5 checks, which fail without the change.
+
 ## 1.37.1 - 2026-11-01
 
 ### Fixed
