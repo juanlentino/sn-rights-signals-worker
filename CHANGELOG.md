@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.37.4 - 2026-11-02
+
+### Fixed
+- **The operations PDF counts as a résumé PDF read, not a page read.** WordPress serves it at `/resume/<file>.pdf` (`JuanLentino_Resume_Operations.pdf` by default, the name an admin setting), not under `/wp-content/uploads/resume/`, so the résumé PDF match missed it: its machine reads filed under surface `html` with an empty `resume_format`, and the Machine readers Résumé panel never saw them. The match now covers both directories, one path segment, PDFs only, so those reads land in surface `resume` with blob17 `pdf`, beside the music PDF and the Spanish CV. What moves: reads of `/resume/<file>.pdf` leave `html`. No new value: the plugin already accepts `resume` and `pdf`. `/cv/<file>.pdf`, a deeper path and a `.pdf.html` stay `html`. The noindex rule is unchanged and still covers the uploads directory only. `test/resume-surface.test.mjs` adds 2 checks and one line to the format check: the new check and that line are red without the change, and the lookalike check fails if the match widens to `/cv/`.
+
 ## 1.37.3 - 2026-11-01
 
 ### Fixed

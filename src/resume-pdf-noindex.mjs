@@ -8,8 +8,9 @@
 // Worker already fronts those reads (it adds the TDM reservation to them), so
 // it adds the noindex there, and the Download URL and its ?v= cache-busting
 // stay as they are. The operations PDF (/resume/<file>.pdf) is served by
-// WordPress with its own X-Robots-Tag. Exact directory, PDFs only: the same
-// match as the machine-readers résumé surface.
+// WordPress with its own X-Robots-Tag. Exact directory, PDFs only: the uploads
+// half of the machine-readers résumé PDF match, which also counts the
+// operations PDF (1.37.4).
 export const RESUME_PDF_PATH = /^\/wp-content\/uploads\/resume\/[^/]+\.pdf$/i;
 export const RESUME_PDF_ROBOTS = "noindex, nofollow";
 

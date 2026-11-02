@@ -37,6 +37,21 @@ describe("resume surface class", () => {
     expect(classifySurface("/wp-content/uploads/2026/10/resume.pdf")).toBe("asset");
   });
 
+  it("classifies the operations PDF WordPress serves at /resume/<file>.pdf as resume, not html", () => {
+    expect(classifySurface("/resume/JuanLentino_Resume_Operations.pdf")).toBe("resume");
+    expect(classifySurface("/resume/Ops.PDF")).toBe("resume");
+    const d = write("https://juanlentino.com/resume/JuanLentino_Resume_Operations.pdf?check=1");
+    expect(d.blobs[1]).toBe("resume");
+    expect(d.blobs[16]).toBe("pdf");
+  });
+
+  it("keeps lookalikes of the operations PDF out of resume", () => {
+    for (const p of ["/resume/sub/x.pdf", "/resume/x.pdf.html", "/resume/.pdf", "/cv/x.pdf", "/notes/a.pdf", "/resumes/x.pdf"]) {
+      expect(classifySurface(p), p).toBe("html");
+      expect(resumeFormat(new Request("https://juanlentino.com" + p), p), p).toBe("");
+    }
+  });
+
   it("is not a rights surface: a résumé read is not a read of the terms", () => {
     expect(DETAIL_SURFACES).not.toContain("resume");
   });
@@ -51,6 +66,7 @@ describe("resumeFormat (blob17)", () => {
     expect(at("/cv/json-resume.json")).toBe("json");
     expect(at("/resume/contact.vcf")).toBe("vcf");
     expect(at("/wp-content/uploads/resume/JuanLentino_Resume.pdf?v=f813b3bc")).toBe("pdf");
+    expect(at("/resume/JuanLentino_Resume_Operations.pdf")).toBe("pdf");
     expect(at("/resume.json")).toBe("twin");
     expect(at("/cv.json")).toBe("twin");
     expect(at("/notes/x/")).toBe("");

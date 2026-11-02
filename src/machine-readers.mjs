@@ -109,7 +109,10 @@ const RESUME_FORMATS = Object.freeze({
   "/resume/contact.vcf": "vcf",
   "/resume.json": "twin", "/cv.json": "twin",
 });
-const RESUME_PDF = /^\/wp-content\/uploads\/resume\/[^/]+\.pdf$/i;
+// The résumé PDFs, each by its own directory: the music PDF and the Spanish CV
+// are files under uploads; the operations PDF is served by WordPress at
+// /resume/<file>.pdf, its name an admin setting (1.37.4: it read as "html").
+const RESUME_PDF = /^\/(wp-content\/uploads\/resume|resume)\/[^/]+\.pdf$/i;
 const RESUME_PAGE = /^\/(resume|cv)\/?$/;
 
 /**
@@ -171,8 +174,9 @@ export function classifySurface(pathname) {
   // Résumé formats: the résumé's machine formats. Same reasoning as agent-discovery:
   // "which crawlers read the résumé, and in which format?" had no answer while
   // these sat in "html" and "asset". What moves: the /resume.json and /cv.json
-  // page twins leave "html", the résumé PDF leaves "asset"; the other files
-  // were new with this class. The HTML pages /resume/ and /cv/ stay "html",
+  // page twins leave "html", the résumé PDF leaves "asset", and (1.37.4) the
+  // operations PDF at /resume/<file>.pdf leaves "html"; the other files were
+  // new with this class. The HTML pages /resume/ and /cv/ stay "html",
   // so a Markdown read negotiated on them is not drained (blob17 names it).
   if (RESUME_FORMATS[p] || RESUME_PDF.test(p)) return "resume";
   if (p === "/feed" || p === "/feed/" || p.startsWith("/feed/") || p.endsWith("/feed/")) return "feed";
