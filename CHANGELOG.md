@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.38.3 - 2026-11-10
+
 ### Fixed
 - **Accept-negotiated Markdown names its HTML page as canonical, as `/notes/<slug>.md` already did.** A note asked for with `Accept: text/markdown` returned the same bytes as the `.md` route but no `Link: rel="canonical"`. The converted twin of `/notes/<slug>/` now sends `<https://<host>/notes/<slug>/>; rel="canonical"`, built by the same helper the `.md` route uses and from the path only, so a query string never enters it. The origin's own `Link` header now rides the Markdown too, so its other relations survive, and when it already names a canonical none is added. Any other page whose canonical the edge cannot know gets none. The HTML, a failed conversion and the origin's own Markdown file are unchanged; `Vary: Accept` is unchanged. `test/negotiated-canonical.test.mjs` adds 5 checks; the three canonical and Link checks are red without the change.
 
