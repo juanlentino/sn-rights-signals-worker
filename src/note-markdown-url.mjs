@@ -1,4 +1,4 @@
-import { markdownResponse } from "./markdown-negotiation.mjs";
+import { canonicalLink, markdownResponse } from "./markdown-negotiation.mjs";
 
 // /notes/<slug>.md: a note's Markdown at its own URL, for readers that cannot
 // send `Accept: text/markdown`. ONE converter: the bytes are what the Accept
@@ -67,6 +67,6 @@ export async function noteMarkdownResponse(request, slug) {
     console.error("note markdown conversion failed", err && err.message ? err.message : err);
     return plain(500, "Conversion failed");
   }
-  md.headers.append("Link", `<${canonical}>; rel="canonical"`);
+  md.headers.append("Link", canonicalLink(canonical));
   return request.method === "HEAD" ? new Response(null, { status: md.status, headers: md.headers }) : md;
 }

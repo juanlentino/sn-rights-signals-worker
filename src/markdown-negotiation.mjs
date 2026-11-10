@@ -93,6 +93,23 @@ async function originMarkdown(origin, requestUrl, userAgent) {
   return new Response(res.body, { status: 200, headers });
 }
 
+// THE CANONICAL. The converted twin names its HTML page as canonical, as
+// /notes/<slug>.md does (one helper, so the two cannot drift). The origin's own
+// Link header rides along, so its other relations survive; when it already
+// names a canonical, that one stands and none is added. Otherwise only a note
+// URL (/notes/<slug>/) gets one, built from the path, so a query string never
+// leaks into it. Any other page whose canonical the edge cannot know gets none.
+export const canonicalLink = (href) => `<${href}>; rel="canonical"`;
+const NOTE_PAGE = /^\/notes\/([^/]+)\/$/;
+
+function withCanonical(markdown, originLink, requestUrl) {
+  if (originLink) markdown.headers.append("Link", originLink);
+  if (/rel\s*=\s*"?[^",;]*\bcanonical\b/i.test(originLink || "") || !requestUrl) return markdown;
+  const url = new URL(requestUrl);
+  if (NOTE_PAGE.test(url.pathname)) markdown.headers.append("Link", canonicalLink(`${url.origin}${url.pathname}`));
+  return markdown;
+}
+
 // Convert when the client asked and the origin gave us a page to convert;
 // otherwise hand back null and let the caller serve HTML unchanged.
 //
@@ -131,5 +148,5 @@ export async function maybeMarkdown(origin, wantsMarkdown, requestUrl = null, us
     return null;
   }
   if (origin.body) origin.body.cancel().catch(() => {});
-  return markdown;
+  return withCanonical(markdown, origin.headers.get("link"), requestUrl);
 }
