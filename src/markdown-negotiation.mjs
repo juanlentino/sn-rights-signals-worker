@@ -99,6 +99,8 @@ async function originMarkdown(origin, requestUrl, userAgent) {
 // names a canonical, that one stands and none is added. Otherwise only a note
 // URL (/notes/<slug>/) gets one, built from the path, so a query string never
 // leaks into it. Any other page whose canonical the edge cannot know gets none.
+// One spelling for both Markdown doors (/notes/<slug>.md and Accept
+// negotiation), so the two canonical Link headers cannot drift (1.38.3).
 export const canonicalLink = (href) => `<${href}>; rel="canonical"`;
 const NOTE_PAGE = /^\/notes\/([^/]+)\/$/;
 
