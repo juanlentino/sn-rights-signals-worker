@@ -1,3 +1,4 @@
+import { ECHOES_LIMIT, echoesQuery } from "./share-echoes.mjs";
 import { vendorVerified } from "./vendor-ranges.mjs";
 import { readSqlJson } from "./sql-response.mjs";
 // Machine-readership sensor (v1.4.0) — the edge half of the plugin's v10.0.0
@@ -421,7 +422,7 @@ const TOTALS_LIMIT = DAYS_MAX + 2;
 const DAYS_DEFAULT = 30;
 
 /** Fixed view allowlist — nothing from the query string is ever interpolated. */
-const VIEWS = new Set(["aggregate", "unknown", "rights", "totals"]);
+const VIEWS = new Set(["aggregate", "unknown", "rights", "totals", "echoes"]);
 
 // How many unclassified user-agent rows the review view returns. Capped, and
 // the cap is REPORTED in the response, because a silently truncated leaderboard
@@ -546,6 +547,9 @@ export function buildQuery(view, days, filter = {}) {
 
   // RULE 3: the full-fidelity rights-surface stream. Separate dataset; never
   // summed with the aggregate.
+  // 1.39.0: share echoes, per event (src/share-echoes.mjs).
+  if (view === "echoes") return echoesQuery(days);
+
   if (view === "rights") {
     const family = filter.family ?? null;
     const excluded = filter.exclude_purpose ?? [];
@@ -695,7 +699,9 @@ export async function machineReadersResponse(request, env) {
         ? RIGHTS_LIMIT
         : view === "totals"
           ? TOTALS_LIMIT
-          : AGGREGATE_LIMIT;
+          : view === "echoes"
+            ? ECHOES_LIMIT
+            : AGGREGATE_LIMIT;
 
   try {
     const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/analytics_engine/sql`, {

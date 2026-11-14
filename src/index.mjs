@@ -10,7 +10,8 @@ import { versionResponse } from "./version.mjs";
 import { bypassesRightsSignals } from "./admin-bypass.mjs";
 import { crawlerListStatusResponse, runAndRecordCrawlerListCheck } from "./crawler-list-status.mjs";
 import { ensureVendorRanges } from "./vendor-ranges.mjs";
-import { FIRST_PARTY_HEADER, firstPartyByHeader, machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
+import { FIRST_PARTY_HEADER, classifySurface, firstPartyByHeader, machineReadersResponse, observeMachineReader } from "./machine-readers.mjs";
+import { observeShareEcho } from "./share-echoes.mjs";
 import { classifyVendorPurpose, taxonomyResponse } from "./taxonomy.mjs";
 import { best, parseAccept, prefersMarkdown } from "./accept-markdown.mjs";
 import { hasWebBotAuthHeaders, resolveSignatureState, signatureAgentOrigin } from "./web-bot-auth.mjs";
@@ -151,6 +152,9 @@ export default {
       } else {
         observeMachineReader(request, env, pathname, undefined, firstParty, owner);
       }
+      // 1.39.0: a link-preview fetch of a page is a share echo (time, path,
+      // app only). Independent of the sensor above; never alters the response.
+      observeShareEcho(request, env, pathname, classifySurface(pathname), firstParty || owner?.identity === 2);
     }
 
     // Keyed to the identity that was actually proved, and empty otherwise. Built

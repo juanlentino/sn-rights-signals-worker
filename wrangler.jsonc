@@ -61,7 +61,9 @@
   ],
   "analytics_engine_datasets": [
     { "binding": "SN_MR", "dataset": "sn_machine_readers" },
-    { "binding": "SN_MR_RIGHTS", "dataset": "sn_machine_readers_rights" }
+    { "binding": "SN_MR_RIGHTS", "dataset": "sn_machine_readers_rights" },
+    // 1.39.0: share echoes, one row per link-preview fetch (time, path, app).
+    { "binding": "SN_ECHO", "dataset": "sn_share_echoes" }
   ],
   "routes": [
     { "pattern": "juanlentino.com/*", "zone_name": "juanlentino.com" }
