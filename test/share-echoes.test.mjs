@@ -31,7 +31,7 @@ const req = (ua, url = "https://juanlentino.com/r/jill?fbclid=abc&x=1") =>
 describe("previewFamily", () => {
   it("maps each app's user agent to its family", () => {
     expect(previewFamily(UA.meta)).toBe("meta");
-    expect(previewFamily(UA.metaFetcher)).toBe("meta");
+    expect(previewFamily(UA.metaFetcher)).toBeNull();
     expect(previewFamily(UA.whatsapp)).toBe("whatsapp");
     expect(previewFamily(UA.linkedin)).toBe("linkedin");
     expect(previewFamily(UA.slack)).toBe("slack");
@@ -41,6 +41,13 @@ describe("previewFamily", () => {
     expect(previewFamily(UA.apple)).toBe("apple-messages");
     expect(previewFamily(UA.other)).toBe("other-preview");
     expect(previewFamily(UA.mastodon)).toBe("other-preview");
+    expect(previewFamily("Mastodon/4.3.0 (http.rb/5.2.0; +https://mastodon.social/)")).toBe("other-preview");
+    expect(previewFamily("WhatsApp/2")).toBe("other-preview"); // Signal, from the sender's device
+    expect(previewFamily("facebookexternalhit/1.1;line-poker/1.0")).toBe("other-preview"); // LINE
+    expect(previewFamily("Snap URL Preview Service; bot; snapchat; https://developers.snap.com/robots")).toBe("other-preview");
+    expect(previewFamily("Mozilla/5.0 (compatible; Bluesky Cardyb/1.1; +mailto:support@bsky.app)")).toBe("other-preview");
+    expect(previewFamily("kakaotalk-scrap/1.0")).toBe("other-preview");
+    expect(previewFamily("facebookcatalog/1.0")).toBeNull();
   });
   it("an app's in-app browser is a person, not a preview", () => {
     expect(previewFamily(UA.snapInApp)).toBeNull();

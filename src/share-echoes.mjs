@@ -11,9 +11,10 @@
 // "facebookexternalhit/1.1 Facebot Twitterbot/1.0", so a first-match on the
 // taxonomy would file both under another app. Most specific first.
 //
-// meta-externalagent is NOT a preview fetcher: Meta files it as the crawler
-// that trains models and indexes content, so counting it would turn a crawl
-// into a share. meta-externalfetcher is Meta's user-initiated fetch and is.
+// meta-externalagent and meta-externalfetcher are NOT preview fetchers: Meta
+// files the first as its training crawler and the second as an AI agent
+// fetching at a user's request, so counting them would turn a crawl or an
+// assistant into a share.
 
 export const ECHO_FAMILIES = Object.freeze([
   "meta", "whatsapp", "linkedin", "slack", "discord", "telegram", "x", "apple-messages", "other-preview",
@@ -21,17 +22,27 @@ export const ECHO_FAMILIES = Object.freeze([
 
 const RULES = [
   ["apple-messages", /facebookexternalhit\/1\.1 facebot twitterbot\/1\.0/],
+  // Signal sends exactly "WhatsApp/2" from the sender's device (Signal-Android
+  // LinkPreviewRepository, Signal-iOS LinkPreviewFetcher); WhatsApp's own
+  // fetcher carries its full version. Signal is not on the fixed list, so it
+  // is another app, never WhatsApp.
+  ["other-preview", /^whatsapp\/2$/],
   ["telegram", /telegrambot/],
-  // The fetcher's agent STARTS with WhatsApp/; an in-app browser starts with Mozilla/.
-  ["whatsapp", /^whatsapp\//],
-  ["meta", /facebookexternalhit|meta-externalfetcher|facebookcatalog/],
+  // The fetcher's agent STARTS with WhatsApp/<version>; an in-app browser starts with Mozilla/.
+  ["whatsapp", /^whatsapp\/\d+\.\d+\.\d+/],
+  // LINE's fetcher names facebookexternalhit too ("facebookexternalhit/1.1;line-poker/1.0").
+  ["other-preview", /line-poker/],
+  // Meta's link-preview fetcher for Facebook, Instagram and Messenger. Not
+  // meta-externalfetcher (Meta files it as an AI agent fetching at a user's
+  // request) and not facebookcatalog (product catalogs).
+  ["meta", /facebookexternalhit/],
   ["linkedin", /linkedinbot/],
   ["slack", /slackbot|slack-imgproxy/],
   ["discord", /discordbot/],
   ["x", /twitterbot/],
   // Crawler forms only: a bare "snapchat" or "mastodon" also names an app's own
-  // in-app browser, which is a person, not a preview.
-  ["other-preview", /skypeuripreview|microsoftpreview|http\.rb\/[\d.]+ \(mastodon\/|redditbot|embedly|iframely|cardyb|pinterestbot/],
+  // in-app browser, which is a person. Mastodon writes its agent in both orders.
+  ["other-preview", /skypeuripreview|microsoftpreview|mastodon\/[\d.]+ \(http\.rb|http\.rb\/[\d.]+ \(mastodon\/|redditbot|embedly|iframely|cardyb|bluesky|pinterestbot|snap url preview service|kakaotalk-scrap/],
 ];
 
 /** @returns {string|null} The preview family for a user agent, or null. PURE. */
