@@ -115,6 +115,8 @@ describe("the echoes read", () => {
     expect(buildQuery("echoes", 7)).toBe(echoesQuery(7));
     expect(echoesQuery(7)).toContain("FROM sn_share_echoes");
     expect(echoesQuery(7)).toContain("blob4 AS verified");
+    expect(echoesQuery(7)).toContain("AND NOT (blob1 = 'meta' AND NOT (blob2 LIKE '/r/%'))");
+    expect(echoesQuery(7)).toContain("blob4 != '1'");
     expect(echoesQuery(7)).toContain("INTERVAL '7' DAY");
     expect(echoesQuery(9999)).toContain("INTERVAL '90' DAY");
     expect(echoesQuery("1; DROP")).toContain("INTERVAL '30' DAY");

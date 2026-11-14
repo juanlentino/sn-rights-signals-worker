@@ -101,6 +101,11 @@ export function echoesQuery(days) {
   return (
     "SELECT blob1 AS family, blob2 AS path, blob3 AS observed_at, blob4 AS verified, sum(_sample_interval) AS hits " +
     `FROM sn_share_echoes WHERE timestamp > NOW() - INTERVAL '${d}' DAY ` +
+    // The row cap is spent on shares only (the plugin's rules, inc/share-echoes.php):
+    // Meta also crawls on its own schedule, so it counts on /r/ links alone, and an
+    // app that fetches from its own servers counts only when Cloudflare verified it.
+    "AND NOT (blob1 = 'meta' AND NOT (blob2 LIKE '/r/%')) " +
+    "AND NOT (blob1 IN ('meta','linkedin','slack','discord','x') AND blob4 != '1') " +
     "GROUP BY family, path, observed_at, verified " +
     `ORDER BY observed_at DESC LIMIT ${ECHOES_LIMIT} FORMAT JSON`
   );
