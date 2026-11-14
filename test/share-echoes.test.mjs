@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import worker from "../src/index.mjs";
 import { ECHO_FAMILIES, echoPath, echoesQuery, observeShareEcho, previewFamily } from "../src/share-echoes.mjs";
 import { buildQuery } from "../src/machine-readers.mjs";
 
@@ -14,6 +15,9 @@ const UA = {
   apple: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/601.2.4 (KHTML, like Gecko) Version/9.0.1 Safari/601.2.4 facebookexternalhit/1.1 Facebot Twitterbot/1.0",
   other: "Mozilla/5.0 (Windows NT 6.1; WOW64) SkypeUriPreview Preview/0.5",
   browser: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+  mastodon: "http.rb/5.1.1 (Mastodon/4.2.10; +https://mastodon.social/)",
+  snapInApp: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Snapchat/12.50.0.40",
+  waInApp: "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36 WhatsApp/2.24",
   metaTrainer: "meta-externalagent/1.1 (+https://developers.facebook.com/docs/sharing/webmasters/crawler)",
 };
 
@@ -36,6 +40,11 @@ describe("previewFamily", () => {
     expect(previewFamily(UA.x)).toBe("x");
     expect(previewFamily(UA.apple)).toBe("apple-messages");
     expect(previewFamily(UA.other)).toBe("other-preview");
+    expect(previewFamily(UA.mastodon)).toBe("other-preview");
+  });
+  it("an app's in-app browser is a person, not a preview", () => {
+    expect(previewFamily(UA.snapInApp)).toBeNull();
+    expect(previewFamily(UA.waInApp)).toBeNull();
   });
   it("every family it returns is on the fixed list", () => {
     for (const ua of Object.values(UA)) {
@@ -94,5 +103,30 @@ describe("the echoes read", () => {
     expect(echoesQuery(7)).toContain("INTERVAL '7' DAY");
     expect(echoesQuery(9999)).toContain("INTERVAL '90' DAY");
     expect(echoesQuery("1; DROP")).toContain("INTERVAL '30' DAY");
+  });
+});
+
+describe("wired into the Worker", () => {
+  const harness = () => {
+    const echoes = [];
+    const env = { SN_MR: { writeDataPoint: () => {} }, SN_MR_RIGHTS: { writeDataPoint: () => {} }, SN_ECHO: { writeDataPoint: (d) => echoes.push(d) } };
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => Promise.resolve(new Response("ok", { headers: { "content-type": "text/plain" } }))));
+    return { echoes, env };
+  };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("a preview fetch of a page writes one echo; the response is the origin's", async () => {
+    const { echoes, env } = harness();
+    const res = await worker.fetch(req(UA.whatsapp, "https://juanlentino.com/r/jill?utm_source=x"), env, {});
+    expect(await res.text()).toBe("ok");
+    expect(echoes).toHaveLength(1);
+    expect(echoes[0].blobs.slice(0, 2)).toEqual(["whatsapp", "/r/jill"]);
+  });
+  it("a browser, a feed and the Worker's own paths write none", async () => {
+    const { echoes, env } = harness();
+    await worker.fetch(req(UA.browser, "https://juanlentino.com/notes/x/"), env, {});
+    await worker.fetch(req(UA.slack, "https://juanlentino.com/feed/"), env, {});
+    await worker.fetch(req(UA.slack, "https://juanlentino.com/_sn/rights-signals/version"), env, {});
+    expect(echoes).toHaveLength(0);
   });
 });

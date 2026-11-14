@@ -22,13 +22,16 @@ export const ECHO_FAMILIES = Object.freeze([
 const RULES = [
   ["apple-messages", /facebookexternalhit\/1\.1 facebot twitterbot\/1\.0/],
   ["telegram", /telegrambot/],
-  ["whatsapp", /whatsapp/],
+  // The fetcher's agent STARTS with WhatsApp/; an in-app browser starts with Mozilla/.
+  ["whatsapp", /^whatsapp\//],
   ["meta", /facebookexternalhit|meta-externalfetcher|facebookcatalog/],
   ["linkedin", /linkedinbot/],
   ["slack", /slackbot|slack-imgproxy/],
   ["discord", /discordbot/],
   ["x", /twitterbot/],
-  ["other-preview", /skypeuripreview|microsoftpreview|mastodon|redditbot|embedly|iframely|cardyb|pinterestbot|snapchat|viber/],
+  // Crawler forms only: a bare "snapchat" or "mastodon" also names an app's own
+  // in-app browser, which is a person, not a preview.
+  ["other-preview", /skypeuripreview|microsoftpreview|http\.rb\/[\d.]+ \(mastodon\/|redditbot|embedly|iframely|cardyb|pinterestbot/],
 ];
 
 /** @returns {string|null} The preview family for a user agent, or null. PURE. */
