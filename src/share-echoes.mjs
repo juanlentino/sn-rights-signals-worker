@@ -66,8 +66,12 @@ export function observeShareEcho(request, env, pathname, surface, firstParty = f
     if (family === null) return null;
     const path = echoPath(pathname);
     if (path === null) return null;
+    // blob4: Cloudflare verified the fetcher ("1"/"0", the zone's x-sn-verified-bot
+    // header). The plugin needs it: a preview agent is easy to spoof, and the
+    // apps that fetch from their own servers are verifiable when genuine.
+    const verified = (request.headers.get("x-sn-verified-bot") ?? "").trim() !== "" ? "1" : "0";
     env.SN_ECHO.writeDataPoint({
-      blobs: [family, path, new Date().toISOString()],
+      blobs: [family, path, new Date().toISOString(), verified],
       doubles: [1],
       indexes: [family],
     });
@@ -84,9 +88,9 @@ export const ECHOES_LIMIT = 5000;
 export function echoesQuery(days) {
   const d = Math.max(1, Math.min(90, Math.trunc(Number(days)) || 30));
   return (
-    "SELECT blob1 AS family, blob2 AS path, blob3 AS observed_at, sum(_sample_interval) AS hits " +
+    "SELECT blob1 AS family, blob2 AS path, blob3 AS observed_at, blob4 AS verified, sum(_sample_interval) AS hits " +
     `FROM sn_share_echoes WHERE timestamp > NOW() - INTERVAL '${d}' DAY ` +
-    "GROUP BY family, path, observed_at " +
+    "GROUP BY family, path, observed_at, verified " +
     `ORDER BY observed_at DESC LIMIT ${ECHOES_LIMIT} FORMAT JSON`
   );
 }

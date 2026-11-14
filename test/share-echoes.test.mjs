@@ -69,9 +69,16 @@ describe("observeShareEcho", () => {
     const [family, path, at] = written[0].blobs;
     expect([family, path]).toEqual(["whatsapp", "/r/jill"]);
     expect(Number.isNaN(Date.parse(at))).toBe(false);
-    expect(written[0].blobs).toHaveLength(3);
+    expect(written[0].blobs).toHaveLength(4);
+    expect(written[0].blobs[3]).toBe("0");
     const all = JSON.stringify(written[0]);
     for (const leak of ["203.0.113.9", "WhatsApp/2", "fbclid", "?"]) expect(all).not.toContain(leak);
+  });
+  it("carries Cloudflare's verified flag", () => {
+    const { written, env } = sink();
+    const r = new Request("https://juanlentino.com/notes/x/", { headers: { "user-agent": UA.linkedin, "x-sn-verified-bot": "Social Media Marketing" } });
+    observeShareEcho(r, env, "/notes/x/", "html");
+    expect(written[0].blobs[3]).toBe("1");
   });
   it("an ordinary browser writes no echo", () => {
     const { written, env } = sink();
@@ -100,6 +107,7 @@ describe("the echoes read", () => {
   it("is a fixed per-event query with clamped days", () => {
     expect(buildQuery("echoes", 7)).toBe(echoesQuery(7));
     expect(echoesQuery(7)).toContain("FROM sn_share_echoes");
+    expect(echoesQuery(7)).toContain("blob4 AS verified");
     expect(echoesQuery(7)).toContain("INTERVAL '7' DAY");
     expect(echoesQuery(9999)).toContain("INTERVAL '90' DAY");
     expect(echoesQuery("1; DROP")).toContain("INTERVAL '30' DAY");
