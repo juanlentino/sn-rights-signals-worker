@@ -108,6 +108,9 @@ describe("observeShareEcho", () => {
     const t = req(UA.metaTrainer, "https://juanlentino.com/resume");
     Object.defineProperty(t, "cf", { value: { asn: 32934, asOrganization: "Facebook, Inc." } });
     expect(observeShareEcho(t, env, "/resume", "html")).toBeNull();
+    const fb = req("Mozilla/5.0 (compatible; FacebookBot/1.0; +https://developers.facebook.com/docs/sharing/webmasters/facebookbot/)", "https://juanlentino.com/resume");
+    Object.defineProperty(fb, "cf", { value: { asn: 32934, asOrganization: "Facebook, Inc." } });
+    expect(observeShareEcho(fb, env, "/resume", "html")).toBeNull();
     expect(written).toHaveLength(0);
   });
   it("an ordinary browser writes no echo", () => {

@@ -62,6 +62,7 @@ export function previewFamily(ua) {
 // (meta-externalagent, meta-externalfetcher) keep their own meaning.
 const META_ASN = 32934;
 const META_ORG = /^(facebook|meta platforms)/i;
+const DECLARED_AGENT = /\(compatible;|bot\b|bot\/|crawl|spider|fetcher|externalagent|externalhit/i;
 
 /** Whether a request came from Meta's network. PURE. */
 export function fromMetaNetwork(cf) {
@@ -78,7 +79,9 @@ export function echoMatch(ua, cf) {
   const family = previewFamily(ua);
   if (family !== null) return { family, via: "agent" };
   const s = typeof ua === "string" ? ua : "";
-  if (/^mozilla\//i.test(s) && fromMetaNetwork(cf)) return { family: "meta", via: "network" };
+  // A declared crawler sends "Mozilla/5.0 (compatible; FacebookBot/1.0; ...)":
+  // Mozilla-first is not browser-shaped on its own.
+  if (/^mozilla\//i.test(s) && !DECLARED_AGENT.test(s) && fromMetaNetwork(cf)) return { family: "meta", via: "network" };
   return null;
 }
 
