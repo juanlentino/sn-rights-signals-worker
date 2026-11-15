@@ -53,6 +53,35 @@ export function previewFamily(ua) {
   return null;
 }
 
+// 1.40.0: Meta's preview renderer for Instagram and Facebook fetches a sent
+// link from Meta's own network with an ordinary phone-browser agent (it even
+// runs the page's beacon), so no agent rule sees it (2026-11-15: an Instagram
+// DM of /resume drew two such fetches, Boardman and Lulea, and no echo).
+// AS32934 is Meta's network; the organization name is the fallback when the
+// edge sends no number. Browser-shaped agents only: Meta's named crawlers
+// (meta-externalagent, meta-externalfetcher) keep their own meaning.
+const META_ASN = 32934;
+const META_ORG = /^(facebook|meta platforms)/i;
+
+/** Whether a request came from Meta's network. PURE. */
+export function fromMetaNetwork(cf) {
+  if (!cf) return false;
+  if (Number(cf.asn) === META_ASN) return true;
+  return META_ORG.test(String(cf.asOrganization ?? "").trim());
+}
+
+/**
+ * The family and how it was matched: "agent" (the user agent names the app)
+ * or "network" (a browser agent from Meta's network). Null when neither. PURE.
+ */
+export function echoMatch(ua, cf) {
+  const family = previewFamily(ua);
+  if (family !== null) return { family, via: "agent" };
+  const s = typeof ua === "string" ? ua : "";
+  if (/^mozilla\//i.test(s) && fromMetaNetwork(cf)) return { family: "meta", via: "network" };
+  return null;
+}
+
 const MAX_PATH = 512;
 
 /** The path as analytics stores it: pathname only, bounded, no control bytes. PURE. */
@@ -73,8 +102,9 @@ export function observeShareEcho(request, env, pathname, surface, firstParty = f
   try {
     if (!env?.SN_ECHO || typeof env.SN_ECHO.writeDataPoint !== "function") return null;
     if (surface !== "html" || firstParty === true) return null;
-    const family = previewFamily(request.headers.get("user-agent"));
-    if (family === null) return null;
+    const match = echoMatch(request.headers.get("user-agent"), request.cf);
+    if (match === null) return null;
+    const { family, via } = match;
     const path = echoPath(pathname);
     if (path === null) return null;
     // blob4: Cloudflare verified the fetcher ("1"/"0", the zone's x-sn-verified-bot
@@ -82,11 +112,13 @@ export function observeShareEcho(request, env, pathname, surface, firstParty = f
     // apps that fetch from their own servers are verifiable when genuine.
     const verified = (request.headers.get("x-sn-verified-bot") ?? "").trim() !== "" ? "1" : "0";
     env.SN_ECHO.writeDataPoint({
-      blobs: [family, path, new Date().toISOString(), verified],
+      // blob5 (1.40.0): how the family was matched, "agent" or "network". The
+      // network itself is never stored: no ASN, IP or agent.
+      blobs: [family, path, new Date().toISOString(), verified, via],
       doubles: [1],
       indexes: [family],
     });
-    return { family, path };
+    return { family, path, via };
   } catch (e) {
     console.error(`[share-echoes] write failed: ${e?.message ?? e}`);
     return null;
@@ -99,14 +131,16 @@ export const ECHOES_LIMIT = 5000;
 export function echoesQuery(days) {
   const d = Math.max(1, Math.min(90, Math.trunc(Number(days)) || 30));
   return (
-    "SELECT blob1 AS family, blob2 AS path, blob3 AS observed_at, blob4 AS verified, sum(_sample_interval) AS hits " +
+    "SELECT blob1 AS family, blob2 AS path, blob3 AS observed_at, blob4 AS verified, blob5 AS via, sum(_sample_interval) AS hits " +
     `FROM sn_share_echoes WHERE timestamp > NOW() - INTERVAL '${d}' DAY ` +
     // The row cap is spent on shares only (the plugin's rules, inc/share-echoes.php):
     // Meta also crawls on its own schedule, so it counts on /r/ links alone, and an
     // app that fetches from its own servers counts only when Cloudflare verified it.
-    "AND NOT (blob1 = 'meta' AND NOT (blob2 LIKE '/r/%')) " +
-    "AND NOT (blob1 IN ('meta','linkedin','slack','discord','x') AND blob4 != '1') " +
-    "GROUP BY family, path, observed_at, verified " +
+    // A Meta fetch matched by Meta's network (blob5 'network', 1.40.0) passes both:
+    // the network is its proof, and it is a send, not a crawl.
+    "AND NOT (blob1 = 'meta' AND blob5 != 'network' AND NOT (blob2 LIKE '/r/%')) " +
+    "AND NOT (blob1 IN ('meta','linkedin','slack','discord','x') AND blob4 != '1' AND NOT (blob1 = 'meta' AND blob5 = 'network')) " +
+    "GROUP BY family, path, observed_at, verified, via " +
     `ORDER BY observed_at DESC LIMIT ${ECHOES_LIMIT} FORMAT JSON`
   );
 }

@@ -71,13 +71,14 @@ describe("observeShareEcho", () => {
   it("writes time, path and family only: no IP, user agent or query string", () => {
     const { written, env } = sink();
     const r = req(UA.whatsapp);
-    expect(observeShareEcho(r, env, new URL(r.url).pathname, "html")).toEqual({ family: "whatsapp", path: "/r/jill" });
+    expect(observeShareEcho(r, env, new URL(r.url).pathname, "html")).toEqual({ family: "whatsapp", path: "/r/jill", via: "agent" });
     expect(written).toHaveLength(1);
     const [family, path, at] = written[0].blobs;
     expect([family, path]).toEqual(["whatsapp", "/r/jill"]);
     expect(Number.isNaN(Date.parse(at))).toBe(false);
-    expect(written[0].blobs).toHaveLength(4);
+    expect(written[0].blobs).toHaveLength(5);
     expect(written[0].blobs[3]).toBe("0");
+    expect(written[0].blobs[4]).toBe("agent");
     const all = JSON.stringify(written[0]);
     for (const leak of ["203.0.113.9", "WhatsApp/2", "fbclid", "?"]) expect(all).not.toContain(leak);
   });
@@ -86,6 +87,28 @@ describe("observeShareEcho", () => {
     const r = new Request("https://juanlentino.com/notes/x/", { headers: { "user-agent": UA.linkedin, "x-sn-verified-bot": "Social Media Marketing" } });
     observeShareEcho(r, env, "/notes/x/", "html");
     expect(written[0].blobs[3]).toBe("1");
+  });
+  it("a phone browser from Meta's network is a meta echo, matched by network, with no network stored", () => {
+    const phone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+    for (const cf of [{ asn: 32934, asOrganization: "Facebook, Inc." }, { asOrganization: "Meta Platforms, Inc." }]) {
+      const { written, env } = sink();
+      const r = req(phone, "https://juanlentino.com/resume");
+      Object.defineProperty(r, "cf", { value: cf });
+      expect(observeShareEcho(r, env, "/resume", "html")).toEqual({ family: "meta", path: "/resume", via: "network" });
+      expect(written[0].blobs[4]).toBe("network");
+      const all = JSON.stringify(written[0]);
+      for (const leak of ["32934", "Facebook", "Meta Platforms", "iPhone", "203.0.113.9"]) expect(all).not.toContain(leak);
+    }
+  });
+  it("the same browser on another network writes none, and Meta's named crawlers stay out", () => {
+    const { written, env } = sink();
+    const r = req(UA.browser, "https://juanlentino.com/resume");
+    Object.defineProperty(r, "cf", { value: { asn: 7922, asOrganization: "Comcast Cable Communications, LLC" } });
+    expect(observeShareEcho(r, env, "/resume", "html")).toBeNull();
+    const t = req(UA.metaTrainer, "https://juanlentino.com/resume");
+    Object.defineProperty(t, "cf", { value: { asn: 32934, asOrganization: "Facebook, Inc." } });
+    expect(observeShareEcho(t, env, "/resume", "html")).toBeNull();
+    expect(written).toHaveLength(0);
   });
   it("an ordinary browser writes no echo", () => {
     const { written, env } = sink();
@@ -115,7 +138,9 @@ describe("the echoes read", () => {
     expect(buildQuery("echoes", 7)).toBe(echoesQuery(7));
     expect(echoesQuery(7)).toContain("FROM sn_share_echoes");
     expect(echoesQuery(7)).toContain("blob4 AS verified");
-    expect(echoesQuery(7)).toContain("AND NOT (blob1 = 'meta' AND NOT (blob2 LIKE '/r/%'))");
+    expect(echoesQuery(7)).toContain("blob5 AS via");
+    expect(echoesQuery(7)).toContain("blob5 != 'network'");
+    expect(echoesQuery(7)).toContain("AND NOT (blob1 = 'meta' AND blob5 != 'network' AND NOT (blob2 LIKE '/r/%'))");
     expect(echoesQuery(7)).toContain("blob4 != '1'");
     expect(echoesQuery(7)).toContain("INTERVAL '7' DAY");
     expect(echoesQuery(9999)).toContain("INTERVAL '90' DAY");
