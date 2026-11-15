@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.40.0 - 2026-11-15
+
 ### Added
 - **Meta's previews for Instagram and Facebook are share echoes, recognized by Meta's network.** On 2026-11-15 an Instagram DM of `/resume` drew two fetches from Meta data centers (Boardman and Luleå) with an ordinary phone-browser agent that even ran the page's beacon, and no echo was written, because only the user agent was checked. A page fetch with a browser agent (`Mozilla/…`, and not a declared crawler such as `Mozilla/5.0 (compatible; FacebookBot/1.0; …)`) from Meta's network (`cf.asn` 32934, or an organization starting `Facebook` or `Meta Platforms` when the edge sends no number) now writes a `meta` echo. A new blob5 says how the family was matched, `agent` or `network`; the ASN, organization, IP and user agent are never stored. Meta's named crawlers (`meta-externalagent`, `meta-externalfetcher`) still write nothing, and every agent rule is unchanged. The read returns blob5 as `via` and lets a network-matched Meta row through both of its share filters (off `/r/`, unverified), since the network is its proof and it is a send, not a crawl; rows written before this read `via` empty and filter as before. The plugin release after 2026.11.43 reads `via` (older plugins ignore it). `test/share-echoes.test.mjs` adds 2 checks (a Meta-network phone browser by number and by name, nothing stored about the network; the same browser elsewhere, Meta's trainer and a Mozilla-first declared crawler such as FacebookBot write nothing) and pins the read; 3 checks are red without the change.
 
