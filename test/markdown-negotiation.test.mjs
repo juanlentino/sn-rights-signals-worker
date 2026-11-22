@@ -160,3 +160,71 @@ describe("withVaryAccept", () => {
     expect(res.headers.get("vary").toLowerCase().split(/\s*,\s*/).filter((v) => v === "accept")).toHaveLength(1);
   });
 });
+
+// 1.40.1: only a GET is converted. A POST is a form or an API call whose
+// answer is not a page to rewrite, and a HEAD passes through to the origin.
+describe("markdown negotiation is for GET only", () => {
+  const send = (method, path = "/notes/a-note/") =>
+    worker.fetch(new Request(`https://juanlentino.com${path}`, { method, headers: { accept: "text/markdown" } }), {});
+
+  it("a POST that asks for markdown gets the origin's HTML", async () => {
+    stubOrigin(PAGE, { "content-type": "text/html" });
+    const res = await send("POST");
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(await res.text()).toContain("<article>");
+    expect(res.headers.get("vary")).toMatch(/accept/i);
+    expect(res.headers.get("tdm-reservation")).toBe("1");
+  });
+
+  it("a POST never fetches the Markdown file the origin names", async () => {
+    stubOrigin(PAGE, { "content-type": "text/html", link: '</resume.md>; rel="alternate"; type="text/markdown"' });
+    const res = await send("POST", "/resume/");
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("a HEAD passes through as the origin's HTML answer", async () => {
+    stubOrigin(null, { "content-type": "text/html", link: '</resume.md>; rel="alternate"; type="text/markdown"' });
+    const res = await send("HEAD", "/resume/");
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(res.headers.get("vary")).toMatch(/accept/i);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("the Worker's own pages convert on GET only", async () => {
+    for (const path of ["/tdm-policy/", "/ns/tdm"]) {
+      expect((await send("GET", path)).headers.get("content-type"), path).toContain("text/markdown");
+      expect((await send("POST", path)).headers.get("content-type"), path).toContain("text/html");
+    }
+  });
+});
+
+// 1.40.1: a page's If-Modified-Since is not forwarded, because the rewritten
+// page changes with a bridge release and the origin's date does not. Every
+// other surface keeps its 304s.
+describe("If-Modified-Since on the page passthrough", () => {
+  const IMS = "Sat, 21 Nov 2026 00:00:00 GMT";
+  const sentFor = async (path, headers = {}) => {
+    stubOrigin(PAGE, { "content-type": "text/html" });
+    const r = new Request(`https://juanlentino.com${path}`, { redirect: "manual", headers: { "if-modified-since": IMS, "x-keep": "1", ...headers } });
+    await worker.fetch(r, {});
+    return { r, sent: fetch.mock.calls[0][0] };
+  };
+
+  it("is not forwarded for a page; the rest of the request is", async () => {
+    const { sent } = await sentFor("/notes/a-note/", { "if-none-match": '"abc-12345678"' });
+    expect(sent.headers.get("if-modified-since")).toBeNull();
+    expect(sent.headers.get("if-none-match")).toBe('"abc-12345678"');
+    expect(sent.headers.get("x-keep")).toBe("1");
+    expect(sent.url).toBe("https://juanlentino.com/notes/a-note/");
+    expect(sent.redirect).toBe("manual");
+  });
+
+  it("is still forwarded for an asset, a feed and an admin path, as the same request object", async () => {
+    for (const path of ["/wp-content/uploads/a.png", "/feed/", "/wp-admin/load-styles.php"]) {
+      const { r, sent } = await sentFor(path);
+      expect(sent, path).toBe(r);
+      vi.unstubAllGlobals();
+    }
+  });
+});

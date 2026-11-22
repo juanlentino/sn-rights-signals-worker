@@ -194,7 +194,10 @@ export default {
     // negotiation every origin page gets (the JSON representations do not —
     // they are already the machine form).
     const accept = request.headers.get("accept");
-    const wantsMarkdown = prefersMarkdown(accept);
+    // 1.40.1: GET only. A POST is never converted (its answer is not a page to
+    // rewrite, and the origin's Markdown file is never fetched for it); a HEAD
+    // passes through to the origin as the HTML answer.
+    const wantsMarkdown = request.method === "GET" && prefersMarkdown(accept);
     if (pathname === "/ns/tdm" || pathname === "/ns/tdm/") {
       const page = nsTdmResponse(prefersOdrl(accept));
       const md = await maybeMarkdown(page, wantsMarkdown);
@@ -229,8 +232,22 @@ export default {
     // An origin redirect of a stripped request gets its params back on a
     // same-origin Location, so the browser still lands tagged.
     const stripped = stripMarketing(request);
+    // 1.40.1: a page's If-Modified-Since is not forwarded. The rewritten page
+    // carries a script tag that changes with a bridge release while the
+    // origin's date does not, so a 304 drawn by date would keep a page whose
+    // integrity attribute no longer matches (html-injector.mjs drops
+    // Last-Modified for the same reason). By path, since the type is not known
+    // before the fetch: assets, feeds and the REST API keep their 304s, and a
+    // request without the header is forwarded as the same object as before.
+    // If-None-Match stays: the re-keyed ETag never matches the origin's.
+    let toOrigin = forwardable(stripped?.url ?? null);
+    if (toOrigin.headers.has("if-modified-since") && classifySurface(pathname) === "html") {
+      const headers = new Headers(toOrigin.headers);
+      headers.delete("if-modified-since");
+      toOrigin = new Request(toOrigin, { headers });
+    }
     // redirect-ok: origin passthrough of the INCOMING request (redirect:"manual"), copied to a stripped URL; a test pins it.
-    const forwarded = await fetch(forwardable(stripped?.url ?? null));
+    const forwarded = await fetch(toOrigin);
     const origin = withRestoredParams(forwarded, request.url, stripped?.removed);
 
     // v1.5.0: the reservation rides EVERY response, not just HTML and REST.

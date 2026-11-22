@@ -96,8 +96,8 @@ export function echoPath(pathname) {
 
 /**
  * Record one preview fetch of a page. Fire-and-forget, never throws, never
- * touches the response. Pages only (surface html); the site's own tools
- * (first party) never write an echo.
+ * touches the response. Pages only (surface html), GET only; the site's own
+ * tools (first party) never write an echo.
  *
  * @returns {{family:string, path:string}|null} What was recorded, or null.
  */
@@ -105,6 +105,8 @@ export function observeShareEcho(request, env, pathname, surface, firstParty = f
   try {
     if (!env?.SN_ECHO || typeof env.SN_ECHO.writeDataPoint !== "function") return null;
     if (surface !== "html" || firstParty === true) return null;
+    // 1.40.1: a preview is a GET. A HEAD, POST or any other method is not one.
+    if (request.method !== "GET") return null;
     const match = echoMatch(request.headers.get("user-agent"), request.cf);
     if (match === null) return null;
     const { family, via } = match;
