@@ -232,7 +232,6 @@ export default {
     // An origin redirect of a stripped request gets its params back on a
     // same-origin Location, so the browser still lands tagged.
     const stripped = stripMarketing(request);
-    // redirect-ok: origin passthrough of the INCOMING request (redirect:"manual"), copied to a stripped URL; a test pins it.
     // 1.40.1: a page's If-Modified-Since is not forwarded. The rewritten page
     // carries a script tag that changes with a bridge release while the
     // origin's date does not, so a 304 drawn by date would keep a page whose
@@ -247,6 +246,7 @@ export default {
       headers.delete("if-modified-since");
       toOrigin = new Request(toOrigin, { headers });
     }
+    // redirect-ok: origin passthrough of the INCOMING request (redirect:"manual"), copied to a stripped URL; a test pins it.
     const forwarded = await fetch(toOrigin);
     const origin = withRestoredParams(forwarded, request.url, stripped?.removed);
 
