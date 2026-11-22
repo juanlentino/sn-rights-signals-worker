@@ -105,3 +105,59 @@ describe("robotsResponse — error handling", () => {
     expect(res.status).toBe(429);
   });
 });
+
+// 1.40.1: the origin's file is appended whole or not at all. A crawler
+// revalidating its copy used to draw a 304 (or a 206 for a Range), which the
+// Worker answered as a 200 holding the owned block alone: the origin's own
+// Disallow and Sitemap lines were gone.
+describe("robotsResponse: built from a full origin body only", () => {
+  const sent = () => fetch.mock.calls[0][0];
+
+  it("asks the origin without the client's validators or Range, as the same request otherwise", async () => {
+    stubFetch("Disallow: /tools/\n");
+    await robotsResponse(
+      new Request("https://juanlentino.com/robots.txt", {
+        redirect: "manual",
+        headers: {
+          "if-none-match": '"abc"',
+          "if-modified-since": "Sat, 21 Nov 2026 00:00:00 GMT",
+          "if-match": '"abc"',
+          "if-unmodified-since": "Sat, 21 Nov 2026 00:00:00 GMT",
+          "if-range": '"abc"',
+          range: "bytes=0-10",
+          "user-agent": "Googlebot/2.1",
+        },
+      }),
+    );
+    for (const h of ["if-none-match", "if-modified-since", "if-match", "if-unmodified-since", "if-range", "range"]) {
+      expect(sent().headers.get(h), h).toBeNull();
+    }
+    expect(sent().headers.get("user-agent")).toBe("Googlebot/2.1");
+    expect(sent().url).toBe("https://juanlentino.com/robots.txt");
+    expect(sent().method).toBe("GET");
+    expect(sent().redirect).toBe("manual");
+  });
+
+  it("does not put the origin's validators on the rewritten body", async () => {
+    stubFetch("Disallow: /tools/\n", { status: 200, headers: { etag: '"abc"', "last-modified": "Sat, 21 Nov 2026 00:00:00 GMT", "cache-control": "max-age=60" } });
+    const res = await robotsResponse(new Request("https://juanlentino.com/robots.txt"));
+    expect(res.headers.get("etag")).toBeNull();
+    expect(res.headers.get("last-modified")).toBeNull();
+    expect(res.headers.get("cache-control")).toBe("max-age=60");
+    expect(await res.text()).toContain("Disallow: /tools/");
+  });
+
+  it("passes an origin redirect through unchanged", async () => {
+    stubFetch(null, { status: 301, headers: { location: "https://www.juanlentino.com/robots.txt" } });
+    const res = await robotsResponse(new Request("https://juanlentino.com/robots.txt"));
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("https://www.juanlentino.com/robots.txt");
+    expect(await res.text()).toBe("");
+  });
+
+  it("never turns a 304 into a 200 without the origin's rules", async () => {
+    stubFetch(null, { status: 304 });
+    const res = await robotsResponse(new Request("https://juanlentino.com/robots.txt"));
+    expect(res.status).toBe(304);
+  });
+});

@@ -7,6 +7,8 @@ import { BRIDGE_SRI, WEBMCP_SCRIPT_TAG } from "./webmcp-bridge.mjs";
 // get 304 from the origin, and keep a page whose integrity attribute no longer
 // matches /webmcp/bridge.js (#55). Content-Length is simply wrong after the
 // transform; the ETag is re-keyed with the SRI so a bridge release invalidates.
+// Last-Modified is dropped (1.40.1): it is the origin's date for the origin's
+// page, and an If-Modified-Since revalidation against it drew the same 304.
 const ETAG_SUFFIX = BRIDGE_SRI.slice("sha384-".length, "sha384-".length + 8);
 
 class HeadMetaInjector {
@@ -22,6 +24,7 @@ export function injectTdmMeta(response) {
   const rewritten = new HTMLRewriter().on("head", new HeadMetaInjector()).transform(response);
   const headers = new Headers(rewritten.headers);
   headers.delete("content-length");
+  headers.delete("last-modified");
   const etag = headers.get("etag");
   if (etag) headers.set("etag", etag.endsWith('"') ? `${etag.slice(0, -1)}-${ETAG_SUFFIX}"` : `${etag}-${ETAG_SUFFIX}`);
   return new Response(rewritten.body, { status: rewritten.status, statusText: rewritten.statusText, headers });

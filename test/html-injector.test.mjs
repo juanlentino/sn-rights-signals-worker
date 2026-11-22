@@ -47,4 +47,16 @@ describe("injectTdmMeta", () => {
     const none = injectTdmMeta(new Response(html, { headers: { "content-type": "text/html" } }));
     expect(none.headers.get("etag")).toBeNull();
   });
+
+  // 1.40.1: Last-Modified is a validator too. Left on, a client revalidating
+  // with If-Modified-Since alone drew a 304 and kept a page whose integrity
+  // attribute no longer matched the bridge.
+  it("drops Last-Modified from the rewritten page and keeps the other headers", async () => {
+    const html = "<html><head></head><body></body></html>";
+    const res = injectTdmMeta(
+      new Response(html, { headers: { "content-type": "text/html", "last-modified": "Sat, 21 Nov 2026 00:00:00 GMT", "cache-control": "max-age=60" } }),
+    );
+    expect(res.headers.get("last-modified")).toBeNull();
+    expect(res.headers.get("cache-control")).toBe("max-age=60");
+  });
 });

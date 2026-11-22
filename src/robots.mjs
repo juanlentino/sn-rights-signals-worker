@@ -13,9 +13,20 @@ import { fullRobotsTxt, originTail } from "./robots-block.mjs";
 // If robots.txt output ever looks duplicated again, the toggle is back on —
 // revert this file to appendLicenseOnly(body) (see git history, v1.1.1)
 // before debugging anything else.
+//
+// 1.40.1: when the origin answers with its file, the served body is built
+// from the FULL file (a 4xx still gets the owned block alone, below). The
+// client's validators and Range are not forwarded (a 304 or a 206 has no
+// complete file to append), and the origin's ETag and Last-Modified do not
+// ride the rewritten body, which is a different entity that also changes with
+// a Worker release. A crawler therefore always gets a full 200 here.
+const PARTIAL_OR_CONDITIONAL = ["if-none-match", "if-modified-since", "if-match", "if-unmodified-since", "if-range", "range"];
+
 export async function robotsResponse(request) {
-  // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual".
-  const origin = await fetch(request);
+  const asked = new Headers(request.headers);
+  for (const h of PARTIAL_OR_CONDITIONAL) asked.delete(h);
+  // redirect-ok: origin passthrough of the INCOMING request, which the Workers runtime defaults to redirect:"manual"; the copy keeps it.
+  const origin = await fetch(new Request(request, { headers: asked }));
 
   // RFC 9309 §2.3.1 gives 4xx and 5xx OPPOSITE meanings, so "not ok" is not one
   // branch. 5xx is "unreachable" — crawlers MUST assume a complete disallow, so
@@ -27,6 +38,10 @@ export async function robotsResponse(request) {
   // simply has no robots.txt of its own to contribute, and our block stands on
   // its own without it.
   if (origin.status >= 500 || origin.status === 429) return origin;
+  // 1.40.1: a redirect (or any other 3xx) is the origin's answer, not a missing
+  // file. It used to fall into the 4xx branch below and come back as a 200
+  // holding the owned block alone.
+  if (origin.status >= 300 && origin.status < 400) return origin;
   if (!origin.ok) {
     return new Response(fullRobotsTxt(""), {
       status: 200,
@@ -40,6 +55,8 @@ export async function robotsResponse(request) {
   const headers = new Headers(origin.headers);
   headers.delete("content-length");
   headers.delete("content-encoding");
+  headers.delete("etag");
+  headers.delete("last-modified");
   headers.set("content-type", "text/plain; charset=utf-8");
   return new Response(patched, { status: origin.status, headers });
 }

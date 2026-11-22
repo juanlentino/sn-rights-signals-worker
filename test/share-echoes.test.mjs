@@ -124,6 +124,17 @@ describe("observeShareEcho", () => {
     expect(observeShareEcho(req(UA.slack), env, "/notes/x/", "html", true)).toBeNull();
     expect(written).toHaveLength(0);
   });
+  // 1.40.1: a preview is a GET. Other methods wrote rows too.
+  it("only a GET is a preview fetch", () => {
+    const { written, env } = sink();
+    for (const method of ["HEAD", "POST", "PUT", "DELETE", "OPTIONS"]) {
+      const r = new Request("https://juanlentino.com/r/jill", { method, headers: { "user-agent": UA.whatsapp } });
+      expect(observeShareEcho(r, env, "/r/jill", "html"), method).toBeNull();
+    }
+    expect(written).toHaveLength(0);
+    expect(observeShareEcho(req(UA.whatsapp), env, "/r/jill", "html")).toMatchObject({ family: "whatsapp" });
+    expect(written).toHaveLength(1);
+  });
   it("a missing binding or a throwing write never throws", () => {
     expect(observeShareEcho(req(UA.slack), {}, "/", "html")).toBeNull();
     const env = { SN_ECHO: { writeDataPoint: () => { throw new Error("boom"); } } };

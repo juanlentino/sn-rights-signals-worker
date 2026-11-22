@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.40.1 - 2026-11-22
+
+### Fixed
+- **`/robots.txt` appends the origin's file whole, never a `304` or a partial answer.** The request was forwarded with the client's validators, and the origin's `ETag` and `Last-Modified` rode the rewritten file, so a crawler revalidating its copy could draw a `304` (or a `206` for a `Range`) from the origin, which the Worker answered as a `200` holding the owned block alone, without the origin's `Disallow` and `Sitemap` lines. `If-None-Match`, `If-Modified-Since`, `If-Match`, `If-Unmodified-Since`, `If-Range` and `Range` are no longer forwarded on this route, and the composed file carries no `ETag` or `Last-Modified`. An origin redirect (any 3xx) now passes through unchanged; it used to become that same bare `200`. Unchanged, and deliberate (RFC 9309): an origin 4xx still answers `200` with the owned block, and a 5xx or 429 passes through.
+- **A rewritten page no longer carries the origin's `Last-Modified`.** The `ETag` was already re-keyed per bridge release, but an `If-Modified-Since` revalidation could still draw a `304` and keep a page whose injected `integrity` attribute no longer matched `/webmcp/bridge.js`. The injector drops `Last-Modified`, and a page request's `If-Modified-Since` is not forwarded to the origin. That is decided by path (the `html` surface), since the type is not known before the fetch: assets, feeds, sitemaps and the REST API keep their `304`s, and a request without the header is forwarded as the same object as before. `If-None-Match` is still forwarded; the re-keyed `ETag` never matches the origin's.
+- **Only a `GET` is converted to Markdown.** A `POST` or `HEAD` with `Accept: text/markdown` was converted too, and could fetch the Markdown file the origin names. A `POST` now gets the origin's answer as it is, and a `HEAD` passes through to the origin as the HTML answer (matching a `GET`'s Markdown headers would cost a second origin request for the named file). `/notes/<slug>.md` is unchanged and still answers `HEAD`.
+- **Only a `GET` writes a share echo.** A request of any method with a preview agent wrote a row. This narrows the write and does not bound it: a `GET` with a `WhatsApp/2.x.y` agent on any path still writes one.
+- Tests: 12 added (4 in `test/robots.test.mjs`, 1 in `test/html-injector.test.mjs`, 6 in `test/markdown-negotiation.test.mjs`, 1 in `test/share-echoes.test.mjs`); 11 are red without the change, and the twelfth (an asset, a feed and an admin path still forward `If-Modified-Since` as the same request object) is red when the path check is removed.
+
 ## 1.40.0 - 2026-11-15
 
 ### Added
